@@ -1,0 +1,15 @@
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+
+# SQLite Database file (optional, you might want to commit a default schema)
+*.db
+*.db-journal
+
+# OS-specific files
+.DS_Store
+Thumbs.db
