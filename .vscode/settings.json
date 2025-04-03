@@ -1,0 +1,48 @@
+// .vscode/settings.json
+{
+    // --- Python Settings ---
+    // Automatically use the Python interpreter from the '.venv' folder
+    "python.defaultInterpreterPath": "${workspaceFolder}/venv/bin/python", // Adjust path for Windows if needed: "${workspaceFolder}\\venv\\Scripts\\python.exe"
+    "python.terminal.activateEnvironment": true, // Automatically activate venv in integrated terminal
+
+    // --- Linting (using Pylint) ---
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    // You can add "--disable=C0114,C0116" etc. to pylintArgs if specific warnings annoy you
+    "python.linting.pylintArgs": [
+        "--load-plugins", "pylint_django", "pylint_celery" // Optional: Add if using Django/Celery later
+    ],
+
+    // --- Formatting (using Black) ---
+    // Ensure you've run: pip install black in your venv
+    "python.formatting.provider": "black",
+    "editor.formatOnSave": true, // Automatically format files when you save them
+    "editor.defaultFormatter": "ms-python.black-formatter", // Specify Black as default for Python
+
+    // --- Editor & Files Settings ---
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/CVS": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true,
+        "**/__pycache__": true, // Hide Python cache files
+        "**/.pytest_cache": true
+    },
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/node_modules/*/**": true,
+        "**/__pycache__/**": true,
+        "**/.pytest_cache/**": true,
+        "**/venv/**": true // Exclude venv from file watching for performance
+    },
+    "files.eol": "\n", // Ensure consistent line endings (Linux/macOS style)
+
+    // --- Integrated Terminal ---
+    // Optional: Set default terminal profile if desired (e.g., bash, zsh, powershell)
+    // "terminal.integrated.defaultProfile.linux": "bash",
+    // "terminal.integrated.defaultProfile.osx": "zsh",
+    // "terminal.integrated.defaultProfile.windows": "PowerShell"
+}
