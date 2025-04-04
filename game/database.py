@@ -96,6 +96,7 @@ def init_db(conn: sqlite3.Connection):
                 name TEXT NOT NULL,
                 description TEXT DEFAULT 'You see nothing special.',
                 exits TEXT DEFAULT '{}', -- Storing exits as JSON text
+                flags TEXT DEFAULT '{}', -- JSON text for set of flags
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (area_id) REFERENCES areas(id) ON DELETE RESTRICT -- Prevent deleting area if rooms exist
             )
@@ -152,8 +153,8 @@ def init_db(conn: sqlite3.Connection):
             log.info("Default room #1 not found, creating it.")
             cursor.execute(
                 """
-                INSERT INTO rooms (id, area_id, name, description, exits)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO rooms (id, area_id, name, description, exits, flags)
+                VALUES (?, ?, ?, ?, ?, ?)
             """,
                 (
                     1,
@@ -161,6 +162,7 @@ def init_db(conn: sqlite3.Connection):
                     "The Void",
                     "A featureless void stretches out around you. It feels safe, somehow.",
                     json.dumps({}), # No exits initially
+                    json.dumps([]) # flags (empty list/set as JSON)
                 ),
             )  
             log.info("Default Room #1 created.")
