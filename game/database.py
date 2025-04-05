@@ -10,6 +10,7 @@ import sys
 import hashlib # For password hashing (example)
 import asyncio
 import aiosqlite
+from . import utils
 
 # Assuming config.py exists in the parent directory
 try:
@@ -259,7 +260,7 @@ async def fetch_all(
         async with conn.execute(query, params) as cursor:
             return await cursor.fetchall()
     except aiosqlite.Error as e:
-        log.error("Database fetch_one error - Query: %s Params: %s Error: %s", query, params, e, exc_info=True)
+        log.error("Database fetch_all error - Query: %s Params: %s Error: %s", query, params, e, exc_info=True)
         return None
 # --- Hashing Utility (Remains synchronous - CPU bound, okay outside event loop if complex) ---
 # Consider running complex hashing in executor if it becomes blocking
@@ -310,7 +311,7 @@ async def main_test():
             # --- Example Usage (Now using await and lazy logging) ---
             log.info("Attempting to create test player 'testacc'...")
             test_pass = "password123"
-            hashed_pass = hash_password(test_pass) # Hashing is sync
+            hashed_pass = utils.hash_password(test_pass) # Hashing is sync
             player_id = await execute_query( # Must await
                 connection,
                 "INSERT INTO players (username, hashed_password, email) VALUES (?, ?, ?)",
