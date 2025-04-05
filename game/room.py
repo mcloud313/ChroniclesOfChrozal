@@ -27,8 +27,8 @@ class Room:
             db_data: A dictionary-like object (e.g., sqlite3.Row) containing room data
             (id, area_id, name, desc, exits, flags).
         """
-        self.dbid int = db_data['id']
-        self.area_id int = db_data['area_id']
+        self.dbid: int = db_data['id']
+        self.area_id: int = db_data['area_id']
         self.name: str = db_data['name']
         self.description: str = db_data['description']
 
@@ -50,7 +50,7 @@ class Room:
         
         # Runtime attributes
         # Using type 'Any' for now until Character is defined
-        self.characters Set[Any] = set() #Holds character objects currently in room
+        self.characters: Set[Any] = set() #Holds character objects currently in room
 
     def add_character(self, character: Any):
         """Adds a character object to the room"""
@@ -144,7 +144,7 @@ class Room:
         name_lower = name.lower()
         for character in self.characters:
             # Access the first_name attribute instead of name
-            first_name = getattr(character, 'first_name' None)
+            first_name = getattr(character, 'first_name', None)
             if first_name and first_name.lower() == name_lower:
                 return character
         return None

@@ -118,6 +118,32 @@ async def init_db(conn: aiosqlite.Connection):
         )
         log.info("Checked/Created 'rooms' table")
 
+        # --- Create races table ---
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS races (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT DEFAULT 'An undescribed race.'
+            -- TODO: Add base stat modifiers, abilities etc later
+            )
+            """
+        )
+        log.info("Checked/Created 'races' table.")
+
+        # --- Create classes table ---
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS classes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT DEFAULT 'An undescribed class'
+            -- Add skill bonsuses, abilities etc. later
+            )
+            """
+        )
+        log.info("Checked/Created 'classes' table.")
+
         # --- Create characters table ---
         await conn.execute(
             """
@@ -126,14 +152,15 @@ async def init_db(conn: aiosqlite.Connection):
             player_id INTEGER NOT NULL,
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
-            race TEXT,
-            class TEXT,
+            race_id INTEGER,
+            class_id INTEGER,
             level INTEGER DEFAULT 1,
             hp INTEGER DEFAULT 50,
             max_hp INTEGER DEFAULT 50,
             essence INTEGER DEFAULT 20,
             max_essence INTEGER DEFAULT 20,
-            xp_pool INTEGER DEFAULT 0,
+            xp_pool INTEGER DEFAULT 0, -- Unabsorbed XP
+            xp_total INTEGER DEFAULT 0, -- XP accumulated within current level
             stats TEXT DEFAULT '{}', -- JSON: {"might": 10, "agility": 10, ...}
             skills TEXT DEFAULT '{}', -- JSON: {"climb": 0, "appraise": 0, ...}
             location_id INTEGER DEFAULT 1, -- Default starting room ID
@@ -141,11 +168,40 @@ async def init_db(conn: aiosqlite.Connection):
             last_saved TIMESTAMP,
             UNIQUE (player_id, first_name, last_name), -- Character names unique per player account
             FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE, -- Delete characters if player account is deleted
-            FOREIGN KEY (location_id) REFERENCES rooms(id) ON DELETE SET DEFAULT -- If room deleted, move char to default room 1
+            FOREIGN KEY (location_id) REFERENCES rooms(id) ON DELETE SET DEFAULT, -- If room deleted, move char to default room 1
+            FOREIGN KEY (race_id) REFERENCES races(id) ON DELETE SET NULL, -- If race deleted, set char race to NULL
+            FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE SET NULL -- If class deleted, set char class to NULL
             )
             """
         )
         log.info("Checked/Created 'characters' table.")
+
+        # --- Populate Default Races ---
+        default_races = [
+            (1, "Chrozalin", "Versatile and adaptable."),
+            (2, "Dwarf", "Sturdy and resilient."),
+            (3, "Elf", "Graceful and long-lived."),
+            (4, "Yan-ter", "Wise and patient turtlefolk.")
+        ]
+        try:
+            # Use INSERT OR IGNORE to avoid errors if they already exist
+            await conn.executemany("INSERT OR IGNORE INTO races(id, name, description) VALUES(?, ?, ?)", default_races)
+            log.info("Checked/Populated default races.")
+        except aiosqlite.Error as e:
+            log.error("Failed to populate default races: %s", e)
+
+        # --- Populate Default Classes ---
+        default_classes = [
+            (1, "Warrior", "Master of martial combat."),
+            (2, "Mage", "Wielder of arcane energies."),
+            (3, "Cleric", "Agent of divine power."),
+            (4, "Rogue", "Master of stealth and skill.")
+        ]
+        try:
+            await conn.executemany("INSERT OR IGNORE INTO classes(id, name, description) VALUES(?, ?, ?)", default_classes)
+            log.info("Checked/Populated default classes.")
+        except aiosqlite.Error as e:
+            log.error("Failed to populate default classes: %s", e)
 
         # --- Create Default Area and Room if they don't exist ---
         # Check for default area
@@ -288,6 +344,137 @@ async def main_test():
     log.info("Running ASYNC database module test...")
 
     # --- Path calculation ---
+    current_script_path = os.path.abspath(__file__)
+    game_dir = os.path.dirname(current_script_path)
+    parent_dir = os.path.dirname(game_dir) # Project root directory
+    db_full_path = os.path.join(parent_dir, DATABASE_PATH)
+    # ------------------------
+
+    log.info("Database path for test: %s", db_full_path)
+
+    connection = await connect_db(db_full_path)
+
+    if connection:
+        try: # use try...finally to ensure connection closure
+            log.info("%s %s %s", "-" * 20, "Initializing DB (Async)", "-" * 20)
+            await init_db(connection)
+            log.info("%s %s %s", "-" * 20, "Initialization Complete", "-" * 20)
+
+            # --- Determine Player ID ---
+            log.info("Attempting to create/find test player 'testacc'...")
+            test_pass = "password123"
+            hashed_pass = utils.hash_password(test_pass) # Use utils function
+            # Attempt player insert
+            new_player_id = await execute_query(
+                connection,
+                "INSERT INTO players (username, hashed_password, email) VALUES (?, ?, ?)",
+                ("testacc", hashed_pass, "test@example.com")
+            )
+
+            current_player_id = None # Variable to hold the ID we will use
+
+            if new_player_id:
+                log.info("Test player 'testacc' created with ID: %s", new_player_id)
+                current_player_id = new_player_id
+            else:
+                log.warning("Test player insertion failed (maybe 'testacc' or test@example.com already exists).")
+                # If insert failed, try to fetch the existing player ID
+                existing_player = await fetch_one(connection, "SELECT id FROM players WHERE username = ?", ("testacc",))
+                if existing_player:
+                    current_player_id = existing_player['id']
+                    log.info("Found existing player 'testacc' with ID: %s", current_player_id)
+                else:
+                    # This case should be unlikely if UNIQUE constraint fired, but handle it
+                    log.error("Failed to create or find player 'testacc'. Cannot proceed with character tests.")
+                    # Exit or raise? For testing, we might stop here.
+                    # return # Exit the test function if player is critical
+
+            # --- Attempt Character Creation/Check (if Player ID was found/created) ---
+            char_id = None # Initialize char_id
+            if current_player_id:
+                log.info("Attempting to create/check character 'Tester' for player ID %s...", current_player_id)
+                initial_stats = json.dumps({"might": 12, "agility": 11, "vitality": 13, "intellect": 9, "aura": 8, "persona": 10})
+                initial_skills = json.dumps({"climb": 1, "swim": 1})
+                # Attempt character insert - this might also fail on UNIQUE constraint if run multiple times
+                char_id = await execute_query(
+                    connection,
+                    """INSERT INTO characters (player_id, first_name, last_name, race_id, class_id, stats, skills, location_id)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    # Use the determined player ID, and correct integer IDs for race/class
+                    (current_player_id, "Tester", "Testee", 1, 1, initial_stats, initial_skills, 1)
+                )
+                if char_id:
+                    log.info("Test character 'Tester' created with ID: %s", char_id)
+                else:
+                    # If insert failed, it might be because the character already exists (UNIQUE constraint)
+                    log.warning("Test character insertion failed (maybe character 'Tester Testee' already exists for player %s).", current_player_id)
+                    # We can still proceed to fetch and check if it exists
+            else:
+                log.error("No valid player ID for 'testacc'; skipping character creation/fetch.")
+
+
+            # --- Fetching character 'Tester' ---
+            log.info("Fetching character 'Tester'...")
+            character_data = None
+            if current_player_id: # Only try to fetch if we have a player ID
+                # Fetch using the known player ID for better targeting
+                character_data = await fetch_one(
+                    connection,
+                    "SELECT * FROM characters WHERE player_id = ? AND first_name = ?",
+                    (current_player_id, "Tester")
+                )
+
+            if character_data:
+                # Safely format using fetched data
+                log.info(
+                    "Found character: ID=%s, Name=%s %s, RaceID=%s, ClassID=%s, Level=%s", # Changed Race/Class -> IDs
+                    character_data['id'],
+                    character_data['first_name'],
+                    character_data['last_name'],
+                    character_data['race_id'], # Displaying ID now
+                    character_data['class_id'], # Displaying ID now
+                    character_data['level']
+                )
+                # Safely parse JSON data
+                try:
+                    stats = json.loads(character_data['stats'])
+                    log.info("  Stats: %s", stats)
+                except (json.JSONDecodeError, TypeError) as e:
+                    log.warning("  Could not decode stats JSON: %s (Error: %s)", character_data['stats'], e)
+                try:
+                    skills = json.loads(character_data['skills'])
+                    log.info("  Skills: %s", skills)
+                except (json.JSONDecodeError, TypeError) as e:
+                    log.warning("  Could not decode skills JSON: %s (Error: %s)", character_data['skills'], e)
+            else:
+                # Log includes player ID for context if available
+                log.info("Character 'Tester' not found for player ID %s.", current_player_id if current_player_id is not None else 'N/A')
+
+
+            # --- Fetching Rooms (Remains the same) ---
+            log.info("Fetching all rooms in Area 1:")
+            area1_rooms = await fetch_all(connection, "SELECT id, name FROM rooms WHERE area_id = ?", (1,)) # Must await
+            if area1_rooms is not None:
+                if area1_rooms:
+                    for room in area1_rooms:
+                        log.info(" Room ID: %s, Name: %s", room['id'], room['name'])
+                else:
+                    log.info(" No rooms found in Area 1.")
+            else:
+                log.info(" Could not fetch rooms.")
+            # --- End Example Usage ---
+
+        finally:
+            log.info("Closing database connection.")
+            await connection.close() # Must await close
+            log.info("Database connection closed.")
+    else:
+        log.error("Failed to connect to the database for testing.")
+    """Asynchronous main function to run database tests."""
+    # Use lazy formatting for log messages
+    log.info("Running ASYNC database module test...")
+
+    # --- Path calculation ---
     # Determine DB path relative to project root using the potentially
     # updated global DATABASE_PATH variable.
     current_script_path = os.path.abspath(__file__)
@@ -328,7 +515,7 @@ async def main_test():
                     connection,
                     """INSERT INTO characters (player_id, first_name, last_name, race, class, stats, skills, location_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (player_id, "Tester", "Testee", "Human", "Warrior", initial_stats, initial_skills, 1)
+                    (player_id, "Tester", "Testee", 1, 1, initial_stats, initial_skills, 1)
                 )
                 if char_id:
                     log.info("Test character 'Tester' created with ID: %s", char_id)
@@ -355,8 +542,8 @@ async def main_test():
                     character_data['id'],
                     character_data['first_name'],
                     character_data['last_name'],
-                    character_data['race'],
-                    character_data['class'],
+                    character_data['race_id'],
+                    character_data['class_id'],
                     character_data['level']
                 )
                 # Safely parse JSON data
