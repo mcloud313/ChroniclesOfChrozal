@@ -335,6 +335,89 @@ def verify_password(stored_hash: str, provided_password: str) -> bool:
     # return bcrypt.checkpw(provided_password.encode('utf-8'), stored_hash.encode('utf-8'))
     return stored_hash == hashlib.sha256(provided_password.encode('utf-8')).hexdigest()
 
+async def load_all_areas(conn: aiosqlite.Connection) -> list[aiosqlite.Row] | None:
+    """Fetches all rows from the areas table."""
+    return await fetch_all(conn, "SELECT * FROM areas ORDER BY id")
+
+async def load_all_rooms(conn: aiosqlite.Connection) -> list[aiosqlite.Row] | None:
+    """Fetches all rows from the rooms table."""
+    # Order by ID for consistency, though not strictly necessary
+    return await fetch_all(conn, "SELECT * FROM rooms ORDER BY id")
+
+async def load_player_account(conn: aiosqlite.Connection, username: str) -> aiosqlite.Row | None:
+    """Fetches a player account by username (case-insensitive)."""
+    # Use lower() for case-insensitive lookup if desired and COLLATE NOCASE isn't used on column
+    # Using parameter binding is generally safer than f-string for user input
+    return await fetch_one(conn, "SELECT * FROM players WHERE lower(username) = lower(?)", (username,))
+
+async def create_player_account(conn: aiosqlite.Connection, username: str, hashed_password: str, email: str) -> int | None:
+    """Creates a new player account and returns the new player Id."""
+    query = """
+        INSERT INTO players (username, hashed_password, email, last_login)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    """
+    # execute_query returns lastrowid on successful insert
+    return await execute_query(conn, query, (username, hashed_password, email))
+
+async def load_characters_for_account(conn: aiosqlite.Connection, player_id: int) -> list[aiosqlite.Row] | None:
+    """Fetches basic info (id, names, level) for all characters belonging to a player account"""
+    query = """
+    SELECT id, first_name, last_name, level, race_id, class_id
+    FROM characters
+    WHERE player_id = ?
+    ORDER BY last_saved DESC, id ASC
+    """
+    return await fetch_all(conn, query, (player_id))
+
+async def load_character_data(conn: aiosqlite.Connection, character_id: int) -> aiosqlite.Row | None:
+    """Fetches all data for a specific character by their ID"""
+    return await fetch_one(conn, "SELECT * FROM characters WHERE id = ?", (character_id,))
+
+async def save_character_data(conn: aiosqlite.Connection, character_id: int, data: dict) -> int | None:
+    """
+    Updates specified fields for a character.
+
+    Args: 
+        conn: Active aiosqlite connection.
+        character_id: The ID of the character to update.
+        data: a dictionary where keys are column names (e.g., 'location_id', 'hp', 'xp_pool')
+                and values are the new values to save.
+
+    Returns:
+        Number of rows affected (should be 1 on success) or None on error.
+    """
+    if not data:
+        log.warning("save_character_data called with empty data for char %s", character_id)
+        return 0 # Nothing to Update
+    
+    # Build the SET part of the query dynamically
+    set_clauses = []
+    params = []
+    valid_columns = [ # Define columns that are allowed to be updated
+        "first_name", "last_name", "race_id", "class_id", "level", "hp", "max_hp",
+        "essence", "max_essence", "xp_pool", "xp_total", "stats", "skills",
+        "location_id", "inventory", "equipment", "coinage" # Add inventory/equip/coinage later
+        ]
+    
+    for key, value in data.items():
+        if key in valid_columns:
+            set_clauses.append(f"{key} = ?")
+            params.append(value)
+        else:
+            log.warning("Attempted to save invalid/protected column '%s' for char %s", key, character_id)
+    if not set_clauses:
+        log.warning("No valid columns provided to save_character_data for char %s", character_id)
+        return 0
+    
+    # Always update last_saved timestamp
+    set_clauses.append("last_saved = CURRENT_TIMESTAMP")
+
+    query = f"UPDATE characters SET {', '.join(set_clauses)} WHERE id = ?"
+    params.append(character_id) # Add the character ID for the WHERE clause
+
+    # execute_query returns rowcount for UPDATE
+    return await execute_query(conn, query, tuple(params))
+
 # ================================================================
 # Async Test Runner
 # ================================================================
