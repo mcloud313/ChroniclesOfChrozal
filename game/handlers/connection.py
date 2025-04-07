@@ -15,6 +15,7 @@ from game.player import Player
 from game.character import Character
 from game.world import World
 from game import utils
+from game.commands import handler as command_handler
 
 # Assume command handler will exist later
 # from ..comands import handler as command_handler
@@ -293,22 +294,23 @@ class ConnectionHandler:
             self.state = ConnectionState.DISCONNECTED
             return
         
-        # Main command loop
-        await self._send("\r\n> ") # Send initial prompt
-        line = await self._read_line()
-        if line is None: return # Connection lost
+        # Main command loop -- keep reading until told to disconnect!
+        while self.state == ConnectionState.PLAYING:
+            await self._send("\r\n> ") # Send initial prompt
+            line = await self._read_line()
+            if line is None: return # Connection lost
 
-        # Basic quit command handling here until Task 9
-        if line.lower().strip() == "quit":
-            log.info("Character %s initiated quit.", self.active_character.name)
-            # Saving happens in the main handle() finally block
-            self.state = ConnectionState.DISCONNECTED
-            return
-        # TODO: Pass line to Command Handler (Task 9)
-        # Command_handler.process(self.active_character, line)
-        await self.active_character.send(f"Command processing not implemented yet: '{line}'\r\n")
+            # Process the command using the handler
+            # Pass necessary objects to the command processor
+            should_continue = await command_handler.process_command(
+                self.active_character, self.world, self.db_conn, line
+            )
 
-        # Loop back to read next command (stay in PLAYING state)
+            if not should_continue:
+                #Process_command returned false (e.g., from 'quit')
+                # Set state, the main handle() loop will see this and call cleanup
+                self.state = ConnectionState.DISCONNECTED
+                # No need to call cleanup directly here.
 
     async def handle(self):
         """Main handling loop driven by state machine."""
