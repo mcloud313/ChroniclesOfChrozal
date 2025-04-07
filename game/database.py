@@ -152,9 +152,11 @@ async def init_db(conn: aiosqlite.Connection):
             player_id INTEGER NOT NULL,
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
+            sex TEXT NOT NULL,
             race_id INTEGER,
             class_id INTEGER,
             level INTEGER DEFAULT 1,
+            description TEXT DEFAULT '',
             hp INTEGER DEFAULT 50,
             max_hp INTEGER DEFAULT 50,
             essence INTEGER DEFAULT 20,
@@ -425,6 +427,78 @@ async def save_character_data(conn: aiosqlite.Connection, character_id: int, dat
     # execute_query returns rowcount for UPDATE
     return await execute_query(conn, query, tuple(params))
 
+async def create_character(
+    conn: aiosqlite.Connection,
+    player_id: int,
+    first_name: str,
+    last_name: str,
+    sex: str,
+    race_id: int, 
+    class_id: int,
+    stats_json: str, 
+    skills_json: str,
+    description: str,
+    hp: int, 
+    max_hp: int,
+    essence: int,
+    max_essence: int,
+    location_id: int = 1 # Default location
+) -> int | None:
+    """
+    Creates a new character record in the database.
+
+    Args:
+        conn: Active aiosqlite connection.
+        player_id: ID of the owning player account.
+        first_name: Character's first name.
+        last_name: Character's last name.
+        sex: Character's chosen sex ('Male', 'Female', 'They/Them', etc.)
+        race_id: ID of the character's race.
+        class_id: ID of the character's class.
+        stats_json: JSON string representing base stats.
+        skills_json: JSON string representing initial skills.
+        description: Generated character description string.
+        hp: Initial HP value.
+        max_hp: Initial Max HP value.
+        essence: Initial Essence value.
+        max_essence: Initial Max Essence value.
+        location_id: Starting location ID (defaults to 1).
+
+    Returns:
+        The dbid of the newly created character, or None on error.
+    """
+    query = """
+        INSERT INTO characters (
+        player_id, first_name, last_name, sex, race_id, class_id,
+        stats, skills, description, hp, max_hp, essence, max_essence,
+        location_id
+        -- level, xp_pool, xp_total use DB defaults
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    params = (
+        player_id, first_name, last_name, sex, race_id, class_id,
+        stats_json, skills_json, description, hp, max_hp, essence, max_essence,
+        location_id
+    )
+
+    try:
+        # Use execute_query which returns lastrowid on success
+        new_char_id = await execute_query(conn, query, params)
+        if new_char_id:
+            log.info("Successfully created character '%s %s' with ID %s for player %s.",
+            first_name, last_name, new_char_id, player_id)
+            return new_char_id
+        else:
+            # This might happen if execute_query returns 0 or None unexpectedly
+            log.error("Character creation for player %s failed, execute_query returned %s",
+            player_id, new_char_id)
+            return None
+    except Exception as e:
+        # Catch potential errors during creation (like UNIQUE constraint violation maybe?)
+        log.exception("Exception during character creation for player %s: %s", player_id, e, exc_info=True)
+        return None
+
+
 # ================================================================
 # Async Test Runner
 # ================================================================
@@ -488,10 +562,9 @@ async def main_test():
                 # Attempt character insert - this might also fail on UNIQUE constraint if run multiple times
                 char_id = await execute_query(
                     connection,
-                    """INSERT INTO characters (player_id, first_name, last_name, race_id, class_id, stats, skills, location_id)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    # Use the determined player ID, and correct integer IDs for race/class
-                    (current_player_id, "Tester", "Testee", 1, 1, initial_stats, initial_skills, 1)
+                    """INSERT INTO characters (player_id, first_name, last_name, sex, race_id, class_id, stats, skills, location_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (current_player_id, "Tester", "Testee", "They/Them", 1, 1, initial_stats, initial_skills, 1)
                 )
                 if char_id:
                     log.info("Test character 'Tester' created with ID: %s", char_id)
