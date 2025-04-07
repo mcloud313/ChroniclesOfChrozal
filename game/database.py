@@ -367,7 +367,7 @@ async def load_characters_for_account(conn: aiosqlite.Connection, player_id: int
     WHERE player_id = ?
     ORDER BY last_saved DESC, id ASC
     """
-    return await fetch_all(conn, query, (player_id))
+    return await fetch_all(conn, query, (player_id,))
 
 async def load_character_data(conn: aiosqlite.Connection, character_id: int) -> aiosqlite.Row | None:
     """Fetches all data for a specific character by their ID"""

@@ -3,13 +3,11 @@ Manages the game world's loaded state, including rooms and areas.
 """
 
 import logging
-from typing import Dict, Any, Optional
-
 import aiosqlite
-
-# Import the database functions and Room class using relative paths
+from typing import Dict, Any, Optional
 from . import database
 from .room import Room
+from .character import Character # Assuming character class is defined
 
 log = logging.getLogger(__name__)
 
@@ -22,9 +20,8 @@ class World:
         # Store raw area data for now, could be Area objects later
         self.areas: Dict[int, aiosqlite.Row] = {}
         self.rooms: Dict[int, Room] = {}
+        self.active_characters: Dict[int, Character] = {} # Add this {character_dbid: Character_object}
         # Add containers for active players/mobs later if needed
-        # self.active_characters: Dict[int, Character] = {}
-
         log.info("World object initialized.")
 
     async def build(self, db_conn: aiosqlite.Connection):
@@ -96,7 +93,29 @@ class World:
         # Returns the raw row data for now
         return self.areas.get(area_id)
     
-# --- Add methods later for managing active entities ---
-# def add_active_character(self, character: Character): ...
-# def remove_active_character(self, character_id: int): ...
-# def get_active_character(self, character_id: int) -> Optional[Character]: ...
+    def add_active_character(self, character: Character):
+        """Adds a character to the active list."""
+        if character.dbid in self.active_characters:
+            log.warning("Character %s (ID: %s) already in active list!", character.name, character.dbid)
+        self.active_characters[character.dbid] = character
+        log.debug("Character %s added to active list.", character.name)
+
+    def remove_active_character(self, character_id: int):
+        """Removes a character from the active list."""
+        character = self.active_characters.pop(character_id, None)
+        if character:
+            log.debug("Character %s removed from active list.", getattr(character, 'name', character_id))
+        else:
+            log.warning("Attempted to remove non-existent active character ID: %s", character_id)
+        # Return the removed character object if needed elsewhere
+        return character
+    
+    def get_active_character(self, character_id: int) -> Optional[Character]:
+        """Gets an active character by their ID"""
+        return self.active_characters.get(character_id)
+    
+    def get_active_characters_list(self) -> list[Character]:
+        """Returns a list of currently active characters."""
+        # Return a copy of the values (the character objects)
+        return list(self.active_characters.values())
+    
