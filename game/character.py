@@ -7,7 +7,9 @@ Holds in-game state, attributes, and connection information.
 import asyncio
 import json
 import logging
+import aiosqlite
 from typing import TYPE_CHECKING, Optional, Dict, Any
+from . import database
 
 # Use TYPE_CHECKING block for Room to avoid circular import errors
 # This makes the type checker happy but doesn't cause runtime import issues.
@@ -116,16 +118,39 @@ class Character:
         except Exception as e:
             log.exception("Unexpected error sending to character %s", self.name, exc_info=True)
 
-    async def save(self):
+    async def save(self, db_conn: aiosqlite.Connection):
         """
-        Placeholder for saving character state to the database.
-        This would call a function like database.save_character_data().
+        Gathers essential character data and saves it to the database.
+
+        Args:
+            db_conn: An active aiosqlite connection.
         """
-        # TODO: Implement saving logic
-        # 1. collect data to save (location_id, hp, xp, stats, skills, etc.)
-        # 2. Call await database.save_character_data(self.dbid, data_dict)
-        log.debug("Character save() called for %s (Not implemented yet)", self.name)
-        pass # Replace with actual save logic later
+        # Define V1 data to save
+        data_to_save = {
+            "location_id": self.location_id,
+            "hp": self.hp,
+            "essence": self.essence,
+            "xp_pool": self.xp_pool,
+            "xp_total": self.xp_total
+            # Add stats/skills/inventory/equipment/coinage later as needed
+            # "stats": json.dumps(self.stats)
+            # "skills": json.dumps(self.skills)
+        }
+
+        log.debug("Saving character %s (ID: %s)... Data: %s", self.name, self.dbid, data_to_save)
+        try:
+            rowcount = await database.save_character_data(db_conn, self.dbid, data_to_save)
+            if rowcount == 1:
+                log.info("Successfully saved character %s (ID: %s).", self.name, self.dbid)
+            elif rowcount == 0:
+                log.warning("Attempted to save character %s (ID: %s), but no rows were updated (Maybe ID invalid?).", self.name, self.dbid)
+            else:
+                # Should ideally not happen with WHERE id = ?
+                log.warning("Attempted to save character %s (ID: %s), unexpected rowcount: %s.", self.name, self.dbid, rowcount)
+
+        except Exception as e:
+            # Log error but don't crash the cleanup/autosave process
+            log.exception("Error saving character %s (ID: %s): %s", self.name, self.dbid, rowcount)
 
     def update_location(self, new_location: Optional['Room']):
         """

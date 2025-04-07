@@ -344,18 +344,29 @@ class ConnectionHandler:
 
         #Save character if one was active
         if self.active_character:
+            char_to_clean = self.active_character
+            char_name = char_to_clean.name # Get name before clearing reference
+            char_id = char_to_clean.dbid
+
+            log.debug("Cleanup: removing active character %s (%s)", char_name, char_id)
             # Remove from world tracking FIRST
-            self.world.remove_active_character(self.active_character.dbid)
-            # Remove from room
-            if self.active_character.location:
+            self.world.remove_active_character(char_id)
+            self.active_character = None # Clear reference on handler
+            # Remove from room and announce
+            if char_to_clean.location:
                 #Announce departure
-                departure_msg = f"\r\n{self.active_character.name} slowly departs.\r\n"
-                self.active_character.location.broadcast(departure_msg, exclude={self.active_character})
-                #Remove from room set
-                self.active_character.location.remove_character(self.active_character)
-            log.info("Attempting final save for character %s.", self.active_character.name)
-            await self.active_character.save() # Call character's save method
-            self.active_character = None # Clear reference
+                departure_msg = f"\r\n{char_name} slowly departs.\r\n"
+                try:
+                    # Use try block as broadcast could fail if room/other players have issues
+                    char_to_clean.location.broadcast(departure_msg, exclude={char_to_clean})
+                except Exception as e:
+                    log.error("Error broadcasting departure for %s: %s", char_name, e)
+                char_to_clean.location.remove_character(char_to_clean)
+
+            log.info("Attempting final save for character %s (%s).", char_name, char_id)
+            # pass the database connection stored in the handler
+            await char_to_clean.save(self.db_conn)
+
         # Close network connection
         if self.writer and not self.writer.is_closing():
             try:

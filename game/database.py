@@ -220,19 +220,26 @@ async def init_db(conn: aiosqlite.Connection):
             room_exists = (await cursor.fetchone())[0]
         if not room_exists:
             log.info("Default room #1 not found, creating it.")
+            exits_room1 = json.dumps({"north": 2}) # Exit North leads to Room 2
             await conn.execute(
-                """
-                INSERT INTO rooms (id, area_id, name, description, exits, flags)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    1, 1, "The Void",
-                    "A featureless void stretches out around you. It feels safe, somehow.",
-                    json.dumps({}), # No exits initially
-                    json.dumps([]) # flags (empty list/set as JSON)
-                ),
-            )  
+                """INSERT INTO rooms (id, area_id, name, description, exits, flags)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (1, 1, "The Void", "A featureless void stretches out around you. To the north, something shimmers slightly.", exits_room1, json.dumps([]))
+            )
             log.info("Default Room #1 created.")
+
+        # *** NEW: Room 2 ("A Dusty Trail") ***
+        async with conn.execute("SELECT COUNT(*) FROM rooms WHERE id = 2") as cursor:
+            room2_exists = (await cursor.fetchone())[0]
+        if not room2_exists:
+            log.info("Default Room #2 not found, creating it.")
+            exits_room2 = json.dumps({"south": 1}) # Exit South leads back to Room 1
+            await conn.execute(
+                """INSERT INTO rooms (id, area_id, name, description, exits, flags)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (2, 1, "A Dusty Trail", "A dusty trail stretches before you, seemingly leading nowhere special. The void lies to the south.", exits_room2, json.dumps(["outdoors"])) # Added outdoors flag example
+            )
+            log.info("Default Room #2 created with exit south.")
 
         await conn.commit()
         log.info("Database initialization check complete.")
@@ -393,11 +400,11 @@ async def save_character_data(conn: aiosqlite.Connection, character_id: int, dat
     # Build the SET part of the query dynamically
     set_clauses = []
     params = []
-    valid_columns = [ # Define columns that are allowed to be updated
-        "first_name", "last_name", "race_id", "class_id", "level", "hp", "max_hp",
-        "essence", "max_essence", "xp_pool", "xp_total", "stats", "skills",
-        "location_id", "inventory", "equipment", "coinage" # Add inventory/equip/coinage later
-        ]
+    valid_columns = [ # V1 focus
+        "location_id", "hp", "essence", "xp_pool", "xp_total",
+        # Add others as they become dynamic/necessary:
+        # "level", "stats", "skills", "inventory", "equipment", "coinage", etc.
+    ]
     
     for key, value in data.items():
         if key in valid_columns:
