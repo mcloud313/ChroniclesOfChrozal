@@ -2,7 +2,7 @@
 """
 General utility functions for the game.
 """
-
+import random
 import hashlib
 import logging
 import math
@@ -50,6 +50,45 @@ def verify_password(stored_hash: str, provided_password: str) -> bool:
         return False # Cannot verify empty or missing components
     # Compare the hash of the provided password with the stored hash
     return stored_hash == hash_password(provided_password)
+
+def generate_stat() -> int:
+    """Generates a single stat weighted towards lower numbers (10-35)."""
+    # Example: roll 3 dice reroll 1s Gives range 6-36 bell curve-ish center
+    # Let's try a simpler weighted choice for now
+    # More likely to get 10-20, less likely 21-30, rare 31-35
+    roll = random.random() # 0.0 <= roll < 1.0
+    if roll < 0.30: # 50% chance for 10-19
+        return random.randint(10, 14)
+    if roll < 0.50:
+        return random.randint(14, 16)
+    if roll < 0.60:
+        return random.randint(16, 18)
+    if roll < 0.65:
+        return random.randint(18, 20)
+    if roll < 0.70:
+        return random.randint(20, 22)
+    if roll < 0.75:
+        return random.randint(22, 24)
+    if roll < 0.80:
+        return random.randint(24, 26)
+    if roll < 0.85:
+        return random.randint(26, 28)
+    if roll < 0.88:
+        return random.randint(28, 30)
+    if roll < 0.91:
+        return random.randint(30, 31)
+    if roll < 0.94:
+        return random.randint(31, 32)
+    if roll < 0.97:
+        return random.randint(32, 33)
+    if roll < 0.99:
+        return random.randint(33, 34)
+    else: 
+        return 35
+
+def generate_stat_set() -> list[int]:
+    """Generates a set of 6 stats."""
+    return sorted([generate_stat() for _ in range(6)], reverse=True)
 
 def calculate_modifier(stat_value: int) -> int:
     """

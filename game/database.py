@@ -427,6 +427,14 @@ async def save_character_data(conn: aiosqlite.Connection, character_id: int, dat
     # execute_query returns rowcount for UPDATE
     return await execute_query(conn, query, tuple(params))
 
+async def load_all_races(conn: aiosqlite.Connection) -> list[aiosqlite.Row] | None:
+    """Fetches all available races."""
+    return await fetch_all(conn, "SELECT id, name, description FROM races ORDER BY id")
+
+async def load_all_classes(conn: aiosqlite.Connection) -> list[aiosqlite.Row] | None:
+    """Fetches all available classes."""
+    return await fetch_all(conn, "SELECT id, name, description FROM classes ORDER BY id")
+
 async def create_character(
     conn: aiosqlite.Connection,
     player_id: int,

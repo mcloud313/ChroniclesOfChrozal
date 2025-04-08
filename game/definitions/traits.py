@@ -16,7 +16,7 @@ TRAIT_OPTIONS = {
         "Eye Color": ["Brown", "Blue", "Green", "Hazel", "Gray"],
         "Nose Type": ["Aquiline", "Button", "Broad", "Hooked"],
         "Skin Tone": ["Pale", "Ruddy", "Brown", "Dark", "Black"]
-        "Facial Hair": ["Stubble", "Moustache", "Average beard", "Thick Beard", "Long Beard"]
+        "Beard Style": ["Stubble", "Moustache", "Average beard", "Thick Beard", "Long Beard"]
     },
     "dwarf": {
         "Height": ["Very Short", "Short", "Average (for a Dwarf)"],
