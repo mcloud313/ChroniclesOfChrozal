@@ -6,6 +6,7 @@ Handles the interactive character creation process.
 import asyncio
 import logging
 import json
+import aiosqlite
 from enum import Enum, auto
 from typing import Optional, Dict, Any, List
 # Imports from game package
@@ -15,14 +16,12 @@ from game.player import Player
 from game.character import Character
 from game.world import World
 # Import trait definitions (assuming traits.py is in game/definitions/)
+log = logging.getLogger(__name__)
 try:
     from ..definitions import traits as trait_defs
 except ImportError:
     log.error("Could not import trait definitions! Creation menus will fail.")
     trait_defs = None
-# Need a reference back to ConnectionState? Or just return success/fail?
-# Let's return new Character on success, None on failure/quit.
-from .connection import ConnectionState # Needed for setting state on ConnectionHandler
 
 log = logging.getLogger(__name__)
 
@@ -323,7 +322,8 @@ class CreationHandler:
         # Get the ordered list of traits to ask about
         # Ensure consistent order: Height, Build, Hair Style, Hair Color, Eye Color, Nose Type ...
         self._trait_keys = [
-            "Height", "Build", "Hair Style", "Hair Color", "Eye Color", "Nose Type"
+            "Height", "Build", "Hair Style", "Hair Color", "Eye Color", "Nose Type", "Beard Type",
+            "Skin Tone", "Ear Shape", "Head Shape", "Shell Color", "Skin Pattern"
             # Add other keys consistent with trait_defs.py, checking if they exist for the race
         ]
         # Filter keys based on what's actually available for the race
@@ -463,7 +463,10 @@ class CreationHandler:
         # 2. Calculate Initial Derived Stats (HP/Essence)
         # We need the assigned stats from creation_data['stats']
         stats_dict = self.creation_data.get("stats", {})
+        might= stats_dict.get("might", 10)
         vitality = stats_dict.get("vitality", 10)
+        agility = stats_dict.get("agility", 10)
+        intellect = stats_dict.get("intellect", 10)
         aura = stats_dict.get("aura", 10)
         persona = stats_dict.get("persona", 10)
         # Get base HP from class - need class info! Load class data here?

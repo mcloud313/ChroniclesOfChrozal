@@ -16,6 +16,7 @@ from game.character import Character
 from game.world import World
 from game import utils
 from game.commands import handler as command_handler
+from game.handlers.creation import CreationHandler, CreationState
 
 # Assume command handler will exist later
 # from ..comands import handler as command_handler
@@ -45,6 +46,7 @@ class ConnectionState(Enum):
     GETTING_USERNAME = auto()
     GETTING_PASSWORD = auto()
     SELECTING_CHARACTER = auto()
+    CREATING_CHARACTER = auto()
     PLAYING = auto()
     DISCONNECTED = auto()
 
@@ -80,13 +82,43 @@ class ConnectionHandler:
         await self.writer.drain()
 
     async def _read_line(self) -> str | None:
-        """Reads a line of input from the client, handles errors."""
+        """
+        Reads a line of input from the client, handles errors,
+        and attempts basic filtering of initial Telnet IAC commands.
+        """
         try:
             # Read until newline character, common for Telnet clients
+            # Add a timeout to prevent hanging if client sends IAC but no newline? Optional
+            # data = await asyncio.wait_for(self.reader.readuntil(b'\n'), timeout=60.0)
             data = await self.reader.readuntil(b'\n')
-            decoded_data = data.decode('utf-8').strip() # Decode and remove whitespace/newlines
-            log.debug("Received from %s: %r", self.addr, decoded_data)
-            return decoded_data
+
+            # --- Basic Telnet IAC Filtering
+            # Check if data starts with IAC (Interpret as Command) byte 0xff
+            if data.startswith(b'\xff'):
+                log.debug("Received Telnet IAC sequence from %s: %r", self.addr, data)
+                # This is very basic - proper handling involves parsing options.
+                # For now, we just ignore this line and prompt again.
+                # We could try reading more bytes here if needed to consume full command.
+                return
+
+            # --- Attempt to decode as UTF-8
+            try:
+                decoded_data = data.decode('utf-8').strip() # Decode and remove whitespace/newlines
+                log.debug("Received from %s: %r", self.addr, decoded_data)
+                # Allow 'quit' during creation/login too
+                if decoded_data.lower() == 'quit':
+                    log.info("Quit command received from %s during login/creation.", self.addr)
+                    self.state = ConnectionState.DISCONNECTED
+                    return None
+                return decoded_data
+            except UnicodeDecodeError as ude:
+                # If it's not IAC but still fails decoding, log it and treat as error
+                log.error("UnicodeDecodeError reading from %s: %s. Data: %r", self.addr, ude, data)
+                await self._send("There was an error interpreting your input. Please try simple text.")
+                # Depending on severity, could disconnect or just return empty to re-prompt
+                # Let's return empty for now.
+                return ""
+
         except (ConnectionResetError, asyncio.IncompleteReadError, BrokenPipeError) as e:
             log.warning("Connection lost from %s during read: %s", self.addr, e)
             self.state = ConnectionState.DISCONNECTED
@@ -187,10 +219,8 @@ class ConnectionHandler:
 
         if not char_list_data:
             log.info("No characters found for player %s (%s).", self.player_account.username, self.addr)
-            # Defer character creation to Phase 2
-            await self._send("\r\nYou have no characters on this account. Character creation is not yet implemented.")
-            await self._send("Disconnecting.")
-            self.state = ConnectionState.DISCONNECTED
+            await self._send("\r\nYou have no characters on this account.")
+            self.state = ConnectionState.CREATING_CHARACTER # Trigger creation
             return
 
         # Format Character List
@@ -323,6 +353,35 @@ class ConnectionHandler:
                     await self._handle_get_password()
                 elif self.state == ConnectionState.SELECTING_CHARACTER:
                     await self._handle_select_character()
+
+
+                elif self.state == ConnectionState.CREATING_CHARACTER:
+                    if not self.player_account: # Should have player account by now
+                        log.error("Reached CREATING_CHARACTER without player account! Disconnecting %s.", self.addr)
+                        self.state = ConnectionState.DISCONNECTED
+                        continue
+
+                    log.info("Starting character creation process for player %s (%s)", self.player_account.username, self.addr)
+                    creation_handler = CreationHandler(self.reader, self.writer, self.player_account, self.world, self.db_conn)
+                    new_character_id = await creation_handler.handle() # Run the creation sub-handler
+                    if new_character_id:
+                        # Creation successful, load the new character
+                        log.info("Creation successful (new char ID: %s). Loading character...", new_character_id)
+                        char_data = await database.load_character_data(self.db_conn, new_character_id)
+                        if char_data:
+                            self.active_character = Character(writer=self.writer, db_data=char_data)
+                            log.info("Newly created character '%s' loaded.", self.active_character.name)
+                            await self._handle_post_load() # Place in world, transitions state to PLAYING
+                        else:
+                            log.error("Failed to load newly created character ID %s! Disconnecting %s.", new_character_id, self.addr)
+                            await self._send("Critical error loading your new character. Disconnecting.")
+                            self.state = ConnectionState.DISCONNECTED
+                    else:
+                        # Creation failed or user quit
+                        log.info("Character creation cancelled or failed for player %s (%s). Disconnecting.", self.player_account.username, self.addr)
+                        await self._send("\r\nDisconnecting.")
+                        self.state = ConnectionState.DISCONNECTED
+
                 elif self.state == ConnectionState.PLAYING:
                     await self._handle_playing() # Will loop internally until state changes
                 else:

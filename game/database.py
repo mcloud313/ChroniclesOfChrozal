@@ -532,94 +532,94 @@ async def main_test():
             await init_db(connection)
             log.info("%s %s %s", "-" * 20, "Initialization Complete", "-" * 20)
 
-            # --- Determine Player ID ---
-            log.info("Attempting to create/find test player 'testacc'...")
-            test_pass = "password123"
-            hashed_pass = utils.hash_password(test_pass) # Use utils function
-            # Attempt player insert
-            new_player_id = await execute_query(
-                connection,
-                "INSERT INTO players (username, hashed_password, email) VALUES (?, ?, ?)",
-                ("testacc", hashed_pass, "test@example.com")
-            )
+            # # --- Determine Player ID ---
+            # log.info("Attempting to create/find test player 'testacc'...")
+            # test_pass = "password123"
+            # hashed_pass = utils.hash_password(test_pass) # Use utils function
+            # # Attempt player insert
+            # new_player_id = await execute_query(
+            #     connection,
+            #     "INSERT INTO players (username, hashed_password, email) VALUES (?, ?, ?)",
+            #     ("testacc", hashed_pass, "test@example.com")
+            # )
 
-            current_player_id = None # Variable to hold the ID we will use
+            # current_player_id = None # Variable to hold the ID we will use
 
-            if new_player_id:
-                log.info("Test player 'testacc' created with ID: %s", new_player_id)
-                current_player_id = new_player_id
-            else:
-                log.warning("Test player insertion failed (maybe 'testacc' or test@example.com already exists).")
-                # If insert failed, try to fetch the existing player ID
-                existing_player = await fetch_one(connection, "SELECT id FROM players WHERE username = ?", ("testacc",))
-                if existing_player:
-                    current_player_id = existing_player['id']
-                    log.info("Found existing player 'testacc' with ID: %s", current_player_id)
-                else:
-                    # This case should be unlikely if UNIQUE constraint fired, but handle it
-                    log.error("Failed to create or find player 'testacc'. Cannot proceed with character tests.")
-                    # Exit or raise? For testing, we might stop here.
-                    # return # Exit the test function if player is critical
+            # if new_player_id:
+            #     log.info("Test player 'testacc' created with ID: %s", new_player_id)
+            #     current_player_id = new_player_id
+            # else:
+            #     log.warning("Test player insertion failed (maybe 'testacc' or test@example.com already exists).")
+            #     # If insert failed, try to fetch the existing player ID
+            #     existing_player = await fetch_one(connection, "SELECT id FROM players WHERE username = ?", ("testacc",))
+            #     if existing_player:
+            #         current_player_id = existing_player['id']
+            #         log.info("Found existing player 'testacc' with ID: %s", current_player_id)
+            #     else:
+            #         # This case should be unlikely if UNIQUE constraint fired, but handle it
+            #         log.error("Failed to create or find player 'testacc'. Cannot proceed with character tests.")
+            #         # Exit or raise? For testing, we might stop here.
+            #         # return # Exit the test function if player is critical
 
-            # --- Attempt Character Creation/Check (if Player ID was found/created) ---
-            char_id = None # Initialize char_id
-            if current_player_id:
-                log.info("Attempting to create/check character 'Tester' for player ID %s...", current_player_id)
-                initial_stats = json.dumps({"might": 12, "agility": 11, "vitality": 13, "intellect": 9, "aura": 8, "persona": 10})
-                initial_skills = json.dumps({"climb": 1, "swim": 1})
-                # Attempt character insert - this might also fail on UNIQUE constraint if run multiple times
-                char_id = await execute_query(
-                    connection,
-                    """INSERT INTO characters (player_id, first_name, last_name, sex, race_id, class_id, stats, skills, location_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (current_player_id, "Tester", "Testee", "They/Them", 1, 1, initial_stats, initial_skills, 1)
-                )
-                if char_id:
-                    log.info("Test character 'Tester' created with ID: %s", char_id)
-                else:
-                    # If insert failed, it might be because the character already exists (UNIQUE constraint)
-                    log.warning("Test character insertion failed (maybe character 'Tester Testee' already exists for player %s).", current_player_id)
-                    # We can still proceed to fetch and check if it exists
-            else:
-                log.error("No valid player ID for 'testacc'; skipping character creation/fetch.")
+            # # --- Attempt Character Creation/Check (if Player ID was found/created) ---
+            # char_id = None # Initialize char_id
+            # if current_player_id:
+            #     log.info("Attempting to create/check character 'Tester' for player ID %s...", current_player_id)
+            #     initial_stats = json.dumps({"might": 12, "agility": 11, "vitality": 13, "intellect": 9, "aura": 8, "persona": 10})
+            #     initial_skills = json.dumps({"climb": 1, "swim": 1})
+            #     # Attempt character insert - this might also fail on UNIQUE constraint if run multiple times
+            #     char_id = await execute_query(
+            #         connection,
+            #         """INSERT INTO characters (player_id, first_name, last_name, sex, race_id, class_id, stats, skills, location_id)
+            #         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            #         (current_player_id, "Tester", "Testee", "They/Them", 1, 1, initial_stats, initial_skills, 1)
+            #     )
+            #     if char_id:
+            #         log.info("Test character 'Tester' created with ID: %s", char_id)
+            #     else:
+            #         # If insert failed, it might be because the character already exists (UNIQUE constraint)
+            #         log.warning("Test character insertion failed (maybe character 'Tester Testee' already exists for player %s).", current_player_id)
+            #         # We can still proceed to fetch and check if it exists
+            # else:
+            #     log.error("No valid player ID for 'testacc'; skipping character creation/fetch.")
 
 
-            # --- Fetching character 'Tester' ---
-            log.info("Fetching character 'Tester'...")
-            character_data = None
-            if current_player_id: # Only try to fetch if we have a player ID
-                # Fetch using the known player ID for better targeting
-                character_data = await fetch_one(
-                    connection,
-                    "SELECT * FROM characters WHERE player_id = ? AND first_name = ?",
-                    (current_player_id, "Tester")
-                )
+            # # --- Fetching character 'Tester' ---
+            # log.info("Fetching character 'Tester'...")
+            # character_data = None
+            # if current_player_id: # Only try to fetch if we have a player ID
+            #     # Fetch using the known player ID for better targeting
+            #     character_data = await fetch_one(
+            #         connection,
+            #         "SELECT * FROM characters WHERE player_id = ? AND first_name = ?",
+            #         (current_player_id, "Tester")
+            #     )
 
-            if character_data:
-                # Safely format using fetched data
-                log.info(
-                    "Found character: ID=%s, Name=%s %s, RaceID=%s, ClassID=%s, Level=%s", # Changed Race/Class -> IDs
-                    character_data['id'],
-                    character_data['first_name'],
-                    character_data['last_name'],
-                    character_data['race_id'], # Displaying ID now
-                    character_data['class_id'], # Displaying ID now
-                    character_data['level']
-                )
-                # Safely parse JSON data
-                try:
-                    stats = json.loads(character_data['stats'])
-                    log.info("  Stats: %s", stats)
-                except (json.JSONDecodeError, TypeError) as e:
-                    log.warning("  Could not decode stats JSON: %s (Error: %s)", character_data['stats'], e)
-                try:
-                    skills = json.loads(character_data['skills'])
-                    log.info("  Skills: %s", skills)
-                except (json.JSONDecodeError, TypeError) as e:
-                    log.warning("  Could not decode skills JSON: %s (Error: %s)", character_data['skills'], e)
-            else:
-                # Log includes player ID for context if available
-                log.info("Character 'Tester' not found for player ID %s.", current_player_id if current_player_id is not None else 'N/A')
+            # if character_data:
+            #     # Safely format using fetched data
+            #     log.info(
+            #         "Found character: ID=%s, Name=%s %s, RaceID=%s, ClassID=%s, Level=%s", # Changed Race/Class -> IDs
+            #         character_data['id'],
+            #         character_data['first_name'],
+            #         character_data['last_name'],
+            #         character_data['race_id'], # Displaying ID now
+            #         character_data['class_id'], # Displaying ID now
+            #         character_data['level']
+            #     )
+            #     # Safely parse JSON data
+            #     try:
+            #         stats = json.loads(character_data['stats'])
+            #         log.info("  Stats: %s", stats)
+            #     except (json.JSONDecodeError, TypeError) as e:
+            #         log.warning("  Could not decode stats JSON: %s (Error: %s)", character_data['stats'], e)
+            #     try:
+            #         skills = json.loads(character_data['skills'])
+            #         log.info("  Skills: %s", skills)
+            #     except (json.JSONDecodeError, TypeError) as e:
+            #         log.warning("  Could not decode skills JSON: %s (Error: %s)", character_data['skills'], e)
+            # else:
+            #     # Log includes player ID for context if available
+            #     log.info("Character 'Tester' not found for player ID %s.", current_player_id if current_player_id is not None else 'N/A')
 
 
             # --- Fetching Rooms (Remains the same) ---

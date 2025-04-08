@@ -15,7 +15,7 @@ TRAIT_OPTIONS = {
         "Hair Color": ["Black", "Brown", "Blond", "Red", "Graying", "White"],
         "Eye Color": ["Brown", "Blue", "Green", "Hazel", "Gray"],
         "Nose Type": ["Aquiline", "Button", "Broad", "Hooked"],
-        "Skin Tone": ["Pale", "Ruddy", "Brown", "Dark", "Black"]
+        "Skin Tone": ["Pale", "Ruddy", "Brown", "Dark", "Black"],
         "Beard Style": ["Stubble", "Moustache", "Average beard", "Thick Beard", "Long Beard"]
     },
     "dwarf": {
@@ -34,8 +34,8 @@ TRAIT_OPTIONS = {
         "Hair Style": ["Long and flowing", "Intricate braids", "Simple ponytail", "Short and neat"],
         "Hair Color": ["Black", "Silver", "Golden Blond", "White", "Forest Green"], # Race specific colors
         "Eye Color": ["Blue", "Green", "Violet", "Silver", "Gold"], # Race specific colors
-        "Nose Type": ["Delicate", "Straight", "Pointed (subtly)"]
-        "Ear Shape": ["Long", "Downward Arcing", "Upward Arcing"]
+        "Nose Type": ["Delicate", "Straight", "Pointed (subtly)"],
+        "Ear Shape": ["Long", "Downward Arcing", "Upward Arcing"],
         "Skin tone": ["Golden Hued", "Pale", "Tanned", "Black"]
     },
     "yan-tar": {
