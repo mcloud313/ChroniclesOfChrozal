@@ -231,6 +231,7 @@ class CreationHandler:
                 return
 
             self.creation_data["class_id"] = selected_class['id']
+            self.creation_data["class_name"] = selected_class['name']
             log.debug("Creation: Got class '%s' (ID: %s) for player %s",
                     selected_class['name'], selected_class['id'], self.player.dbid)
             self.state = CreationState.ROLL_STATS
@@ -408,49 +409,119 @@ class CreationHandler:
             return # Stay in current trait state
 
     def _build_description_string(self) -> str:
-        """Constructs the description string from selected traits."""
-        # Basic Pronoun logic
-        sex = self.creation_data.get("sex")
-        pronoun_subj = "They" # Default
-        pronoun_obj = "them"
-        pronoun_poss = "their"
-        verb_is = "are"
-        verb_has = "have"
-
-        if sex == "Male":
-            pronoun_subj = "He"
-            pronoun_obj = "him"
-            pronoun_poss = "his"
-            verb_is = "is"
-            verb_has = "has"
-        elif sex == "Female":
-            pronoun_subj = "She"
-            pronoun_obj = "her"
-            pronoun_poss = "her"
-            verb_is = "is"
-            verb_has = "has"
-
-        # Get traits with defaults if missing
+        """Constructs a more detailed description paragraph from selected traits."""
         traits = self.creation_data.get("description_traits", {})
-        height = traits.get("Height", "average height")
-        build = traits.get("Build", "an average build")
-        hair_style = traits.get("Hair Style", "nondescript hair")
-        hair_color = traits.get("Hair Color", "") # Color might be included in style
-        eye_color = traits.get("Eye Color", "dark eyes")
-        nose_type = traits.get("Nose Type", "an unremarkable nose")
-        # Add other traits here
+        sex = self.creation_data.get("sex")
+        race_name = self.creation_data.get('race_name', 'Unknown Race')
+        class_name = self.creation_data.get('class_name', 'Unknown Class')
+        first_name = self.creation_data.get('first_name', 'Someone')
+        last_name = self.creation_data.get('last_name', '')
 
-        # Construct sentence (can be much more elaborate)
-        desc = (
-            f"You see {self.creation_data['first_name']} {self.creation_data['last_name']}, "
-            f"a {self.creation_data.get('race_name', 'Unknown Race')} {self.creation_data.get('class_name', 'Unknown Class')}.\r\n" # Need class name!
-            f"{pronoun_subj} {verb_is} {height} with {build}.\r\n"
-            f"{pronoun_subj} {verb_has} {hair_style} {hair_color} hair, {eye_color} eyes, and {nose_type}."
-            # Add more sentences for other traits
-        )
-        # Need class name - fetch it maybe? Or store it earlier? Let's store it.
-        # Need to modify _handle_get_class to store class_name.
-        return desc
+        # --- Pronoun Setup ---
+        pronoun_subj, pronoun_obj, pronoun_poss, verb_is, verb_has = "They", "them", "their", "are", "have"
+        if sex == "Male": pronoun_subj, pronoun_obj, pronoun_poss, verb_is, verb_has = "He", "him", "his", "is", "has"
+        elif sex == "Female": pronoun_subj, pronoun_obj, pronoun_poss, verb_is, verb_has = "She", "her", "her", "is", "has"
+
+        # --- Define canonical order for description building ---
+        # This ensures sentences flow logically. Only includes traits if selected by player.
+        trait_order = [
+            "Height", "Build", "Skin Tone", "Skin Pattern", "Shell Color", # Body
+            "Head Shape", "Hair Style", "Hair Color", "Beard Style",       # Head / Hair
+            "Eye Color", "Ear Shape", "Nose Type"                          # Facial Features
+        ]
+
+        # --- Build Description ---
+        desc = f"You see {first_name} {last_name}, {utils.get_article(race_name)} {race_name} {class_name}.\r\n"
+
+        # Sentence 1: Height and Build
+        height = traits.get("Height", "").lower()
+        build = traits.get("Build", "").lower()
+        if height and build:
+            desc += f"{pronoun_subj} {verb_is} of {height} height and {verb_has} {utils.get_article(build)} {build} build. "
+        elif height:
+            desc += f"{pronoun_subj} {verb_is} of {height} height. "
+        elif build:
+            desc += f"{pronoun_subj} {verb_has} {utils.get_article(build)} {build} build. "
+
+        # Sentence 2 (or continued): Skin / Shell / Patterns
+        skin_tone = traits.get("Skin Tone", "").lower()
+        skin_pattern = traits.get("Skin Pattern", "").lower()
+        shell_color = traits.get("Shell Color", "").lower()
+        skin_parts = []
+        if skin_tone:
+            skin_parts.append(f"{pronoun_poss} skin possesses {utils.get_article(skin_tone)} {skin_tone} tone")
+        if skin_pattern:
+            skin_parts.append(f"marked by {skin_pattern} patterns")
+        if shell_color:
+            skin_parts.append(f"protected by {utils.get_article(shell_color)} {shell_color} shell")
+        if skin_parts:
+            desc += pronoun_subj if not desc.endswith(". ") else pronoun_subj.lower() # Capitalize if new sentence
+            desc += f" {verb_has} skin that " if skin_tone and (skin_pattern or shell_color) else "" # Connector phrase
+            desc += ", ".join(skin_parts[:-1]) # Join all but last with comma
+            if len(skin_parts) > 1:
+                desc += " and " + skin_parts[-1] # Add 'and' before last
+            elif skin_parts:
+                desc += skin_parts[0] # Only one fragment
+            desc += ". "
+
+
+        # Sentence 3: Head / Hair / Beard
+        head_shape = traits.get("Head Shape", "").lower()
+        hair_style = traits.get("Hair Style", "").lower()
+        hair_color = traits.get("Hair Color", "").lower()
+        beard_style = traits.get("Beard Style", "").lower()
+        head_parts = []
+        if head_shape:
+            head_parts.append(f"{utils.get_article(head_shape)} {head_shape} head")
+        if hair_style and hair_color and hair_style != "bald":
+            head_parts.append(f"{hair_style} {hair_color} hair")
+        elif hair_style: # e.g., Bald
+            head_parts.append(hair_style)
+        if beard_style and beard_style not in ["none", "clean-shaven"]:
+            head_parts.append(f"accented by {utils.get_article(beard_style)} {beard_style} beard")
+        elif beard_style == "clean-shaven":
+            head_parts.append(f"a clean-shaven face")
+
+        if head_parts:
+            desc += pronoun_subj if not desc.endswith(". ") else pronoun_subj.lower()
+            desc += f" {verb_has} "
+            desc += ", ".join(head_parts[:-1])
+            if len(head_parts) > 1:
+                desc += " and " + head_parts[-1]
+            elif head_parts:
+                desc += head_parts[0]
+            desc += ". "
+
+        # Sentence 4: Eyes / Ears / Nose
+        eye_color = traits.get("Eye Color", "").lower()
+        ear_shape = traits.get("Ear Shape", "").lower()
+        nose_type = traits.get("Nose Type", "").lower()
+        facial_parts = []
+        if eye_color:
+            facial_parts.append(f"{eye_color} eyes")
+        if ear_shape:
+            facial_parts.append(f"{ear_shape} ears")
+        if nose_type:
+            facial_parts.append(f"{utils.get_article(nose_type)} {nose_type} nose")
+
+        if facial_parts:
+            desc += pronoun_poss.capitalize() if not desc.endswith(". ") else pronoun_poss
+            desc += " face is further defined by "
+            desc += ", ".join(facial_parts[:-1])
+            if len(facial_parts) > 1:
+                desc += " and " + facial_parts[-1]
+            elif facial_parts:
+                desc += facial_parts[0]
+            desc += "."
+
+
+        # Add placeholder for equipment
+        desc += f"\r\n{pronoun_subj} {verb_is} wearing:\r\n Nothing."
+        # Add placeholder for wielded items later
+
+        return desc.strip() # Remove any trailing space
+
+
 
     async def _handle_finalize(self):
         """Calculates derived stats, builds description, creates DB entry."""
@@ -572,7 +643,16 @@ class CreationHandler:
                     await self._handle_get_trait("Eye Color")
                 elif current_state == CreationState.GET_TRAIT_NOSE_TYPE:
                     await self._handle_get_trait("Nose Type")
-                # Add elif for other GET_TRAIT_ states...
+                elif current_state == CreationState.GET_TRAIT_SKIN_TONE:
+                    await self._handle_get_trait("Skin Tone")
+                elif current_state == CreationState.GET_TRAIT_EAR_SHAPE:
+                    await self._handle_get_trait("Ear Shape")
+                elif current_state == CreationState.GET_TRAIT_BEARD_STYLE:
+                    await self._handle_get_trait("Beard Style")
+                elif current_state == CreationState.GET_TRAIT_HEAD_SHAPE:
+                    await self._handle_get_trait("Head Shape")
+                elif current_state == CreationState.GET_TRAIT_SHELL_COLOR:
+                    await self._handle_get_trait("Shell Color")
                 elif current_state == CreationState.FINALIZE:
                     await self._handle_finalize()
                 else:

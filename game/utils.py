@@ -52,39 +52,27 @@ def verify_password(stored_hash: str, provided_password: str) -> bool:
     return stored_hash == hash_password(provided_password)
 
 def generate_stat() -> int:
-    """Generates a single stat weighted towards lower numbers (10-35)."""
-    # Example: roll 3 dice reroll 1s Gives range 6-36 bell curve-ish center
-    # Let's try a simpler weighted choice for now
-    # More likely to get 10-20, less likely 21-30, rare 31-35
+    """
+    Generates a single stat (10-35) weighted towards lower/mid values,
+    with increasing rarity for high values.
+    Based on user-defined probability bands.
+    """
     roll = random.random() # 0.0 <= roll < 1.0
-    if roll < 0.30: # 50% chance for 10-19
-        return random.randint(10, 14)
-    if roll < 0.50:
-        return random.randint(14, 16)
-    if roll < 0.60:
-        return random.randint(16, 18)
-    if roll < 0.65:
-        return random.randint(18, 20)
-    if roll < 0.70:
-        return random.randint(20, 22)
-    if roll < 0.75:
-        return random.randint(22, 24)
-    if roll < 0.80:
-        return random.randint(24, 26)
-    if roll < 0.85:
-        return random.randint(26, 28)
-    if roll < 0.88:
-        return random.randint(28, 30)
-    if roll < 0.91:
-        return random.randint(30, 31)
-    if roll < 0.94:
-        return random.randint(31, 32)
-    if roll < 0.97:
-        return random.randint(32, 33)
-    if roll < 0.99:
-        return random.randint(33, 34)
-    else: 
-        return 35
+
+    if roll < 0.30:  # 30% chance
+        return random.randint(10, 14) # Range: 10-14
+    elif roll < 0.55: # 25% chance (0.55 - 0.30)
+        return random.randint(15, 19) # Range: 15-19
+    elif roll < 0.75: # 20% chance (0.75 - 0.55)
+        return random.randint(20, 24) # Range: 20-24
+    elif roll < 0.90: # 15% chance (0.90 - 0.75)
+        return random.randint(25, 29) # Range: 25-29
+    elif roll < 0.97: # 7% chance (0.97 - 0.90)
+        return random.randint(30, 33) # Range: 30-33
+    elif roll < 0.99: # 2% chance (0.99 - 0.97)
+        return 34                 # Value: 34 (randint(34,34))
+    else:             # 1% chance (1.00 - 0.99)
+        return 35                 # Value: 35
 
 def generate_stat_set() -> list[int]:
     """Generates a set of 6 stats."""
@@ -128,3 +116,10 @@ def xp_to_next_level(level: int) -> int:
     # Let's use XP required for *current* level L = L * 1000. Player needs xp_total >= L*1000 to advance.
     required = level * 1000
     return required
+
+def get_article(word: str) -> str:
+    """Returns 'an' if word starts with a vowel sound, else 'a'."""
+    if not word:
+        return "a" # Default if empty string passed
+    # Simple check for common vowel sounds (lowercase)
+    return "an" if word.lower()[0] in 'aeiou' else "a"

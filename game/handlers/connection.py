@@ -45,6 +45,10 @@ MOTD = """
 class ConnectionState(Enum):
     GETTING_USERNAME = auto()
     GETTING_PASSWORD = auto()
+    GETTING_NEW_ACCOUNT_EMAIL = auto()
+    GETTING_NEW_PASSWORD = auto()
+    CONFIRM_NEW_PASSWORD = auto()
+    ASK_CREATE_ACCOUNT = auto()
     SELECTING_CHARACTER = auto()
     CREATING_CHARACTER = auto()
     PLAYING = auto()
@@ -66,6 +70,7 @@ class ConnectionHandler:
         self.player_account: Optional[Player] = None # Holds loaded player account
         self.active_character: Optional[Character] = None # Holds loaded character object
         self.password_attempts: int = 0
+        self.new_account_data: Dict[str, Any] = {}
 
         log.info("ConnectionHandler initialized for %s", self.addr)
 
@@ -150,8 +155,8 @@ class ConnectionHandler:
         username = await self._read_line()
         if username is None: return # Connection lost
 
-        if not username: #Empty input
-            await self._send("Username cannot be empty.")
+        if not username or not username.isalnum() or len(username) < 3 or len(username) > 20: #Empty input
+            await self._send("Invalid username. Must be 3-20 letters/numbers only.")
             return # Stay in current state, prompt again
         
         # Try to load account
@@ -169,13 +174,107 @@ class ConnectionHandler:
             self.password_attempts = 0
             self.state = ConnectionState.GETTING_PASSWORD
         else:
-            # Defer account creation to phase 2
+            # Account not found - ask to create
             log.info("Player account '%s' not found for %s.", username, self.addr)
-            await self._send(f"Account '{username}' not found. Account creation not yet implemented.")
-            # For now, disconnect or loop. Let's loop back.
-            # self.state = ConnectionState.DISCONNECTED # Option: Disconnect
-            await self._send("Please try again or type 'quit'.") # Option: Loop
-            # Stay in GETTING_USERNAME state
+            # store potential username
+            self.new_account_data = {"username": username}
+            self.state = ConnectionState.ASK_CREATE_ACCOUNT # Go to confirmation
+
+    async def _handle_ask_create_account(self):
+        """Asks the user if they want to create a new account."""
+        username = self.new_account_data.get("username", "Unknown")
+        await self._prompt(f"Account '{username}' not found. Create it? (yes/no)")
+        choice = await self._read_line()
+        if choice is None: return # Quit or connection lost
+
+        if choice.lower() == 'yes' or choice.lower() == 'y':
+            log.info("User %s chose to create new account '%s'.", self.addr, username)
+            self.state = ConnectionState.GETTING_NEW_ACCOUNT_EMAIL
+        elif choice.lower() == 'no' or choice.lower() == 'n':
+            log.info("User %s declined account creation.", self.addr)
+            await self._send("Okay, please enter a different account name.")
+            self.new_account_data = {} # Clear stored username
+            self.state = ConnectionState.GETTING_USERNAME # Go back to username prompt
+        else:
+            await self._send("Please enter 'yes' or 'no'.")
+            # Stay in ASK_CREATE_ACCOUNT state
+
+    async def _handle_get_new_account_email(self):
+        """Prompts for and validates new account email"""
+        await self._prompt("Enter your email address")
+        email = await self._read_line()
+        if email is None: return
+
+        # Basic validation - more robust validation recommended for production
+        if not email or '@' not in email or '.' not in email.split('@')[-1]:
+            await self._send("Invalid email format. Please try again.")
+            return # Stay in state
+        
+        self.new_account_data['email'] = email
+        log.debug("Got email '%s' for new account %s", email, self.new_account_data['username'])
+        self.state = ConnectionState.GETTING_NEW_PASSWORD
+
+    async def _handle_get_new_password(self):
+        """Prompts for new accoutn password."""
+        await self._prompt("Choose a password (min 6 characters)")
+        password = await self._read_line()
+        if password is None: return
+
+        # Basic validation
+        if not password or len(password) < 6:
+            await self._send("Password too short. Must be at least 6 characters.")
+            return # Stay in state
+        
+        self.new_account_data['password'] = password # Store plaintext temporarily
+        log.debug("Got password for new account %s", self.new_account_data['username'])
+        self.state = ConnectionState.CONFIRM_NEW_PASSWORD
+
+    async def _handle_confirm_new_password(self):
+        """Prompts for password confirmation and creates account if match."""
+        await self._prompt("Confirm password")
+        confirm_password = await self._read_line()
+        if confirm_password is None: return
+
+        if confirm_password != self.new_account_data.get('password'):
+            await self._send("Passwords do not match. Please try setting password again.")
+            self.new_account_data.pop('password', None) # Clear stored password
+            self.state = ConnectionState.GETTING_NEW_PASSWORD # Go back to set password
+            return
+
+        # Passwords match - Hash and create account
+        username = self.new_account_data['username']
+        email = self.new_account_data['email']
+        password = self.new_account_data['password']
+        hashed = utils.hash_password(password)
+
+        log.info("Attempting to create account '%s' in database...", username)
+        new_player_id = await database.create_player_account(self.db_conn, username, hashed, email)
+
+        # Clear temporary data regardless of success/failure now
+        self.new_account_data = {}
+
+        if new_player_id:
+            log.info("Account '%s' (ID: %s) created successfully.", username, new_player_id)
+            await self._send(f"Account '{username}' created successfully!")
+            # Now load the new account into self.player_account
+            player_data = await database.load_player_account(self.db_conn, username)
+            if player_data:
+                self.player_account = Player(
+                    dbid=player_data['id'], username=player_data['username'],
+                    email=player_data['email'], hashed_password=player_data['hashed_password']
+                )
+                # New accounts always go to character creation
+                self.state = ConnectionState.CREATING_CHARACTER
+            else:
+                # Should not happen if create succeeded, but handle DB inconsistency
+                log.error("Failed to load newly created player account '%s'!", username)
+                await self._send("Error loading your new account data. Disconnecting.")
+                self.state = ConnectionState.DISCONNECTED
+        else:
+            # DB error during creation (e.g., email UNIQUE constraint?)
+            log.error("Database failed to create account '%s'.", username)
+            await self._send("Failed to create account (possibly email already in use?). Please try again.")
+            self.state = ConnectionState.GETTING_USERNAME # Go back to start
 
     async def _handle_get_password(self):
         """Handles prompting for and verifying the password."""
@@ -210,15 +309,14 @@ class ConnectionHandler:
             self.state = ConnectionState.DISCONNECTED
             return
         
-        # --- V V V ADD DEBUG LOGGING HERE V V V ---
         player_id_to_query = self.player_account.dbid
         log.debug("Querying characters for player_id: %s", player_id_to_query)
-        # --- ^ ^ ^ END DEBUG LOGGING ^ ^ ^ ---
-        
         char_list_data = await database.load_characters_for_account(self.db_conn, self.player_account.dbid)
+        log.debug("Result from load_characters_for_account: %s", char_list_data)
 
         if not char_list_data:
-            log.info("No characters found for player %s (%s).", self.player_account.username, self.addr)
+            log.info("No characters found for player %s (%s). Proceeding to creation.",
+                    self.player_account.username, self.addr)
             await self._send("\r\nYou have no characters on this account.")
             self.state = ConnectionState.CREATING_CHARACTER # Trigger creation
             return
@@ -347,22 +445,34 @@ class ConnectionHandler:
         log.debug("Handler starting for %s", self.addr)
         try:
             while self.state != ConnectionState.DISCONNECTED:
-                if self.state == ConnectionState.GETTING_USERNAME:
+                current_state = self.state
+                log.debug("Handler loop for %s, state: %s", self.addr, current_state)
+
+                if current_state == ConnectionState.GETTING_USERNAME:
                     await self._handle_get_username()
-                elif self.state == ConnectionState.GETTING_PASSWORD:
+                elif current_state == ConnectionState.ASK_CREATE_ACCOUNT:
+                    await self._handle_ask_create_account()
+                elif current_state == ConnectionState.GETTING_NEW_ACCOUNT_EMAIL:
+                    await self._handle_get_new_account_email()
+                elif current_state == ConnectionState.GETTING_NEW_PASSWORD:
+                    await self._handle_get_new_password()
+                elif current_state == ConnectionState.CONFIRM_NEW_PASSWORD:
+                    await self._handle_confirm_new_password()
+                elif current_state == ConnectionState.GETTING_PASSWORD:
                     await self._handle_get_password()
-                elif self.state == ConnectionState.SELECTING_CHARACTER:
+                elif current_state == ConnectionState.SELECTING_CHARACTER:
                     await self._handle_select_character()
-
-
-                elif self.state == ConnectionState.CREATING_CHARACTER:
+                elif current_state == ConnectionState.CREATING_CHARACTER:
                     if not self.player_account: # Should have player account by now
                         log.error("Reached CREATING_CHARACTER without player account! Disconnecting %s.", self.addr)
                         self.state = ConnectionState.DISCONNECTED
                         continue
 
                     log.info("Starting character creation process for player %s (%s)", self.player_account.username, self.addr)
-                    creation_handler = CreationHandler(self.reader, self.writer, self.player_account, self.world, self.db_conn)
+                    # Pass necessary objects to CreationHandler
+                    creation_handler = CreationHandler(
+                        self.reader, self.writer, self.player_account, self.world, self.db_conn
+                    )
                     new_character_id = await creation_handler.handle() # Run the creation sub-handler
                     if new_character_id:
                         # Creation successful, load the new character
@@ -379,6 +489,8 @@ class ConnectionHandler:
                     else:
                         # Creation failed or user quit
                         log.info("Character creation cancelled or failed for player %s (%s). Disconnecting.", self.player_account.username, self.addr)
+                        # CreationHandler likely sent cancellation message already
+                        self.state = ConnectionState.DISCONNECTED
                         await self._send("\r\nDisconnecting.")
                         self.state = ConnectionState.DISCONNECTED
 
@@ -437,5 +549,3 @@ class ConnectionHandler:
             except Exception as e:
                 log.warning("Error closing writer for %s: %s", self.addr, e)
         log.info("Connection handler finished for %s.", self.addr)
-
-

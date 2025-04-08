@@ -194,7 +194,7 @@ class Character:
         # Calculate Max HP/Essence based on formulas
         # TODO: Incorporate Level/Race/Class bonuses later
         self.max_hp = 10 + vit_mod
-        self.max_essence = aura_mod + pers_mod
+        self.max_essence = aur_mod + per_mod
 
         # Ensure HP/Essence aren't higher than the new Max values
         # And set current HP/Essence to Max upon initialization/level up usually
