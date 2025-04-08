@@ -6,6 +6,7 @@ import random
 import hashlib
 import logging
 import math
+from typing import Optional
 
 # You might want other utilities here later (e.g. logging setup, decorators)
 
@@ -116,6 +117,24 @@ def xp_to_next_level(level: int) -> int:
     # Let's use XP required for *current* level L = L * 1000. Player needs xp_total >= L*1000 to advance.
     required = level * 1000
     return required
+
+def get_pronouns(sex: Optional[str]) -> tuple[str, str, str, str, str]:
+    """
+    Returns a tuple of pronouns based on sex string.
+
+    Args:
+        sex: The sex string ('Male', 'Female', 'They/Them', or None).
+
+    Returns:
+        Tuple: (subject, object, possessive, verb_is, verb_has)
+            e.g., ('He', 'him', 'his', 'is', 'has') or ('They', 'them', 'their', 'are', 'have')
+    """
+    if sex == "Male":
+        return "He", "him", "his", "is", "has"
+    elif sex == "Female":
+        return "She", "her", "her", "is", "has"
+    else: # Default to They/Them for None or other values
+        return "They", "them", "their", "are", "have"
 
 def get_article(word: str) -> str:
     """Returns 'an' if word starts with a vowel sound, else 'a'."""

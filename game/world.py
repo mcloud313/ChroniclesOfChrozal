@@ -123,6 +123,18 @@ class World:
         # Returns the raw row data for now
         return self.areas.get(area_id)
     
+    def get_race_name(self, race_id: Optional[int]) -> str:
+        """Safely retrieves a Race name by its ID."""
+        if race_id is None: return "Unknown"
+        race_data = self.races.get(race_id)
+        return race_data['name'] if race_data else "Unknown"
+
+    def get_class_name(self, class_id: Optional[int]) -> str:
+        """Safely retrieves a Class name by its ID."""
+        if class_id is None: return "Unknown"
+        class_data = self.classes.get(class_id)
+        return class_data['name'] if class_data else "Unknown"
+
     def add_active_character(self, character: Character):
         """Adds a character to the active list."""
         if character.dbid in self.active_characters:

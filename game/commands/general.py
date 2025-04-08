@@ -18,19 +18,61 @@ log = logging.getLogger(__name__)
 # Note: These functions match the CommandHandlerFunc signature
 
 async def cmd_look(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
-    """Handles the 'look' command."""
-    # TODO: Handle 'look <target>' later
-    if args_str:
-        await character.send("Just 'look' for now.")
-        return True
+    """Handles the 'look' command (looking at room or target character)."""
+
     if not character.location:
         await character.send("You are floating in an endless void... somehow.")
         log.warning("Character %s tried to look but has no location.", character.name)
+        return True # Keep connection active
+    
+    target_name = args_str.strip()
+
+    # --- Look at Room (No arguments) ---
+    if not target_name:
+        look_desc = character.location.get_look_string(character)
+        await character.send(look_desc)
         return True
     
-    # Get the description from the room and send it
-    look_desc = character.location.get_look_string(character)
-    await character.send(look_desc)
+    # --- Look at Target (Character) ---
+    target = character.location.get_character_by_name(target_name)
+
+    # Handle target not found
+    if target is None:
+        # TODO: Later, check for items/objects in the room here too
+        await character.send(f"You don't see anyone or anything named '{target_name}' here.")
+        return True
+    
+    # Handle looking at self - show room description (standard MUD behavior)
+    if target == character:
+        look_desc = character.location.get_look_string(character)
+        await character.send(look_desc)
+        return True
+    
+    # --- Format Target Character's Description ---
+    try:
+        # Get Race/Class Names
+        target_race_name = world.get_race_name(target.race_id)
+        target_class_name = world.get_class_name(target.class_id)
+
+        # Get Pronouns
+        pronoun_subj, _, _, verb_is, _ = utils.get_pronouns(target.sex)
+
+        output = "\r\n"
+        # Display the generated description stored on the character
+        output += target.description # Assumes target.description is loaded from DB
+        output += "\r\n"
+        # Add basic info line
+        output += f"({target_race_name} {target_class_name}, Level {target.level})\r\n"
+        # Add equipment placeholder
+        output += f"{pronoun_subj} {verb_is} wearing:\r\n Nothing." # Placeholder
+        # TODO: Add wielded item placeholder later
+
+        await character.send(output)
+    
+    except Exception:
+        log.exception("Error generating look description for target %s:", target.name, exc_info=True)
+        await character.send("You look at them, but your vision blurs momentarily.")
+
     return True # Keep connection active
 
 async def cmd_say(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
