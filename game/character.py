@@ -10,6 +10,7 @@ import logging
 import aiosqlite
 from typing import TYPE_CHECKING, Optional, Dict, Any
 from . import database
+from . import utils
 
 # Use TYPE_CHECKING block for Room to avoid circular import errors
 # This makes the type checker happy but doesn't cause runtime import issues.
@@ -37,10 +38,12 @@ class Character:
         self.writer: asyncio.StreamWriter = writer # Network connection
 
         # --- Data loaded from DB ---
+        self.writer: asyncio.StreamWriter = writer  
         self.dbid: int = db_data['id']
         self.player_id: int = db_data['player_id'] # Link to Player account
         self.first_name: str = db_data['first_name']
         self.last_name: str = db_data['last_name']
+        self.sex: str = db_data['sex']
         self.race_id: Optional[int] = db_data['race_id'] # Store ID
         self.class_id: Optional[int] = db_data['class_id'] # Store ID
         self.level: int = db_data['level']
@@ -50,6 +53,7 @@ class Character:
         self.max_essence: int = db_data['max_essence']
         self.xp_pool: int = db_data['xp_pool'] # Unabsorbed XP
         self.xp_total: int = db_data['xp_total'] # Current level progress
+        self.description: str = db_data['description']
 
         # Load stats (JSON string -> dict)
         try:
@@ -68,14 +72,11 @@ class Character:
             self.skills: Dict[str, int] = {} # Default to empty if invalid
 
         self.location_id: int = db_data['location_id'] # Store DB location ID
-
-        # --- Runtime Data ---
-        # Location is set AFTER initialization by the world/login manager
-        # Use forward reference string 'Room' for type hint if not using TYPE_CHECKING
         self.location: Optional['Room'] = None
 
         # Add basic derived name property
         self.name = f"{self.first_name} {self.last_name}"
+        self.calculate_initial_derived_attributes()
 
         log.debug("Character object initialized for %s (ID: %s)", self.name, self.dbid)
 
@@ -168,6 +169,41 @@ class Character:
         log.debug("Character %s location updated from room %s to room %s",
                 self.name, old_loc_id, new_loc_id)
     
+    def calculate_initial_derived_attributes(self):
+        """
+        Calculates Max HP/Essence based on current stats and sets current HP/Essence.
+        Should be called after stats are loaded/set during __init__ or level up.
+        """
+        # Get base stats, defaulting to 10 if somehow missing after creation
+        # (Shouldn't happen with proper creation sequence)
+        might = self.stats.get("might", 10)
+        vitality = self.stats.get("vitality", 10)
+        agility = self.stats.get("agility", 10)
+        intellect = self.stats.get("intellect", 10)
+        aura = self.stats.get("aura", 10)
+        persona = self.stats.get("persona", 10)
+
+        # Calculate modifiers using the utility function
+        mig_mod = utils.calculate_modifier(might)
+        vit_mod = utils.calculate_modifier(vitality)
+        agi_mod = utils.calculate_modifier(agility)
+        int_mod = utils.calculate_modifier(intellect)
+        aur_mod = utils.calculate_modifier(aura)
+        per_mod = utils.calculate_modifier(persona)
+
+        # Calculate Max HP/Essence based on formulas
+        # TODO: Incorporate Level/Race/Class bonuses later
+        self.max_hp = 10 + vit_mod
+        self.max_essence = aura_mod + pers_mod
+
+        # Ensure HP/Essence aren't higher than the new Max values
+        # And set current HP/Essence to Max upon initialization/level up usually
+        self.hp = self.max_hp
+        self.essence = self.max_essence
+
+        log.debug("Character %s: Derived attributes calculated: MaxHP=%d, MaxEssence=%d",
+                self.name, self.max_hp, self.max_essence)
+
     def __repr__(self) -> str:
             return f"<Character {self.dbid}: '{self.first_name} {self.last_name}'>"
 
