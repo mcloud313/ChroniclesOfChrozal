@@ -4,6 +4,7 @@ General player commands like look, say, quit, who help.
 """
 import logging
 from typing import TYPE_CHECKING
+from .. import utils
 
 # Avoid circular imports with type checking
 if TYPE_CHECKING:
@@ -91,4 +92,65 @@ async def cmd_help(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
 
     await character.send(output)
     return True
+
+async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Handles the 'score/stats' command."""
+
+    # --- Gather Data ---
+    char_name = character.name
+    char_sex = character.sex
+    # Get race/class names safely using world lookup
+    race_name = world.get_race_name(character.race_id)
+    class_name = world.get_class_name(character.class_id)
+    level = character.level
+    hp = character.hp
+    max_hp = character.max_hp
+    essence = character.essence
+    max_essence = character.max_essence
+    xp_pool = character.xp_pool # unspent banked XP
+    xp_total = character.xp_total # xp earned this level
+    xp_needed = utils.xp_to_next_level(level)
+
+    # Attribute and Modifiers
+    stats = character.stats # The dict like {'might': 15, ....}
+    attributes_display = []
+    stat_order = ["might", "vitality", "agility", "intellect", "aura", "persona"]
+    modifiers = {} # Store modifiers for reuse
+    for stat_name in stat_order:
+        value = stats.get(stat_name, 10) # Get value, default 10
+        modifier = utils.calculate_modifier(value)
+        modifiers[stat_name] = modifier # Store modifier
+        mod_sign = "+" if modifier >= 0 else "" # Add plus sign for positive/zero
+        attributes_display.append(f" {stat_name.capitalize():<10}: {value:>2} [{mod_sign}{modifier}]")
+
+    # Derived Stats
+    might_val = stats.get("might", 10)
+    max_carry_weight = might_val * 2
+
+    # Coinage (Deferred until Phase 3)
+    # coinage = character.coinage # Need this attribute added later
+    # formatted_coinage = utils.format_coinage(coinage) # Need this util later
+
+    # --- Format Output ---
+    # Using f-strings with padding for alignment
+    output = "\r\n" + "=" * 40 + "\r\n"
+    output += f" Name : {char_name:<28} Sex: {char_sex}\r\n"
+    output += f" Race : {race_name:<28} Class: {class_name}\r\n"
+    output += f" Level: {level:<31}\r\n"
+    output += "=" * 40 + "\r\n"
+    output += f" HP   : {hp:>4}/{max_hp:<28} Carry: ??/{max_carry_weight} lbs\r\n" # Add current weight later
+    output += f" Essn : {essence:>4}/{max_essence:<31}\r\n"
+    # Display XP Needed for *next* level, show current progress
+    output += f" XP   : {xp_total:>4}/{xp_needed:<28} Pool: {xp_pool}\r\n"
+    output += " --- Attributes ---                 \r\n" # Adjusted spacing
+    # Display 3 attributes per line
+    output += f"{attributes_display[0]} {attributes_display[1]}\r\n"
+    output += f"{attributes_display[2]} {attributes_display[3]}\r\n"
+    output += f"{attributes_display[4]} {attributes_display[5]}\r\n"
+    # Coinage display deferred
+    # output += f" Coin : {formatted_coinage}\r\n"
+    output += "=" * 40 + "\r\n"
+
+    await character.send(output)
+    return True # Keep connection active
 

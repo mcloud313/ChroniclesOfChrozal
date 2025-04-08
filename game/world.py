@@ -4,7 +4,7 @@ Manages the game world's loaded state, including rooms and areas.
 
 import logging
 import aiosqlite
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from . import database
 from .room import Room
 from .character import Character # Assuming character class is defined
@@ -20,6 +20,8 @@ class World:
         # Store raw area data for now, could be Area objects later
         self.areas: Dict[int, aiosqlite.Row] = {}
         self.rooms: Dict[int, Room] = {}
+        self.races: Dict[int, aiosqlite.Row] = {}
+        self.classes: Dict[int, aiosqlite.Row] = {}
         self.active_characters: Dict[int, Character] = {} # Add this {character_dbid: Character_object}
         # Add containers for active players/mobs later if needed
         log.info("World object initialized.")
@@ -49,6 +51,34 @@ class World:
         except Exception as e:
             log.exception("Exception loading areas: %s", e, exc_info=True)
             load_success = False
+
+        # 1 - A Load Races
+        if load_success:
+            try:
+                race_rows = await database.load_all_races(db_conn)
+                if race_rows is None:
+                    log.error("Failed to load races from database.")
+                    load_success = False
+                else:
+                    self.races = {row['id']: row for row in race_rows}
+                    log.info("Loaded %d races.", len(self.races))
+            except Exception as e:
+                log.exception("Exception loading races: %s", e, exc_info=True)
+                load_success = False
+
+        # 1 - B Load Classes
+        if load_success:
+            try:
+                class_rows = await database.load_all_classes(db_conn)
+                if class_rows is None:
+                    log.error("Failed to load classes from database.")
+                    load_success = False
+                else:
+                    self.classes = {row['id']: row for row in class_rows}
+                    log.info("Loaded %d classes.", len(self.classes))
+            except Exception as e:
+                log.exception("Exception loading classes: %s", e, exc_info=True)
+                load_success = False
 
         # 2. Load Rooms (only proceed if areas loaded somewhat successfully)
         if load_success:

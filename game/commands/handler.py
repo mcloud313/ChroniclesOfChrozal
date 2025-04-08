@@ -34,7 +34,8 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "quit": general_cmds.cmd_quit,
     "who": general_cmds.cmd_who,
     "help": general_cmds.cmd_help,
-    #Add other general commands here...
+    "score": general_cmds.cmd_score,
+    "stats": general_cmds.cmd_score, # Alias
 
     # Movement Commands (Pass direction directly to the handler)
     "north": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "north"),
