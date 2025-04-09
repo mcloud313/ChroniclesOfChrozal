@@ -25,9 +25,8 @@ class Player:
         self.dbid: int = dbid
         self.username: str = username
         self.email: str = email
-        # Store the hash directly as loaded from DB or set by set_password
         self.hashed_password: str = hashed_password
-        # Note: No location, writer or character details here.
+        self.is_admin: bool = bool(is_admin)
 
         log.debug("Player object initialized: %s (ID: %s)", self.username, self.dbid)
 

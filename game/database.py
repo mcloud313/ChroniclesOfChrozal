@@ -94,6 +94,7 @@ async def init_db(conn: aiosqlite.Connection):
                 username TEXT UNIQUE NOT NULL,
                 hashed_password TEXT NOT NULL,
                 email TEXT NOT NULL,
+                is_admin BOOLEAN NOT NULL DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_login TIMESTAMP
             )
@@ -357,7 +358,7 @@ async def load_player_account(conn: aiosqlite.Connection, username: str) -> aios
     """Fetches a player account by username (case-insensitive)."""
     # Use lower() for case-insensitive lookup if desired and COLLATE NOCASE isn't used on column
     # Using parameter binding is generally safer than f-string for user input
-    return await fetch_one(conn, "SELECT * FROM players WHERE lower(username) = lower(?)", (username,))
+    return await fetch_one(conn, "SELECT *, is_admin FROM players WHERE lower(username) = lower(?)", (username,))
 
 async def create_player_account(conn: aiosqlite.Connection, username: str, hashed_password: str, email: str) -> int | None:
     """Creates a new player account and returns the new player Id."""

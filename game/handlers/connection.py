@@ -168,7 +168,8 @@ class ConnectionHandler:
                 dbid=player_data['id'],
                 username=player_data['username'],
                 email=player_data['email'],
-                hashed_password=player_data['hashed_password']
+                hashed_password=player_data['hashed_password'],
+                is_admin=player_data['is_admin']
             )
             log.info("Player account '%s' found for %s.", username, self.addr)
             self.password_attempts = 0
@@ -261,7 +262,8 @@ class ConnectionHandler:
             if player_data:
                 self.player_account = Player(
                     dbid=player_data['id'], username=player_data['username'],
-                    email=player_data['email'], hashed_password=player_data['hashed_password']
+                    email=player_data['email'], hashed_password=player_data['hashed_password'],
+                    is_admin=player_data['is_admin']
                 )
                 # New accounts always go to character creation
                 self.state = ConnectionState.CREATING_CHARACTER
@@ -288,7 +290,8 @@ class ConnectionHandler:
         if password is None: return # Connection lost
 
         if self.player_account.check_password(password):
-            log.info("Password correct for player %s (%s).", self.player_account.username, self.addr)
+            log.info("Password correct for player %s (%s). Admin: %s",
+                self.player_account.username, self.addr, self.player_account.is_admin) # Log admin status
             await self._send("\r\nPassword accepted.")
             self.state = ConnectionState.SELECTING_CHARACTER
         else:
@@ -355,8 +358,12 @@ class ConnectionHandler:
                 return # Stay in SELECTING_CHARACTER state
             
             # Instantiate the Character object
-            self.active_character = Character(writer=self.writer, db_data=char_data)
-            log.info("Character '%s' loaded for player %s (%s).", self.active_character.name, self.player_account.username, self.addr)
+            self.active_character = Character(
+                writer=self.writer,
+                db_data=char_data,
+                player_is_admin=self.player_account.is_admin)
+            log.info("Character '%s' loaded for player %s (%s). Admin: %s",
+                    self.active_character.name, self.player_account.username, self.addr, self.active_character.is_admin)
 
             # Proceed to place character in world (Post-Load steps)
             await self._handle_post_load()

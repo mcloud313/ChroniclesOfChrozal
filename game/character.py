@@ -38,7 +38,8 @@ class Character:
         self.writer: asyncio.StreamWriter = writer # Network connection
 
         # --- Data loaded from DB ---
-        self.writer: asyncio.StreamWriter = writer  
+        self.writer: asyncio.StreamWriter = writer
+        self.is_admin: bool = player_is_admin  
         self.dbid: int = db_data['id']
         self.player_id: int = db_data['player_id'] # Link to Player account
         self.first_name: str = db_data['first_name']

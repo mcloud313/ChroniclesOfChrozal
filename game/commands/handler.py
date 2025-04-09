@@ -50,7 +50,14 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "u": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "up"),
     "down": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "down"),
     "d": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "down"),
+    "go": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, args.strip()), # Add 'go' using args as direction/exit name
     # Add out, in, etc. if needed later
+
+    "@teleport": admin_cmds.cmd_teleport,
+    "@examine": admin_cmds.cmd_examine,
+    "@setstat": admin_cmds.cmd_setstat,
+    "@dig": admin_cmds.cmd_dig_placeholder, # Placeholder
+    "@tunnel": admin_cmds.cmd_tunnel_placeholder, # Placeholder
 
 }
 
@@ -97,7 +104,13 @@ async def process_command(character: Character, world: World, db_conn: aiosqlite
     command_func = COMMAND_MAP.get(command_verb)
 
     if command_func:
+        is_admin_cmd = command_verb.startswith('@')
+        if is_admin_cmd and not character.is_admin:
+            log.warning("Non-admin %s tried to use admin command: %s", character.name, command_verb)
+            await character.send("Huh? (Unknown command).")
+            return True
         log.info("Executing command '%s' for %s (args: '%s')", command_verb, character.name, args_str)
+        
         try:
             # Execute the command function
             should_continue = await command_func(character, world, db_conn, args_str)
