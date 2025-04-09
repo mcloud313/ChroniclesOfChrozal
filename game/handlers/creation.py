@@ -489,12 +489,12 @@ class CreationHandler:
             if not description_parts[-1].endswith((".", "?", "!")): # Check if previous part ended sentence
                 first_word = first_word[0].lower() + first_word[1:]
             else: # Start new sentence
-                 first_word = first_word[0].upper() + first_word[1:]
+                first_word = first_word[0].upper() + first_word[1:]
 
             head_sentence = first_word
             if len(head_sentence_parts) > 1:
-                 head_sentence += ", " + ", ".join(head_sentence_parts[1:-1]) # Middle parts with comma
-                 if len(head_sentence_parts) > 2: head_sentence += "," # Comma before 'and' if > 2 parts
+                head_sentence += ", " + ", ".join(head_sentence_parts[1:-1]) # Middle parts with comma
+                if len(head_sentence_parts) > 2: head_sentence += "," # Comma before 'and' if > 2 parts
                 head_sentence += " and " + head_sentence_parts[-1] # Last part with 'and'
             description_parts.append(head_sentence + ".")
 

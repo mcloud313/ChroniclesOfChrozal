@@ -112,7 +112,7 @@ async def cmd_examine(character: 'Character', world: 'World', db_conn: 'aiosqlit
                 area_id = int(identifier)
                 area_data = world.get_area(area_id)
                 if area_data:
-                output += json.dumps(dict(area_data), indent=2)
+                    output += json.dumps(dict(area_data), indent=2)
                     found = True
         # Add race/class examination later if needed
 

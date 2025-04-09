@@ -13,6 +13,7 @@ from ..world import World
 import aiosqlite # Needed for db_conn type hint
 from . import general as general_cmds
 from . import movement as movement_cmds
+from . import admin as admin_cmds
 
 log = logging.getLogger(__name__)
 
