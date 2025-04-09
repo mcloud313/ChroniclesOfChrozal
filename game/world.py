@@ -161,3 +161,19 @@ class World:
         # Return a copy of the values (the character objects)
         return list(self.active_characters.values())
     
+    async def update_roundtimes(self, dt: float):
+        """
+        Called by the game ticker to decrease active roundtime for characters
+
+        ARGS:
+            dt: Delta time (seconds) since the last tick
+        """
+        # Use a list copy in case characters disconnect during iteration
+        active_chars = self.get_active_characters_list()
+        if not active_chars:
+            return
+        # log.debug("updating roundtime for %d characters (dt=%.3f)", len(active_chars)
+        for char in active_chars:
+            if char.roundtime > 0:
+                new_roundtime = char.roundtime - dt
+                char.roundtime = max(0.0, new_roundtime) # Decrease, clamp at 0

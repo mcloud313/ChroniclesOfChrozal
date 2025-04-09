@@ -75,6 +75,9 @@ class Character:
         self.location_id: int = db_data['location_id'] # Store DB location ID
         self.location: Optional['Room'] = None
 
+        # Roundtime attribute
+        self.roundtime: float = 0.0 # Time until next action possible
+
         # Add basic derived name property
         self.name = f"{self.first_name} {self.last_name}"
         self.calculate_initial_derived_attributes()

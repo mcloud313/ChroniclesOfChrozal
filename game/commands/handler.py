@@ -108,6 +108,11 @@ async def process_command(character: Character, world: World, db_conn: aiosqlite
     if not command_verb:
         return True # Ignore empty input, keep connection active
     
+    if character.roundtime > 0:
+        # Provide feedback with remaining time, formatted to one decimal place
+        await character.send(f"You are still recovering for {character.roundtime:.1f} seconds.")
+        return True
+
     # Find the command function in our map
     command_func = COMMAND_MAP.get(command_verb)
 

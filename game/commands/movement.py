@@ -51,8 +51,7 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
     look_string = target_room.get_look_string(character)
     await character.send(look_string)
 
-    #TODO: Apply roundtime for movement later (Phase 3 Task 3)
-    # character.roundtime 1.0 # Example
+    character.roundtime = 1.0
 
 # --- Command Function ---
 

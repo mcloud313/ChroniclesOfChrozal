@@ -109,6 +109,10 @@ async def main():
             await ticker.start_ticker(ticker_interval)
             ticker_task_started = True # Mark as started
 
+            if world:
+                ticker.subscribe(world.update_roundtimes)
+                log.info("Subscribed world roundtime updates to ticker.")
+
             # --- Start Network Server ---
             server = await asyncio.start_server(
                 handle_connection, server_host, server_port
@@ -133,6 +137,9 @@ async def main():
 
         if ticker_task_started: # only stop if we attempted to start it
             log.info("Stopping game ticker...")
+            if world: # Unsubscribe if world exists
+                ticker.unsubscribe(world.update_roundtimes)
+                log.info("Unsubscribed world updates from ticker.")
             await ticker.stop_ticker()
             log.info("Game ticker stopped.")
 
