@@ -26,7 +26,7 @@ class Character:
     # hint network connection type
     writer: asyncio.StreamWriter
 
-    def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any]):
+    def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any], player_is_admin: bool = False):
         """
         Initializes a Character object from database data and network writer.
 

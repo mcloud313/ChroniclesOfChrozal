@@ -2,17 +2,18 @@
 """
 Main asynchronous server start script
 """
-import asyncio
-import aiosqlite
+
 import logging
 import os
 import sys
 import time
+import asyncio
+import aiosqlite
 import config
 from game import database
 from game.world import World
-# --- V V V Import the new handler V V V ---
 from game.handlers.connection import ConnectionHandler
+from game import ticker
 
 # Configure basic logging
 log = logging.getLogger(__name__)
@@ -59,6 +60,8 @@ async def main():
     global world, db_conn
     # Initialize task variable outside try block so finally can access it
     autosave_task = None
+    # Initialize ticker task variable
+    ticker_task_started = False
     # Ensure db_conn is also initialized for finally block safety
     db_conn = None # Start as None
 
@@ -86,10 +89,6 @@ async def main():
 
         log.info("World loaded successfully.")
 
-        # Add optional debug logs here if needed:
-        log.debug("MAIN: Pre-start check - world object: %s (ID: %s)", world, id(world))
-        log.debug("MAIN: Pre-start check - db_conn object: %s (ID: %s)", db_conn, id(db_conn))
-
         # 3. Start Network Server and Autosave Task
         server = None # Define server variable outside inner try
         try:
@@ -105,6 +104,10 @@ async def main():
             else:
                 log.warning("Autosave disabled (interval <= 0 or world/db missing)")
             # --- End Autosave Task ---
+
+            ticker_interval = getattr(config, 'TICKER_INTERVAL_SECONDS', 1.0)
+            await ticker.start_ticker(ticker_interval)
+            ticker_task_started = True # Mark as started
 
             # --- Start Network Server ---
             server = await asyncio.start_server(
@@ -127,6 +130,11 @@ async def main():
     finally:
         # Graceful shutdown
         log.info("Shutting down server...")
+
+        if ticker_task_started: # only stop if we attempted to start it
+            log.info("Stopping game ticker...")
+            await ticker.stop_ticker()
+            log.info("Game ticker stopped.")
 
         # --- Cancel Autosave Task ---
         if autosave_task:
