@@ -384,48 +384,63 @@ async def load_character_data(conn: aiosqlite.Connection, character_id: int) -> 
 
 async def save_character_data(conn: aiosqlite.Connection, character_id: int, data: dict) -> int | None:
     """
-    Updates specified fields for a character.
+    Updates specified fields for a character dynamically.
 
-    Args: 
+    Args:
         conn: Active aiosqlite connection.
         character_id: The ID of the character to update.
-        data: a dictionary where keys are column names (e.g., 'location_id', 'hp', 'xp_pool')
-                and values are the new values to save.
+        data: A dictionary where keys are column names and values are the new values.
 
     Returns:
-        Number of rows affected (should be 1 on success) or None on error.
+        Number of rows affected (e.g., 1 on success) or None on error.
     """
     if not data:
         log.warning("save_character_data called with empty data for char %s", character_id)
-        return 0 # Nothing to Update
-    
+        return 0 # Nothing to update
+
     # Build the SET part of the query dynamically
     set_clauses = []
     params = []
-    valid_columns = [ # V1 focus
-        "location_id", "hp", "essence", "xp_pool", "xp_total",
-        # Add others as they become dynamic/necessary:
-        # "level", "stats", "skills", "inventory", "equipment", "coinage", etc.
+    # Define columns allowed for updates via this function
+    valid_columns = [
+        "location_id", "hp", "essence", "xp_pool", "xp_total", "level",
+        "stats", "skills", "description", "sex", "race_id", "class_id",
+        "max_hp", "max_essence", "inventory", "equipment", "coinage"
+        # Add others as needed, remove ones that shouldn't be updated here
     ]
-    
+
     for key, value in data.items():
         if key in valid_columns:
             set_clauses.append(f"{key} = ?")
-            params.append(value)
+            # Handle JSON data - ensure it's passed as string
+            if isinstance(value, (dict, list)):
+                params.append(json.dumps(value))
+            else:
+                params.append(value)
         else:
-            log.warning("Attempted to save invalid/protected column '%s' for char %s", key, character_id)
+            log.warning("Attempted to save invalid/protected column '%s' via save_character_data for char %s", key, character_id)
+
     if not set_clauses:
         log.warning("No valid columns provided to save_character_data for char %s", character_id)
         return 0
-    
+
     # Always update last_saved timestamp
     set_clauses.append("last_saved = CURRENT_TIMESTAMP")
 
     query = f"UPDATE characters SET {', '.join(set_clauses)} WHERE id = ?"
     params.append(character_id) # Add the character ID for the WHERE clause
+    params_tuple = tuple(params) # Convert list to tuple for execute
 
-    # execute_query returns rowcount for UPDATE
-    return await execute_query(conn, query, tuple(params))
+    # Keep debug logs to monitor query/params if needed, level DEBUG
+    log.debug("Executing Save Character Query: %s", query)
+    log.debug("Save Character Params: %s", params_tuple)
+
+    # execute_query returns rowcount for UPDATE or None on error
+    result = await execute_query(conn, query, params_tuple)
+
+    log.debug("Save Character execute_query returned: %r", result)
+
+    return result # Return the rowcount (or None)
 
 async def load_all_races(conn: aiosqlite.Connection) -> list[aiosqlite.Row] | None:
     """Fetches all available races."""
@@ -507,253 +522,6 @@ async def create_character(
         return None
 
 
-# ================================================================
-# Async Test Runner
-# ================================================================
-async def main_test():
-    """Asynchronous main function to run database tests."""
-    # Use lazy formatting for log messages
-    log.info("Running ASYNC database module test...")
-
-    # --- Path calculation ---
-    current_script_path = os.path.abspath(__file__)
-    game_dir = os.path.dirname(current_script_path)
-    parent_dir = os.path.dirname(game_dir) # Project root directory
-    db_full_path = os.path.join(parent_dir, DATABASE_PATH)
-    # ------------------------
-
-    log.info("Database path for test: %s", db_full_path)
-
-    connection = await connect_db(db_full_path)
-
-    if connection:
-        try: # use try...finally to ensure connection closure
-            log.info("%s %s %s", "-" * 20, "Initializing DB (Async)", "-" * 20)
-            await init_db(connection)
-            log.info("%s %s %s", "-" * 20, "Initialization Complete", "-" * 20)
-
-            # # --- Determine Player ID ---
-            # log.info("Attempting to create/find test player 'testacc'...")
-            # test_pass = "password123"
-            # hashed_pass = utils.hash_password(test_pass) # Use utils function
-            # # Attempt player insert
-            # new_player_id = await execute_query(
-            #     connection,
-            #     "INSERT INTO players (username, hashed_password, email) VALUES (?, ?, ?)",
-            #     ("testacc", hashed_pass, "test@example.com")
-            # )
-
-            # current_player_id = None # Variable to hold the ID we will use
-
-            # if new_player_id:
-            #     log.info("Test player 'testacc' created with ID: %s", new_player_id)
-            #     current_player_id = new_player_id
-            # else:
-            #     log.warning("Test player insertion failed (maybe 'testacc' or test@example.com already exists).")
-            #     # If insert failed, try to fetch the existing player ID
-            #     existing_player = await fetch_one(connection, "SELECT id FROM players WHERE username = ?", ("testacc",))
-            #     if existing_player:
-            #         current_player_id = existing_player['id']
-            #         log.info("Found existing player 'testacc' with ID: %s", current_player_id)
-            #     else:
-            #         # This case should be unlikely if UNIQUE constraint fired, but handle it
-            #         log.error("Failed to create or find player 'testacc'. Cannot proceed with character tests.")
-            #         # Exit or raise? For testing, we might stop here.
-            #         # return # Exit the test function if player is critical
-
-            # # --- Attempt Character Creation/Check (if Player ID was found/created) ---
-            # char_id = None # Initialize char_id
-            # if current_player_id:
-            #     log.info("Attempting to create/check character 'Tester' for player ID %s...", current_player_id)
-            #     initial_stats = json.dumps({"might": 12, "agility": 11, "vitality": 13, "intellect": 9, "aura": 8, "persona": 10})
-            #     initial_skills = json.dumps({"climb": 1, "swim": 1})
-            #     # Attempt character insert - this might also fail on UNIQUE constraint if run multiple times
-            #     char_id = await execute_query(
-            #         connection,
-            #         """INSERT INTO characters (player_id, first_name, last_name, sex, race_id, class_id, stats, skills, location_id)
-            #         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            #         (current_player_id, "Tester", "Testee", "They/Them", 1, 1, initial_stats, initial_skills, 1)
-            #     )
-            #     if char_id:
-            #         log.info("Test character 'Tester' created with ID: %s", char_id)
-            #     else:
-            #         # If insert failed, it might be because the character already exists (UNIQUE constraint)
-            #         log.warning("Test character insertion failed (maybe character 'Tester Testee' already exists for player %s).", current_player_id)
-            #         # We can still proceed to fetch and check if it exists
-            # else:
-            #     log.error("No valid player ID for 'testacc'; skipping character creation/fetch.")
-
-
-            # # --- Fetching character 'Tester' ---
-            # log.info("Fetching character 'Tester'...")
-            # character_data = None
-            # if current_player_id: # Only try to fetch if we have a player ID
-            #     # Fetch using the known player ID for better targeting
-            #     character_data = await fetch_one(
-            #         connection,
-            #         "SELECT * FROM characters WHERE player_id = ? AND first_name = ?",
-            #         (current_player_id, "Tester")
-            #     )
-
-            # if character_data:
-            #     # Safely format using fetched data
-            #     log.info(
-            #         "Found character: ID=%s, Name=%s %s, RaceID=%s, ClassID=%s, Level=%s", # Changed Race/Class -> IDs
-            #         character_data['id'],
-            #         character_data['first_name'],
-            #         character_data['last_name'],
-            #         character_data['race_id'], # Displaying ID now
-            #         character_data['class_id'], # Displaying ID now
-            #         character_data['level']
-            #     )
-            #     # Safely parse JSON data
-            #     try:
-            #         stats = json.loads(character_data['stats'])
-            #         log.info("  Stats: %s", stats)
-            #     except (json.JSONDecodeError, TypeError) as e:
-            #         log.warning("  Could not decode stats JSON: %s (Error: %s)", character_data['stats'], e)
-            #     try:
-            #         skills = json.loads(character_data['skills'])
-            #         log.info("  Skills: %s", skills)
-            #     except (json.JSONDecodeError, TypeError) as e:
-            #         log.warning("  Could not decode skills JSON: %s (Error: %s)", character_data['skills'], e)
-            # else:
-            #     # Log includes player ID for context if available
-            #     log.info("Character 'Tester' not found for player ID %s.", current_player_id if current_player_id is not None else 'N/A')
-
-
-            # --- Fetching Rooms (Remains the same) ---
-            log.info("Fetching all rooms in Area 1:")
-            area1_rooms = await fetch_all(connection, "SELECT id, name FROM rooms WHERE area_id = ?", (1,)) # Must await
-            if area1_rooms is not None:
-                if area1_rooms:
-                    for room in area1_rooms:
-                        log.info(" Room ID: %s, Name: %s", room['id'], room['name'])
-                else:
-                    log.info(" No rooms found in Area 1.")
-            else:
-                log.info(" Could not fetch rooms.")
-            # --- End Example Usage ---
-
-        finally:
-            log.info("Closing database connection.")
-            await connection.close() # Must await close
-            log.info("Database connection closed.")
-    else:
-        log.error("Failed to connect to the database for testing.")
-    """Asynchronous main function to run database tests."""
-    # Use lazy formatting for log messages
-    log.info("Running ASYNC database module test...")
-
-    # --- Path calculation ---
-    # Determine DB path relative to project root using the potentially
-    # updated global DATABASE_PATH variable.
-    current_script_path = os.path.abspath(__file__)
-    game_dir = os.path.dirname(current_script_path)
-    parent_dir = os.path.dirname(game_dir) # Project root directory
-    db_full_path = os.path.join(parent_dir, DATABASE_PATH)
-    # ------------------------
-
-    log.info("Database path for test: %s", db_full_path)
-
-    # Must await connection
-    connection = await connect_db(db_full_path)
-
-    if connection:
-        try: # use try...finally to ensure connection closure
-            log.info("%s %s %s", "-" * 20, "Initializing DB (Async)", "-" * 20)
-            # Must await initialization
-            await init_db(connection)
-            log.info("%s %s %s", "-" * 20, "Initialization Complete", "-" * 20)
-
-            # --- Example Usage (Now using await and lazy logging) ---
-            log.info("Attempting to create test player 'testacc'...")
-            test_pass = "password123"
-            hashed_pass = utils.hash_password(test_pass) # Hashing is sync
-            player_id = await execute_query( # Must await
-                connection,
-                "INSERT INTO players (username, hashed_password, email) VALUES (?, ?, ?)",
-                ("testacc", hashed_pass, "test@example.com")
-            )
-
-            if player_id:
-                log.info("Test player 'testacc' created with ID: %s", player_id)
-
-                log.info("Attempting to create character 'Tester' for player ID %s...", player_id)
-                initial_stats = json.dumps({"might": 12, "agility": 11, "vitality": 13, "intellect": 9, "aura": 8, "persona": 10})
-                initial_skills = json.dumps({"climb": 1, "swim": 1})
-                char_id = await execute_query( # Must await
-                    connection,
-                    """INSERT INTO characters (player_id, first_name, last_name, race, class, stats, skills, location_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (player_id, "Tester", "Testee", 1, 1, initial_stats, initial_skills, 1)
-                )
-                if char_id:
-                    log.info("Test character 'Tester' created with ID: %s", char_id)
-                else:
-                    log.error("Failed to create test character 'Tester'.") # No variable args here
-
-            else:
-                log.warning("Test player insertion failed (maybe 'testacc' or test@example.com already exists).")
-                existing_player = await fetch_one(connection, "SELECT id FROM players WHERE username = ?", ("testacc",)) # Must await
-                if existing_player:
-                    player_id = existing_player['id']
-                    log.info("Found existing player 'testacc' with ID: %s", player_id)
-                else:
-                    player_id = None # Ensure player_id is None if not found and not created
-
-
-            log.info("Fetching character 'Tester'...")
-            character_data = await fetch_one(connection, "SELECT * FROM characters WHERE first_name = ?", ("Tester",)) # Must await
-
-            if character_data:
-                # Safely format using fetched data
-                log.info(
-                    "Found character: ID=%s, Name=%s %s, Race=%s, Class=%s, Level=%s",
-                    character_data['id'],
-                    character_data['first_name'],
-                    character_data['last_name'],
-                    character_data['race_id'],
-                    character_data['class_id'],
-                    character_data['level']
-                )
-                # Safely parse JSON data
-                try:
-                    stats = json.loads(character_data['stats'])
-                    # Use %s for potentially complex objects if not just simple dict __str__
-                    log.info("  Stats: %s", stats)
-                except (json.JSONDecodeError, TypeError):
-                    log.warning("  Could not decode stats JSON: %s", character_data['stats'])
-                try:
-                    skills = json.loads(character_data['skills'])
-                    log.info("  Skills: %s", skills)
-                except (json.JSONDecodeError, TypeError):
-                    log.warning("  Could not decode skills JSON: %s", character_data['skills'])
-            else:
-                # Only run this if character_data is None or empty after fetch attempt
-                log.info("Character 'Tester' not found.")
-
-
-            log.info("Fetching all rooms in Area 1:")
-            area1_rooms = await fetch_all(connection, "SELECT id, name FROM rooms WHERE area_id = ?", (1,)) # Must await
-            if area1_rooms is not None:
-                if area1_rooms:
-                    for room in area1_rooms:
-                        log.info(" Room ID: %s, Name: %s", room['id'], room['name'])
-                else:
-                    log.info(" No rooms found in Area 1.")
-            else:
-                log.info(" Could not fetch rooms.")
-            # --- End Example Usage ---
-
-        finally:
-            log.info("Closing database connection.")
-            await connection.close() # Must await close
-            log.info("Database connection closed.")
-    else:
-        log.error("Failed to connect to the database for testing.")
-
-if __name__ == "__main__":
     # Fix path for direct execution IF config wasn't loaded initially
     if not config:
         current_dir = os.path.dirname(os.path.abspath(__file__))

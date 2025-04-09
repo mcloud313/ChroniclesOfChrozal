@@ -409,7 +409,7 @@ class ConnectionHandler:
 
         #6 Announce Arrival to Room
         arrival_msg = f"\r\n{self.active_character.name} slowly approaches.\r\n"
-        room.broadcast(arrival_msg, exclude={self.active_character})
+        await room.broadcast(arrival_msg, exclude={self.active_character})
 
         # 7. Change State to Playing
         self.state = ConnectionState.PLAYING
@@ -531,7 +531,7 @@ class ConnectionHandler:
                 departure_msg = f"\r\n{char_name} slowly departs.\r\n"
                 try:
                     # Use try block as broadcast could fail if room/other players have issues
-                    char_to_clean.location.broadcast(departure_msg, exclude={char_to_clean})
+                    await char_to_clean.location.broadcast(departure_msg, exclude={char_to_clean})
                 except Exception as e:
                     log.error("Error broadcasting departure for %s: %s", char_name, e)
                 char_to_clean.location.remove_character(char_to_clean)

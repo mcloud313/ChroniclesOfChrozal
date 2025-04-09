@@ -86,11 +86,13 @@ async def cmd_say(character: 'Character', world: 'World', db_conn: 'aiosqlite.Co
         await character.send("You try to speak, but no sound comes out.")
         return True
     
+    speaker_msg = f"You say: \"{args_str}\""
+    broadcast_msg = f"{character.first_name} says: \"{args_str}\""
     # Send message to self
-    await character.send(f"You say: {args_str}")
-    # Broadcast to the room
-    message = f"{character.first_name} says: {args_str}" # Use first name for broadcasts
-    character.location.broadcast(message + "\r\n", exclude={character}) # Add newline for broadcast
+    await character.send(speaker_msg) # Already adds \r\n in send()
+
+    # Broadcast to room (add line endings for broadcast here)
+    await character.location.broadcast(broadcast_msg + "\r\n", exclude={character})
     return True
 
 async def cmd_quit(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:

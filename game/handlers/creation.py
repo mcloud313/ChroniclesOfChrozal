@@ -413,113 +413,121 @@ class CreationHandler:
         traits = self.creation_data.get("description_traits", {})
         sex = self.creation_data.get("sex")
         race_name = self.creation_data.get('race_name', 'Unknown Race')
+        # Ensure class_name was stored in _handle_get_class!
         class_name = self.creation_data.get('class_name', 'Unknown Class')
         first_name = self.creation_data.get('first_name', 'Someone')
         last_name = self.creation_data.get('last_name', '')
 
         # --- Pronoun Setup ---
-        pronoun_subj, pronoun_obj, pronoun_poss, verb_is, verb_has = "They", "them", "their", "are", "have"
-        if sex == "Male": pronoun_subj, pronoun_obj, pronoun_poss, verb_is, verb_has = "He", "him", "his", "is", "has"
-        elif sex == "Female": pronoun_subj, pronoun_obj, pronoun_poss, verb_is, verb_has = "She", "her", "her", "is", "has"
+        pronoun_subj, _, _, verb_is, verb_has = utils.get_pronouns(sex) # Get needed pronouns
 
-        # --- Define canonical order for description building ---
-        # This ensures sentences flow logically. Only includes traits if selected by player.
-        trait_order = [
-            "Height", "Build", "Skin Tone", "Skin Pattern", "Shell Color", # Body
-            "Head Shape", "Hair Style", "Hair Color", "Beard Style",       # Head / Hair
-            "Eye Color", "Ear Shape", "Nose Type"                          # Facial Features
-        ]
+        # --- Build Description Parts ---
+        description_parts = []
 
-        # --- Build Description ---
-        desc = f"You see {first_name} {last_name}, {utils.get_article(race_name)} {race_name} {class_name}.\r\n"
+        # Initial line
+        description_parts.append(f"You see {first_name} {last_name}, {utils.get_article(race_name)} {race_name} {class_name}.")
 
-        # Sentence 1: Height and Build
+        # --- Physical Build ---
         height = traits.get("Height", "").lower()
         build = traits.get("Build", "").lower()
         if height and build:
-            desc += f"{pronoun_subj} {verb_is} of {height} height and {verb_has} {utils.get_article(build)} {build} build. "
+            description_parts.append(f"{pronoun_subj} {verb_is} of {height} height and {verb_has} {utils.get_article(build)} {build} build.")
         elif height:
-            desc += f"{pronoun_subj} {verb_is} of {height} height. "
+            description_parts.append(f"{pronoun_subj} {verb_is} of {height} height.")
         elif build:
-            desc += f"{pronoun_subj} {verb_has} {utils.get_article(build)} {build} build. "
+            description_parts.append(f"{pronoun_subj} {verb_has} {utils.get_article(build)} {build} build.")
 
-        # Sentence 2 (or continued): Skin / Shell / Patterns
+        # --- Skin / Shell / Patterns ---
         skin_tone = traits.get("Skin Tone", "").lower()
         skin_pattern = traits.get("Skin Pattern", "").lower()
         shell_color = traits.get("Shell Color", "").lower()
-        skin_parts = []
+        skin_sentence_parts = []
         if skin_tone:
-            skin_parts.append(f"{pronoun_poss} skin possesses {utils.get_article(skin_tone)} {skin_tone} tone")
+             skin_sentence_parts.append(f"{pronoun_poss} skin has {utils.get_article(skin_tone)} {skin_tone} tone")
         if skin_pattern:
-            skin_parts.append(f"marked by {skin_pattern} patterns")
+            skin_sentence_parts.append(f"is marked by {skin_pattern} patterns") # Changed phrasing
         if shell_color:
-            skin_parts.append(f"protected by {utils.get_article(shell_color)} {shell_color} shell")
-        if skin_parts:
-            desc += pronoun_subj if not desc.endswith(". ") else pronoun_subj.lower() # Capitalize if new sentence
-            desc += f" {verb_has} skin that " if skin_tone and (skin_pattern or shell_color) else "" # Connector phrase
-            desc += ", ".join(skin_parts[:-1]) # Join all but last with comma
-            if len(skin_parts) > 1:
-                desc += " and " + skin_parts[-1] # Add 'and' before last
-            elif skin_parts:
-                desc += skin_parts[0] # Only one fragment
-            desc += ". "
+            skin_sentence_parts.append(f"is protected by {utils.get_article(shell_color)} {shell_color} shell")
 
+        if skin_sentence_parts:
+            # Combine skin parts grammatically
+            skin_desc = skin_sentence_parts[0]
+            if len(skin_sentence_parts) > 1:
+                 skin_desc += " and " + skin_sentence_parts[1]
+            if len(skin_sentence_parts) > 2: # Max 3 assumed for now
+                 skin_desc += " and " + skin_sentence_parts[2]
+            description_parts.append(f"{pronoun_subj}'s body {skin_desc}.") # Form sentence
 
-        # Sentence 3: Head / Hair / Beard
+        # --- Head / Hair / Beard ---
         head_shape = traits.get("Head Shape", "").lower()
         hair_style = traits.get("Hair Style", "").lower()
         hair_color = traits.get("Hair Color", "").lower()
         beard_style = traits.get("Beard Style", "").lower()
-        head_parts = []
+        head_sentence_parts = []
+        # Head shape first if present
         if head_shape:
-            head_parts.append(f"{utils.get_article(head_shape)} {head_shape} head")
+            head_sentence_parts.append(f"{pronoun_subj} {verb_has} {utils.get_article(head_shape)} {head_shape} head")
+
+        # Combine hair style/color
+        hair_desc = ""
         if hair_style and hair_color and hair_style != "bald":
-            head_parts.append(f"{hair_style} {hair_color} hair")
+            hair_desc = f"{hair_style} {hair_color} hair"
         elif hair_style: # e.g., Bald
-            head_parts.append(hair_style)
+            hair_desc = f"{hair_style} hair" # "bald hair" is okay for generic MUD desc
+        if hair_desc:
+            head_sentence_parts.append(hair_desc)
+
+        # Add beard info
         if beard_style and beard_style not in ["none", "clean-shaven"]:
-            head_parts.append(f"accented by {utils.get_article(beard_style)} {beard_style} beard")
+             head_sentence_parts.append(f"and {utils.get_article(beard_style)} {beard_style} beard")
         elif beard_style == "clean-shaven":
-            head_parts.append(f"a clean-shaven face")
+            head_sentence_parts.append("and a clean-shaven face")
 
-        if head_parts:
-            desc += pronoun_subj if not desc.endswith(". ") else pronoun_subj.lower()
-            desc += f" {verb_has} "
-            desc += ", ".join(head_parts[:-1])
-            if len(head_parts) > 1:
-                desc += " and " + head_parts[-1]
-            elif head_parts:
-                desc += head_parts[0]
-            desc += ". "
+        if head_sentence_parts:
+            # Construct sentence - capitalize first word if needed
+            first_word = head_sentence_parts[0]
+            if not description_parts[-1].endswith((".", "?", "!")): # Check if previous part ended sentence
+                first_word = first_word[0].lower() + first_word[1:]
+            else: # Start new sentence
+                 first_word = first_word[0].upper() + first_word[1:]
 
-        # Sentence 4: Eyes / Ears / Nose
+            head_sentence = first_word
+            if len(head_sentence_parts) > 1:
+                 head_sentence += ", " + ", ".join(head_sentence_parts[1:-1]) # Middle parts with comma
+                 if len(head_sentence_parts) > 2: head_sentence += "," # Comma before 'and' if > 2 parts
+                head_sentence += " and " + head_sentence_parts[-1] # Last part with 'and'
+            description_parts.append(head_sentence + ".")
+
+
+        # --- Facial Features ---
         eye_color = traits.get("Eye Color", "").lower()
         ear_shape = traits.get("Ear Shape", "").lower()
         nose_type = traits.get("Nose Type", "").lower()
-        facial_parts = []
+        facial_sentence_parts = []
         if eye_color:
-            facial_parts.append(f"{eye_color} eyes")
+            facial_sentence_parts.append(f"{eye_color} eyes")
         if ear_shape:
-            facial_parts.append(f"{ear_shape} ears")
+            facial_sentence_parts.append(f"{ear_shape} ears")
         if nose_type:
-            facial_parts.append(f"{utils.get_article(nose_type)} {nose_type} nose")
+            facial_sentence_parts.append(f"{utils.get_article(nose_type)} {nose_type} nose")
 
-        if facial_parts:
-            desc += pronoun_poss.capitalize() if not desc.endswith(". ") else pronoun_poss
-            desc += " face is further defined by "
-            desc += ", ".join(facial_parts[:-1])
-            if len(facial_parts) > 1:
-                desc += " and " + facial_parts[-1]
-            elif facial_parts:
-                desc += facial_parts[0]
-            desc += "."
+        if facial_sentence_parts:
+            face_desc = ", ".join(facial_sentence_parts[:-1])
+            if len(facial_sentence_parts) > 1:
+                face_desc += " and " + facial_sentence_parts[-1]
+            elif facial_sentence_parts:
+                face_desc = facial_sentence_parts[0]
 
+            # Start new sentence
+            description_parts.append(f"{pronoun_poss.capitalize()} face is distinguished by {face_desc}.")
 
+        # --- Combine and Return ---
+        # Join parts with spaces, ensuring only one space between sentences.
+        full_desc = " ".join(description_parts)
         # Add placeholder for equipment
-        desc += f"\r\n{pronoun_subj} {verb_is} wearing:\r\n Nothing."
-        # Add placeholder for wielded items later
+        full_desc += f"\r\n{pronoun_subj} {verb_is} wearing:\r\n Nothing."
 
-        return desc.strip() # Remove any trailing space
+        return full_desc.strip()
 
 
 
@@ -653,6 +661,8 @@ class CreationHandler:
                     await self._handle_get_trait("Head Shape")
                 elif current_state == CreationState.GET_TRAIT_SHELL_COLOR:
                     await self._handle_get_trait("Shell Color")
+                elif current_state == CreationState.GET_TRAIT_SKIN_PATTERN:
+                    await self._handle_get_trait("Skin Pattern")
                 elif current_state == CreationState.FINALIZE:
                     await self._handle_finalize()
                 else:

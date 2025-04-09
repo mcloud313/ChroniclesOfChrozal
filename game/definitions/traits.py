@@ -10,7 +10,7 @@ Used during character creation.
 TRAIT_OPTIONS = {
     # Use 'human' key to match DB race name if you stored 'Human' not 'Chrozalin'
     # If you stored 'Chrozalin' in DB, use "chrozalin" key here. Assuming 'human'.
-    "human": {
+    "chrozalin": {
         "Height": ["Short", "Average", "Tall"],
         "Build": ["Slender", "Average", "Stocky", "Muscular"],
         "Skin Tone": ["Pale", "Fair", "Tanned", "Ruddy", "Brown", "Dark Brown", "Black"], # Added more
@@ -47,7 +47,7 @@ TRAIT_OPTIONS = {
         # Elves typically don't have beards by default in many fantasies
         # "Beard Style": ["None"], # Optional: Add if Elven beards are possible
     },
-    "yan-tar": {
+    "yan-ter": {
         "Height": ["Short", "Average", "Stocky Average", "Broad Average"], # Added
         "Build": ["Stocky", "Solid", "Heavy", "Imposing"], # Added
         "Skin Pattern": ["Geometric", "Whorls", "Stripes", "Mottled", "Smooth", "Cracked Earth"], # Added more

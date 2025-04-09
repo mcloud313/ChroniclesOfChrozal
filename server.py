@@ -71,6 +71,11 @@ async def main():
             log.critical("!!! Failed to connect to database. Server cannot start.")
             return # Stop server startup
 
+        # 1b. Initialize Database Schema (Create tables IF they don't exist)
+        log.info("Initializing database schema if needed...")
+        await database.init_db(db_conn)
+        log.info("Database initialization check complete.")
+
         # 2. Build World State
         world = World() # Assign to global world
         build_successful = await world.build(db_conn)

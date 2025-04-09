@@ -104,14 +104,13 @@ class Room:
 
         return output
     
-    def broadcast(self, message: str, exclude: Optional[Set[Any]] = None):
+    async def broadcast(self, message: str, exclude: Optional[Set[Any]] = None):
         """
         Sends a message to all characters in the room, optionally excluding some.
 
         Args:
-            message: The string message to send.
-            exclude: A set of characters objects to NOT send the message to.
-                Defaults to None (send to all).
+            message: The string message to send. MUST include line endings if needed.
+            exclude: A set of Character objects to NOT send the message to.
         """
         if exclude is None:
             exclude = set()
@@ -123,7 +122,7 @@ class Room:
             if character not in exclude:
                 try:
                     # Assumes character object has a 'send' method
-                    getattr(character, 'send')(message)
+                    await character.send(message)
                 except AttributeError:
                     log.error(f"Room {self.dbid}: Tried to broadcast to object without send method: {character} ")
                 except Exception as e:

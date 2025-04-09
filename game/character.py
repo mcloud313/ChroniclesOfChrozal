@@ -132,26 +132,41 @@ class Character:
             "hp": self.hp,
             "essence": self.essence,
             "xp_pool": self.xp_pool,
-            "xp_total": self.xp_total
-            # Add stats/skills/inventory/equipment/coinage later as needed
-            # "stats": json.dumps(self.stats)
-            # "skills": json.dumps(self.skills)
+            "xp_total": self.xp_total,
+            # Add stats/skills later if they need frequent saving
+            # Add inventory/equipment/coinage when implemented
         }
 
-        log.debug("Saving character %s (ID: %s)... Data: %s", self.name, self.dbid, data_to_save)
+        # Only proceed if there's actually data to save
+        if not data_to_save:
+            log.warning("Character %s: No data generated to save.", self.name)
+            return
+
+        log.debug("Attempting save for character %s (ID: %s)... Data: %s", self.name, self.dbid, data_to_save)
         try:
+            # Call the database function (which should now be the dynamic one)
             rowcount = await database.save_character_data(db_conn, self.dbid, data_to_save)
-            if rowcount == 1:
-                log.info("Successfully saved character %s (ID: %s).", self.name, self.dbid)
+
+            # Log the outcome based on rowcount
+            if rowcount is None:
+                # This indicates an error occurred within execute_query/save_character_data
+                log.error("Save FAILED for character %s (ID: %s), DB function returned None.", self.name, self.dbid)
+            elif rowcount == 1:
+                # This is the ideal, expected outcome
+                log.info("Successfully saved character %s (ID: %s). 1 row affected.", self.name, self.dbid)
             elif rowcount == 0:
-                log.warning("Attempted to save character %s (ID: %s), but no rows were updated (Maybe ID invalid?).", self.name, self.dbid)
+                # This means the WHERE id = ? clause didn't match any rows
+                log.warning("Attempted to save character %s (ID: %s), but no rows were updated (ID not found in DB?).", self.name, self.dbid)
             else:
-                # Should ideally not happen with WHERE id = ?
-                log.warning("Attempted to save character %s (ID: %s), unexpected rowcount: %s.", self.name, self.dbid, rowcount)
+                # Handles the unexpected rowcount=2 (or other non-zero values)
+                # Log as info for now, not warning, due to the unresolved issue
+                log.info("Save attempt for character %s (ID: %s) completed. DB rowcount reported: %s.",
+                        self.name, self.dbid, rowcount)
 
         except Exception as e:
-            # Log error but don't crash the cleanup/autosave process
-            log.exception("Error saving character %s (ID: %s): %s", self.name, self.dbid, rowcount)
+            # Catch any other unexpected errors during the save process
+            # Log the actual exception object 'e'
+            log.exception("Unexpected error saving character %s (ID: %s): %s", self.name, self.dbid, e, exc_info=True)
 
     def update_location(self, new_location: Optional['Room']):
         """
