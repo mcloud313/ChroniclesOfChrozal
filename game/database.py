@@ -10,6 +10,7 @@ import sys
 import hashlib # For password hashing (example)
 import asyncio
 import aiosqlite
+import config
 from . import utils
 
 # Assuming config.py exists in the parent directory
@@ -223,11 +224,11 @@ async def init_db(conn: aiosqlite.Connection):
             room_exists = (await cursor.fetchone())[0]
         if not room_exists:
             log.info("Default room #1 not found, creating it.")
-            exits_room1 = json.dumps({"north": 2}) # Exit North leads to Room 2
+            exits_room1 = json.dumps({"north": 2, "northwest": 3})
             await conn.execute(
                 """INSERT INTO rooms (id, area_id, name, description, exits, flags)
-                VALUES (?, ?, ?, ?, ?, ?)""",
-                (1, 1, "The Void", "A featureless void stretches out around you. To the north, something shimmers slightly.", exits_room1, json.dumps([]))
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (1, 1, "The Void", "A featureless void stretches around you. Something shimmers to the north. A faint path leads northwest.", exits_room1, json.dumps([]))
             )
             log.info("Default Room #1 created.")
 
@@ -236,13 +237,40 @@ async def init_db(conn: aiosqlite.Connection):
             room2_exists = (await cursor.fetchone())[0]
         if not room2_exists:
             log.info("Default Room #2 not found, creating it.")
-            exits_room2 = json.dumps({"south": 1}) # Exit South leads back to Room 1
+            exits_room2 = json.dumps({"south": 1, "hole": 4})
             await conn.execute(
                 """INSERT INTO rooms (id, area_id, name, description, exits, flags)
-                VALUES (?, ?, ?, ?, ?, ?)""",
-                (2, 1, "A Dusty Trail", "A dusty trail stretches before you, seemingly leading nowhere special. The void lies to the south.", exits_room2, json.dumps(["outdoors"])) # Added outdoors flag example
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (2, 1, "A Dusty Trail", "A dusty trail stretches before you. The void lies south. There is a dark hole in the ground here.", exits_room2, json.dumps(["outdoors"])) # Added outdoors flag example
             )
             log.info("Default Room #2 created with exit south.")
+
+        # *** NEW: Room 3 ("A Windy Ridge") *** - Exits: Southeast (to R1)
+        async with conn.execute("SELECT COUNT(*) FROM rooms WHERE id = 3") as cursor:
+            room3_exists = (await cursor.fetchone())[0]
+        if not room3_exists:
+            log.info("Default Room #3 not found, creating it.")
+            exits_room3 = json.dumps({"southeast": 1})
+            await conn.execute(
+                """INSERT INTO rooms (id, area_id, name, description, exits, flags)
+                    VALUES (?, ?, ?, ?, ?, ?)""",
+                (3, 1, "A Windy Ridge", "A blustery wind whips around you on this rocky ridge. A path leads back southeast.", exits_room3, json.dumps(["outdoors", "windy"]))
+            )
+            log.info("Default Room #3 created.")
+
+        # *** NEW: Room 4 ("A Damp Cave") *** - Exits: Climb Up (to R2)
+        async with conn.execute("SELECT COUNT(*) FROM rooms WHERE id = 4") as cursor:
+            room4_exists = (await cursor.fetchone())[0]
+        if not room4_exists:
+            log.info("Default Room #4 not found, creating it.")
+            # --- V V V SPECIAL EXIT NAME V V V ---
+            exits_room4 = json.dumps({"climb up": 2})
+            await conn.execute(
+                """INSERT INTO rooms (id, area_id, name, description, exits, flags)
+                    VALUES (?, ?, ?, ?, ?, ?)""",
+                (4, 1, "A Damp Cave", "Water drips steadily in this small, dark cave. The only way out seems to be climbing up the hole you fell through.", exits_room4, json.dumps(["indoors", "dark", "wet"]))
+            )
+            log.info("Default Room #4 created.")
 
         await conn.commit()
         log.info("Database initialization check complete.")
@@ -521,20 +549,3 @@ async def create_character(
         # Catch potential errors during creation (like UNIQUE constraint violation maybe?)
         log.exception("Exception during character creation for player %s: %s", player_id, e, exc_info=True)
         return None
-
-
-    # Fix path for direct execution IF config wasn't loaded initially
-    if not config:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        parent_dir = os.path.dirname(current_dir)
-        if parent_dir not in sys.path:
-            sys.path.insert(0, parent_dir)
-        try:
-            import config # Try importing again now path is set
-            DATABASE_PATH = config.DB_NAME # Update global if needed
-        except ModuleNotFoundError:
-            log.error("config.py not found even after path adjustment.")
-            # Exit or use fallback path set earlier
-
-    # Run the async test function
-    asyncio.run(main_test())

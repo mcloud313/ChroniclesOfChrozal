@@ -64,46 +64,51 @@ class Room:
 
     def get_look_string(self, looker_character: Any) -> str:
         """
-        Generates the formatted string describing the room for a looking character.
-
-        ArgS:
-            looker_character: The character object looking at the room.
-
-        returns: 
-            A formatted string describing the room.
+        Generates the formatted string describing the room, including sorted exits.
         """
-        # TODO: Add logic based on flags (darkness, weather) and looker abilities (infravision)
-        if "dark" in self.flags: # Example flag usage
-            # Simplistic dark check - assumes no light source yet
-            pass # return "It is pitch black..."
-
         # --- Room Name ---
-        output = f"---{self.name} --- [{self.dbid}]\n" # Show room ID for debugging/building
+        output = f"--- {self.name} --- [{self.dbid}]\n\r" # Using \n\r standard newline
 
         # --- Description ---
-        output += f"{self.description}\n"
+        # Consider wrapping long descriptions later
+        output += f"{self.description}\n\r"
 
         # --- Exits ---
-        visible_exits = sorted(self.exits.keys())
-        if visible_exits:
-            output += f"[Exits: {', '.join(visible_exits)}]\n"
+        # Define standard order
+        std_directions = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest", "up", "down"]
+        visible_std_exits = []
+        visible_special_exits = []
+
+        for exit_name in sorted(self.exits.keys()):
+            # TODO: Add check here later if exits can be hidden/secret
+            if exit_name in std_directions:
+                visible_std_exits.append(exit_name.capitalize()) # Capitalize for display
+            else:
+                visible_special_exits.append(exit_name.title()) # Capitalize words (e.g., "Hole", "Climb Up")
+
+        # Sort standard exits according to our defined order
+        visible_std_exits.sort(key=lambda x: std_directions.index(x.lower()) if x.lower() in std_directions else 99)
+
+        exit_list = visible_std_exits + visible_special_exits # Combine lists
+
+        if exit_list:
+            output += f"[Exits: {', '.join(exit_list)}]\n\r"
         else:
-            output += "[Exits: none]\n"
+            output += "[Exits: none]\n\r"
 
         # --- Characters ---
-        # Get names of OTHER characters present 
-        other_character_names = [ 
-            getattr(char, 'name', 'Someone') # Use getattr for safety until Character defined
+        other_character_names = [
+            getattr(char, 'name', 'Someone')
             for char in self.characters
             if char != looker_character
         ]
-
         if other_character_names:
-            output += "Also here: " + ", ".join(other_character_names) + ".\n"
-        # Consider adding NPCs/Mobs here later too
+            output += "Also here: " + ", ".join(sorted(other_character_names)) + ".\n\r" # Sort names
 
-        return output
-    
+        # --- Items (Placeholder for later) ---
+        # TODO: List items on the ground here
+
+        return output.strip() # Remove any trailing newline before sending
     async def broadcast(self, message: str, exclude: Optional[Set[Any]] = None):
         """
         Sends a message to all characters in the room, optionally excluding some.

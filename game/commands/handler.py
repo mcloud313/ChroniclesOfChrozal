@@ -51,8 +51,15 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "u": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "up"),
     "down": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "down"),
     "d": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "down"),
-    "go": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, args.strip()), # Add 'go' using args as direction/exit name
-    # Add out, in, etc. if needed later
+    "northwest": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "northwest"),
+    "nw": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "northwest"),
+    "northeast": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "northeast"),
+    "ne": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "northeast"),
+    "southeast": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "southeast"),
+    "se": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "southeast"),
+    "southwest": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "southwest"),
+    "sw": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "southwest"),
+    "go": movement_cmds.cmd_go, # Map 'go' verb to cmd_go function # Add 'go' using args as direction/exit name
 
     "@teleport": admin_cmds.cmd_teleport,
     "@examine": admin_cmds.cmd_examine,
