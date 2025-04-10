@@ -226,6 +226,43 @@ async def init_db(conn: aiosqlite.Connection):
         except aiosqlite.Error as e:
             log.error("Failed to populate default classes: %s", e)
 
+        # --- V V V Populate Default Item Templates V V V ---
+        default_items = [
+            (1, "a rusty dagger", "A simple dagger, pitted with rust.", "WEAPON",
+            json.dumps({"wear_location": "WIELD_MAIN", "damage_base": 2, "damage_rng": 4, "speed": 1.5, "weight": 1, "value": 5}),
+            json.dumps([]), "pierce"),
+            (2, "a cloth shirt", "A basic shirt made of rough cloth.", "ARMOR",
+            json.dumps({"wear_location": "TORSO", "armor": 1, "weight": 1, "value": 10}),
+            json.dumps([]), None),
+            (3, "a small pouch", "A simple leather pouch. Doesn't hold much.", "GENERAL", # Changed type from CONTAINER for V1
+            json.dumps({"weight": 0, "value": 2}),
+            json.dumps([]), None),
+            (4, "heavy work boots", "Sturdy boots, scuffed from use.", "ARMOR",
+            json.dumps({"wear_location": "FEET", "armor": 1, "speed": 0.2, "weight": 3, "value": 20}),
+            json.dumps([]), None),
+            (5, "an iron ring", "A plain band of iron.", "ARMOR",
+            json.dumps({"wear_location": ["FINGER_L", "FINGER_R"], "armor": 0, "weight": 0, "value": 10}),
+            json.dumps([]), None),
+            (6, "a wooden shield", "A simple round shield made of wood.", "SHIELD", # Changed type
+            json.dumps({"wear_location": "WIELD_OFF", "armor": 2, "speed": 0.5, "weight": 5, "value": 30}),
+            json.dumps([]), None),
+            (7, "stale bread", "Looks barely edible.", "FOOD", # Changed type from CONSUMABLE
+            json.dumps({"weight": 0, "value": 1}), # Add consume effect later {effect: 'heal_hp', amount: 2} ?
+            json.dumps([]), None),
+        ]
+        try:
+            # Use INSERT OR IGNORE to avoid errors if items somehow already exist
+            await conn.executemany(
+                """INSERT OR IGNORE INTO item_templates
+                (id, name, description, type, stats, flags, damage_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                default_items
+            )
+            log.info("Checked/Populated default item templates.")
+        except aiosqlite.Error as e:
+            log.error("Failed to populate default item templates: %s", e)
+        # --- ^ ^ ^ End Populate Items ^ ^ ^ ---
+
         # --- Create Default Area and Room if they don't exist ---
         # Check for default area
         async with conn.execute("SELECT COUNT(*) FROM areas WHERE id = 1") as cursor:
