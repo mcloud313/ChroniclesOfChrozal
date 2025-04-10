@@ -113,12 +113,13 @@ async def init_db(conn: aiosqlite.Connection):
                 description TEXT DEFAULT 'You see nothing special.',
                 exits TEXT DEFAULT '{}', -- Storing exits as JSON text
                 flags TEXT DEFAULT '[]', -- JSON text for set of flags
+                spawners TEXT DEFAULT '{}', -- JSON like {"1": {"max_present": 3}} MobTemplateID: {details}
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (area_id) REFERENCES areas(id) ON DELETE RESTRICT -- Prevent deleting area if rooms exist
             )
         """
         )
-        log.info("Checked/Created 'rooms' table")
+        log.info("Checked/Created 'rooms' table with spawners!")
 
         # --- Create races table ---
         await conn.execute(
@@ -226,6 +227,28 @@ async def init_db(conn: aiosqlite.Connection):
         except aiosqlite.Error as e:
             log.error("Failed to populate default classes: %s", e)
 
+        # --- V V V NEW: Create mob_templates table V V V ---
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mob_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                description TEXT DEFAULT 'A creature.',
+                level INTEGER NOT NULL DEFAULT 1,
+                stats TEXT DEFAULT '{}', -- JSON: {might: 10, vit: 10, agi: 10...}
+                max_hp INTEGER NOT NULL DEFAULT 10,
+                attacks TEXT DEFAULT '[]', -- JSON: [{"name": "hit", "damage_base": 1, "damage_rng": 1, "speed": 2.0}]
+                loot TEXT DEFAULT '{}', -- JSON: {"coinage_max": 5, "items": [{"template_id": 7, "chance": 0.1}]}
+                flags TEXT DEFAULT '[]', -- JSON: ["AGGRESSIVE", "STATIONARY"]
+                respawn_delay_seconds INTEGER DEFAULT 300, -- Time to respawn after death
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                -- Add faction, behaviors etc. later
+            )
+            """
+        )
+        log.info("Checked/Created 'mob_templates' table.")
+        # --- ^ ^ ^ ---
+
         # --- V V V Populate Default Item Templates V V V ---
         default_items = [
             (1, "a rusty dagger", "A simple dagger, pitted with rust.", "WEAPON",
@@ -283,7 +306,7 @@ async def init_db(conn: aiosqlite.Connection):
             exits_room1 = json.dumps({"north": 2, "northwest": 3})
             await conn.execute(
                 """INSERT INTO rooms (id, area_id, name, description, exits, flags)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?)""",
                 (1, 1, "The Void", "A featureless void stretches around you. Something shimmers to the north. A faint path leads northwest.", exits_room1, json.dumps([]))
             )
             log.info("Default Room #1 created.")
@@ -294,10 +317,12 @@ async def init_db(conn: aiosqlite.Connection):
         if not room2_exists:
             log.info("Default Room #2 not found, creating it.")
             exits_room2 = json.dumps({"south": 1, "hole": 4})
+            # Add a spawner for mob template #1 (e.g., a rat), max 1 present
+            spawners_room2 = json.dumps({ "1": {"max_present": 1} }) # Spawn Mob Template 1
             await conn.execute(
                 """INSERT INTO rooms (id, area_id, name, description, exits, flags)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (2, 1, "A Dusty Trail", "A dusty trail stretches before you. The void lies south. There is a dark hole in the ground here.", exits_room2, json.dumps(["outdoors"])) # Added outdoors flag example
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (2, 1, "A Dusty Trail", "A dusty trail stretches before you. The void lies south. There is a dark hole in the ground here.", exits_room2, json.dumps(["outdoors"]), spawners_room2) 
             )
             log.info("Default Room #2 created with exit south.")
 
@@ -327,6 +352,25 @@ async def init_db(conn: aiosqlite.Connection):
                 (4, 1, "A Damp Cave", "Water drips steadily in this small, dark cave. The only way out seems to be climbing up the hole you fell through.", exits_room4, json.dumps(["indoors", "dark", "wet"]))
             )
             log.info("Default Room #4 created.")
+
+        default_mobs = [
+            (1, "a giant rat", "A rodent of unusual size, its eyes gleam.", 1,
+            json.dumps({"might": 5, "vitality": 5, "agility": 8}), 8, # stats, max_hp
+            json.dumps([{"name": "bite", "damage_base": 1, "damage_rng": 2, "speed": 2.5}]), # attacks
+            json.dumps({"coinage_max": 3, "items": [{"template_id": 7, "chance": 0.05}]}), # loot (bread)
+            json.dumps([]), 60), # flags (empty), respawn_delay
+            # Add more mobs: Goblin, Wolf etc.
+        ]
+        try:
+            await conn.executemany(
+                """INSERT OR IGNORE INTO mob_templates
+                (id, name, description, level, stats, max_hp, attacks, loot, flags, respawn_delay_seconds)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                default_mobs
+            )
+            log.info("Checked/Populated default mob templates.")
+        except aiosqlite.Error as e:
+            log.error("Failed to populate default mob templates: %s", e)
 
         await conn.commit()
         log.info("Database initialization check complete.")
@@ -542,6 +586,10 @@ async def load_all_item_templates(conn: aiosqlite.Connection) -> list[aiosqlite.
 async def load_item_template(conn: aiosqlite.Connection, template_id: int) -> aiosqlite.Row | None:
     """Fetches a specific item template by its ID."""
     return await fetch_one(conn, "SELECT * FROM item_templates WHERE id = ?", (template_id,))
+
+async def load_mob_template(conn: aiosqlite.Connection, template_id: int) -> aiosqlite.Row | None:
+    """Fetches a specific mob template by its ID."""
+    return await fetch_one(conn, "SELECT * FROM mob_templates WHERE id = ?", (template_id,))
 
 async def create_character(
     conn: aiosqlite.Connection,

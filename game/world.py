@@ -1,13 +1,14 @@
 """
 Manages the game world's loaded state, including rooms and areas.
 """
-
+import time
 import logging
 import aiosqlite
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
 from . import database
 from .room import Room
 from .character import Character # Assuming character class is defined
+from .mob import Mob
 
 log = logging.getLogger(__name__)
 
@@ -111,6 +112,25 @@ class World:
                             #Create room object
                             room = Room(db_data=row)
                             self.rooms[room.dbid] = room
+
+                            if room.spawners:
+                                for template_id_str, spawn_info in room.spawners.items():
+                                    try:
+                                        template_id = int(template_id_str)
+                                        max_present = spawn_info.get("max_present", 1)
+                                        # initial_spawn = spawn_info.get("initial_spawn", max_present) #Optional
+                                        mob_template = await database.load_mob_template(db_conn, template_id)
+                                        if mob_template:
+                                            mob_template_dict = dict(mob_template)
+                                            # Spawn initial mobs up to max_present
+                                            for _ in range(max_present):
+                                                mob_instance = Mob(mob_template_dict, room)
+                                                room.add_mob(mob_instance)
+                                                initial_mob_count += 1
+                                        else:
+                                            log.warning("Room %d spawner references non-existent mob template ID %d.", room.dbid, template_id)
+                                    except (ValueError, KeyError, TypeError) as spawn_e:
+                                        log.error("Room %d: Error processing spawner data '%s': %s", room.dbid, spawn_info, spawn_e)
                             count += 1
                         except Exception as e:
                             log.exception("Failed to instantiate Room object for dbid %d: %s", row['id'], e, exc_info=True)
@@ -196,3 +216,24 @@ class World:
             if char.roundtime > 0:
                 new_roundtime = char.roundtime - dt
                 char.roundtime = max(0.0, new_roundtime) # Decrease, clamp at 0
+
+    async def update_mob_ai(self, dt: float):
+        """Ticks AI for all mobs in all loaded rooms."""
+        # Use asyncio.gather for concurrency? Maybe not needed if AI is simple.
+        # Let's iterate sequentially for simplicity/predictability first.
+        # log.debug("World ticking mob AI...") # Can be very verbose
+        for room in list(self.rooms.values()): # Iterate copy
+            try:
+                await room.mob_ai_tick(dt)
+            except Exception:
+                log.exception("Error ticking AI in Room %d", room.dbid, exc_info=True)
+
+    async def update_respawns(self):
+        """Checks for and processes mob respawns in all loaded rooms."""
+        # log.debug("World checking mob respawns...") # Can be verbose
+        current_time = time.monotonic()
+        for room in list(self.rooms.values()):
+            try:
+                await room.check_respawn(current_time)
+            except Exception:
+                log.exception("Error checking respawns in Room %d", room.dbid, exc_info=True)

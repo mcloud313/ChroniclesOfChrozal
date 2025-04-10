@@ -3,15 +3,16 @@
 Defines the Room class.
 Represents a Room in the game world.
 """
+import time
 import json
 import logging
-from typing import Set, Dict, Any, Optional, List
+import asyncio
+from typing import Set, Dict, Any, Optional, List, TYPE_CHECKING
 
-# Since character class doesn't exist yet, we use a foward reference string
-# Or just use 'Any' for now if type hitning isn't strictly needed yet.
-# from typing import TYPE_CHECKING
-# if TYPE_CHECKING:
-#   from .character import Character # Assuming character.py will exist
+if TYPE_CHECKING:
+    from .character import Character
+    from .mob import Mob
+    import aiosqlite
 
 log = logging.getLogger(__name__)
 
@@ -47,11 +48,24 @@ class Room:
         except json.JSONDecodeError:
             log.warning(f"Room {self.dbid}: Could not decode flags JSON: {db_data['flags']}")
             self.flags: Set[str] = set()
+
+        # Load spawners for MOBs
+        try:
+            # Example: {"1": {"max_present": 3}} -> MobTemplateID: {details}
+            self.spawners: Dict[int, Dict[str, Any]] = json.loads(db_data['spawners'] or '{}')
+            # Convert keys from string (JSON standard) to int
+            self.spawners = {int(k): v for k, v in self.spawners.items()}
+        except (json.JSONDecodeError, TypeError, ValueError):
+            log.warning("Room %d: Could not decode spawners JSON: %r", self.dbid, db_data.get('spawners','{}'))
+            self.spawners: Dict[int, Dict[str, Any]] = {}
+
+
         
         # Runtime attributes
         # Using type 'Any' for now until Character is defined
         self.characters: Set[Any] = set() #Holds character objects currently in room
         self.items: List[int] = [] # Holds item_templates_ids of items on the ground
+        self.mobs: Set['Mob'] = set()
 
     def add_character(self, character: Any):
         """Adds a character object to the room"""
@@ -105,6 +119,16 @@ class Room:
         ]
         if other_character_names:
             output += "Also here: " + ", ".join(sorted(other_character_names)) + ".\n\r" # Sort names
+
+        living_mob_names = [
+            mob.name.capitalize() # Get capitalized name from Mob object
+            for mob in self.mobs
+            if mob.is_alive() # Only show living mobs
+        ]
+        if living_mob_names:
+            # Add before or after players? After seems common.
+            # Could group identical mobs later (e.g., "Three giant rats")
+            output += "Visible creatures: " + ", ".join(sorted(living_mob_names)) + ".\n\r"
 
         # Add Items on Ground
         if self.items:
@@ -170,3 +194,50 @@ class Room:
     
     def __repr__(self) -> str:
         return f"<Room {self.dbid}: '{self.name}'>"
+    
+    def add_mob(self, mob: 'Mob'):
+        """Adds a Mob instance to the room."""
+        self.mobs.add(mob)
+        mob.location = self # Ensure mob knows its location
+        log.debug("Mob %d (%s) added to Room %d", mob.instance_id, mob.name, self.dbid)
+
+    def remove_mob(self, mob: 'Mob'):
+        """Removes a Mob instance from the room."""
+        self.mobs.discard(mob)
+        log.debug("Mob %d (%s) removed from Room %d", mob.instance_id, mob.name, self.dbid)
+
+    # --- Add Respawn Check Method ---
+    async def check_respawn(self, current_time: float):
+        """Checks dead mobs in the room and respawns them if timer elapsed."""
+        # In V1, we just check mobs already in self.mobs that are dead
+        mobs_to_respawn = [mob for mob in self.mobs if not mob.is_alive()]
+
+        if not mobs_to_respawn:
+            return # No dead mobs to check
+
+        respawned_count = 0
+        for mob in mobs_to_respawn:
+            # Check if enough time has passed since death
+            if mob.time_of_death and (current_time - mob.time_of_death >= mob.respawn_delay):
+                mob.respawn() # Reset mob's state
+                # Announce respawn? Optional, can be noisy.
+                # await self.broadcast(f"\r\nA {mob.name} suddenly appears!\r\n") # Example broadcast
+                respawned_count += 1
+
+        if respawned_count > 0:
+            log.debug("Room %d: Respawned %d mobs.", self.dbid, respawned_count)
+
+    # --- Add Mob AI Tick Method ---
+    async def mob_ai_tick(self, dt: float):
+        """Calls the AI tick method for all living mobs in the room."""
+        living_mobs = [mob for mob in list(self.mobs) if mob.is_alive()] # Copy list
+        if not living_mobs:
+            return
+
+        tasks = [asyncio.create_task(mob.simple_ai_tick(dt)) for mob in living_mobs]
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    mob_name = getattr(living_mobs[i], 'name', '?')
+                    log.exception("Room %d: Exception in AI tick for mob '%s': %s", self.dbid, mob_name, result, exc_info=result)

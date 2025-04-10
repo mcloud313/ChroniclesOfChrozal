@@ -111,6 +111,8 @@ async def main():
 
             if world:
                 ticker.subscribe(world.update_roundtimes)
+                ticker.subscribe(world.update_mob_ai)
+                ticker.subscribe(world.update_respawns)
                 log.info("Subscribed world roundtime updates to ticker.")
 
             # --- Start Network Server ---
@@ -139,6 +141,8 @@ async def main():
             log.info("Stopping game ticker...")
             if world: # Unsubscribe if world exists
                 ticker.unsubscribe(world.update_roundtimes)
+                ticker.unsubscribe(world.update_mob_ai) # <<< ADDED
+                ticker.unsubscribe(world.update_respawns)
                 log.info("Unsubscribed world updates from ticker.")
             await ticker.stop_ticker()
             log.info("Game ticker stopped.")
