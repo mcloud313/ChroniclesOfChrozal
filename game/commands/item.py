@@ -339,12 +339,12 @@ async def cmd_examine(character: 'Character', world: 'World', db_conn: 'aiosqlit
     template_id = None
 
     # Search Order: Equipment -> Inventory -> Ground
-    found_in_eq = character.find_item_in_equipment_by_name(target_name)
+    found_in_eq = character.find_item_in_equipment_by_name(world, target_name)
     if found_in_eq:
         item_location = "equipment"
         template_id = found_in_eq[1]
     else:
-        found_in_inv = character.find_item_in_inventory_by_name(target_name)
+        found_in_inv = character.find_item_in_inventory_by_name(world, target_name)
         if found_in_inv:
             item_location = "inventory"
             template_id = found_in_inv

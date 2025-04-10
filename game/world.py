@@ -123,6 +123,7 @@ class World:
                                         if mob_template:
                                             mob_template_dict = dict(mob_template)
                                             # Spawn initial mobs up to max_present
+                                            initial_mob_count = 0
                                             for _ in range(max_present):
                                                 mob_instance = Mob(mob_template_dict, room)
                                                 room.add_mob(mob_instance)

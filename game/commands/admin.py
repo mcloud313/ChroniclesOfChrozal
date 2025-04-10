@@ -115,7 +115,46 @@ async def cmd_examine(character: 'Character', world: 'World', db_conn: 'aiosqlit
                     output += json.dumps(dict(area_data), indent=2)
                     found = True
         # Add race/class examination later if needed
+        elif obj_type == "mob":
+            if identifier.isdigit():
+                mob_instance_id = int(identifier) # Note: This is instance ID, not template ID
+                target_mob = None
+                # Search current room first (most common case)
+                if character.location:
+                    for mob in character.location.mobs:
+                        if mob.instance_id == mob_instance_id:
+                            target_mob = mob
+                            break
+                # TODO: Could add searching all world mobs later if needed
 
+                if target_mob:
+                    output += f"Found Mob Instance {mob_instance_id} in Room {getattr(target_mob.location, 'dbid', '?')}:\r\n"
+                    output += f" Name: {target_mob.name}\r\n"
+                    output += f" Template ID: {target_mob.template_id}\r\n"
+                    output += f" HP: {target_mob.hp}/{target_mob.max_hp}\r\n"
+                    output += f" Level: {target_mob.level}\r\n"
+                    output += f" Stats: {json.dumps(target_mob.stats)}\r\n"
+                    output += f" Flags: {list(target_mob.flags)}\r\n"
+                    output += f" Target: {getattr(target_mob.target, 'name', 'None')}\r\n"
+                    output += f" Fighting: {target_mob.is_fighting}\r\n"
+                    output += f" Roundtime: {target_mob.roundtime:.1f}\r\n"
+                    output += f" Dead Since: {target_mob.time_of_death}\r\n"
+                    found = True
+            else:
+                # TODO: Implement finding mob by name later?
+                await character.send("Use mob instance ID (a number) for @examine mob for now.")
+
+        elif obj_type == "item_template" or obj_type == "itemtemplate":
+            if identifier.isdigit():
+                template_id = int(identifier)
+                template_data = world.get_item_template(template_id) # Get from world cache
+                if template_data:
+                    output += f"Item Template ID: {template_id}\r\n"
+                    # Pretty print the raw row data
+                    output += json.dumps(dict(template_data), indent=2)
+                    found = True
+            else:
+                await character.send("Use item template ID (a number) for @examine item_template.")
     except Exception as e:
         log.exception("Error during @examine: %s", e)
         output += f"\r\nError processing examine: {e}"

@@ -154,6 +154,8 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     xp_pool = character.xp_pool # unspent banked XP
     xp_total = character.xp_total # xp earned this level
     xp_needed = utils.xp_to_next_level(level)
+    coinage = character.coinage # Get from character attribute
+    formatted_coinage = utils.format_coinage(coinage) # Use the util function
 
     # Attribute and Modifiers
     stats = character.stats # The dict like {'might': 15, ....}
@@ -170,6 +172,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     # Derived Stats
     might_val = stats.get("might", 10)
     max_carry_weight = might_val * 2
+    curr_w = character.get_current_weight(world)
 
     # Coinage (Deferred until Phase 3)
     # coinage = character.coinage # Need this attribute added later
@@ -182,6 +185,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     output += f" Race : {race_name:<28} Class: {class_name}\r\n"
     output += f" Level: {level:<31}\r\n"
     output += "=" * 40 + "\r\n"
+    output += f" HP   : {hp:>4}/{max_hp:<28} Carry: {curr_w:>2}/{max_carry_weight:<3} lbs\r\n"
     output += f" HP   : {hp:>4}/{max_hp:<28} Carry: ??/{max_carry_weight} lbs\r\n" # Add current weight later
     output += f" Essn : {essence:>4}/{max_essence:<31}\r\n"
     # Display XP Needed for *next* level, show current progress
@@ -191,8 +195,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     output += f"{attributes_display[0]} {attributes_display[1]}\r\n"
     output += f"{attributes_display[2]} {attributes_display[3]}\r\n"
     output += f"{attributes_display[4]} {attributes_display[5]}\r\n"
-    # Coinage display deferred
-    # output += f" Coin : {formatted_coinage}\r\n"
+    output += f" Coins: {formatted_coinage:<31}\r\n"
     output += "=" * 40 + "\r\n"
 
     await character.send(output)
