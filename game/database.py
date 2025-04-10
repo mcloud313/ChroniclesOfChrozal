@@ -321,7 +321,7 @@ async def init_db(conn: aiosqlite.Connection):
             spawners_room2 = json.dumps({ "1": {"max_present": 1} }) # Spawn Mob Template 1
             await conn.execute(
                 """INSERT INTO rooms (id, area_id, name, description, exits, flags)
-                VALUES (?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (2, 1, "A Dusty Trail", "A dusty trail stretches before you. The void lies south. There is a dark hole in the ground here.", exits_room2, json.dumps(["outdoors"]), spawners_room2) 
             )
             log.info("Default Room #2 created with exit south.")

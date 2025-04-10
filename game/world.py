@@ -228,7 +228,7 @@ class World:
             except Exception:
                 log.exception("Error ticking AI in Room %d", room.dbid, exc_info=True)
 
-    async def update_respawns(self):
+    async def update_respawns(self, dt: float):
         """Checks for and processes mob respawns in all loaded rooms."""
         # log.debug("World checking mob respawns...") # Can be verbose
         current_time = time.monotonic()
