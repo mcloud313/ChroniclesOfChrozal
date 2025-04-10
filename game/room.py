@@ -5,7 +5,7 @@ Represents a Room in the game world.
 """
 import json
 import logging
-from typing import Set, Dict, Any, Optional
+from typing import Set, Dict, Any, Optional, List
 
 # Since character class doesn't exist yet, we use a foward reference string
 # Or just use 'Any' for now if type hitning isn't strictly needed yet.
@@ -51,6 +51,7 @@ class Room:
         # Runtime attributes
         # Using type 'Any' for now until Character is defined
         self.characters: Set[Any] = set() #Holds character objects currently in room
+        self.items: List[int] = [] # Holds item_templates_ids of items on the ground
 
     def add_character(self, character: Any):
         """Adds a character object to the room"""
@@ -105,8 +106,19 @@ class Room:
         if other_character_names:
             output += "Also here: " + ", ".join(sorted(other_character_names)) + ".\n\r" # Sort names
 
-        # --- Items (Placeholder for later) ---
-        # TODO: List items on the ground here
+        # Add Items on Ground
+        if self.items:
+            # NEed world access to get names! Passworld to this method?
+            # For now, just show IDs as a placeholder. Will fix when integrating World.
+            # Alternative: The command calls this, then fetches names itself? Yes, better.
+            # Command 'look' will get this string, then separately get item names for IDs in room.items
+            output += "You also see:\n\r"
+            # Group identical items later? For now, just list IDs.
+            # We cannot get names here easily without passing 'world'.
+            # The 'look' command itself will handle displaying item names.
+            # output += ", ".join(f"Item#{item_id}" for item_id in self.items) + ".\n\r"
+            output += "Some items lie here.\n\r" # Placeholder text
+
 
         return output.strip() # Remove any trailing newline before sending
     async def broadcast(self, message: str, exclude: Optional[Set[Any]] = None):

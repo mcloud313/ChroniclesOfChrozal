@@ -14,6 +14,7 @@ import aiosqlite # Needed for db_conn type hint
 from . import general as general_cmds
 from . import movement as movement_cmds
 from . import admin as admin_cmds
+from . import item as item_cmds
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +61,22 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "southwest": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "southwest"),
     "sw": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "southwest"),
     "go": movement_cmds.cmd_go, # Map 'go' verb to cmd_go function # Add 'go' using args as direction/exit name
+
+    # --- V V V Add Item Commands V V V ---
+    "inventory": item_cmds.cmd_inventory,
+    "inv": item_cmds.cmd_inventory, # Alias
+    "i": item_cmds.cmd_inventory, # Alias
+    "wield": item_cmds.cmd_wield,
+    "wear": item_cmds.cmd_wear,
+    "remove": item_cmds.cmd_remove,
+    "rem": item_cmds.cmd_remove, # Alias
+    "get": item_cmds.cmd_get,
+    "g": item_cmds.cmd_get, # Alias
+    "take": item_cmds.cmd_get, # Alias
+    "drop": item_cmds.cmd_drop,
+    "examine": item_cmds.cmd_examine,
+    "exa": item_cmds.cmd_examine, # Alias
+    # --- ^ ^ ^ ---
 
     "@teleport": admin_cmds.cmd_teleport,
     "@examine": admin_cmds.cmd_examine,

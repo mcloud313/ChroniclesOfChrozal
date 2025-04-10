@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import aiosqlite
-from typing import TYPE_CHECKING, Optional, Dict, Any
+from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple
 from . import database
 from . import utils
 from .item import Item
@@ -86,7 +86,7 @@ class Character:
             if not isinstance(self.inventory, list): #Ensure it's a list
                 log.warning("Character %s inventory loaded non-list, resetting: %r", self.dbid, inv_str)
                 self.inventory = []
-        except (json.JSONDecodeError, Typeerror):
+        except (json.JSONDecodeError, TypeError):
             log.warning("Character %s: Could not decode inventory JSON: %r", self.dbid, db_data.get('inventory','[]'))
             self.inventory: List[int] = []
 
@@ -114,12 +114,12 @@ class Character:
         might = self.stats.get("might", 10) # Default 10 might if missing
         return might * 2
 
-    def get_current_weight(self) -> int:
+    def get_current_weight(self, world: 'World') -> int:
         """Calculates current weight carried from inventory and equipment."""
         current_weight = 0
         # Weight from inventory (loose items)
         for item_template_id in self.inventory:
-            template = self.world.get_item_template(item_template_id)
+            template = world.get_item_template(item_template_id)
             if template:
                 try:
                     # Need to parse stats JSON from the template Row
@@ -135,7 +135,7 @@ class Character:
 
         # Weight from equipment
         for item_template_id in self.equipment.values():
-            template = self.world.get_item_template(item_template_id)
+            template = world.get_item_template(item_template_id)
             if template:
                 try:
                     stats_dict = json.loads(template['stats'] or '{}')
@@ -149,6 +149,47 @@ class Character:
 
         # TODO: Add weight of coinage later if desired? Typically negligible.
         return current_weight
+
+    def find_item_in_inventory_by_name(self, world: 'World', item_name: str) -> Optional[int]:
+        """Finds the first template ID in inventory matching some (case-insensitive)"""
+        name_lower = item_name.lower()
+        for template_id in self.inventory:
+            template = world.get_item_template(template_id)
+            if template and template['name'].lower() == name_lower:
+                return template_id
+            
+    def find_item_in_equipment_by_name(self, world: 'World', item_name: str) -> Optional[Tuple[str, int]]:
+        """Finds the first equipped template ID matching name (case-insensitive)."""
+        name_lower = item_name.lower()
+        for slot, template_id in self.equipment.items():
+            template = world.get_item_template(template_id)
+            if template and template['name'].lower() == name_lower:
+                return slot, template_id # Return slot name and template ID
+        return None
+    
+    def find_item_anywhere_by_name(self, world: 'World', item_name: str) -> Optional[Tuple[str, int]]:
+        """Finds item by name in equipment then inventory. Returns (location, template_id)."""
+        # Check equipment first
+        equipped = self.find_item_in_equipment_by_name(world, item_name)
+        if equipped:
+            return equipped[0], equipped[1] # Return slot, template_id
+
+        # Check inventory next
+        inv_tid = self.find_item_in_inventory_by_name(world, item_name)
+        if inv_tid:
+            return "inventory", inv_tid # Return "inventory", template_id
+
+        return None
+    
+    def get_item_instance(self, world: 'World', template_id: int) -> Optional[Item]:
+        """Instantiates an Item object from a template ID."""
+        template_data = world.get_item_template(template_id)
+        if template_data:
+            try:
+                return Item(template_data)
+            except Exception:
+                log.exception("Failed to instantiate Item from template %d", template_id)
+        return None
 
     async def send(self, message: str):
         """
