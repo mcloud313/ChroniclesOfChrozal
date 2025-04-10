@@ -186,7 +186,6 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     output += f" Level: {level:<31}\r\n"
     output += "=" * 40 + "\r\n"
     output += f" HP   : {hp:>4}/{max_hp:<28} Carry: {curr_w:>2}/{max_carry_weight:<3} lbs\r\n"
-    output += f" HP   : {hp:>4}/{max_hp:<28} Carry: ??/{max_carry_weight} lbs\r\n" # Add current weight later
     output += f" Essn : {essence:>4}/{max_essence:<31}\r\n"
     # Display XP Needed for *next* level, show current progress
     output += f" XP   : {xp_total:>4}/{xp_needed:<28} Pool: {xp_pool}\r\n"

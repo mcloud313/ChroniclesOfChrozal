@@ -77,7 +77,7 @@ async def cmd_inventory(character: 'Character', world: 'World', db_conn: 'aiosql
 
         # Coinage & Weight
         max_w = character.get_max_weight()
-        curr_w = character.get_Current_weight(world) # pass world
+        curr_w = character.get_current_weight(world) # pass world
         formatted_coinage = utils.format_coinage(character.coinage)
         output += f" Coins: {formatted_coinage}\r\n"
         output += f" Weight: {curr_w}/{max_w} stones"
