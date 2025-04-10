@@ -419,7 +419,7 @@ class CreationHandler:
         last_name = self.creation_data.get('last_name', '')
 
         # --- Pronoun Setup ---
-        pronoun_subj, _, _, verb_is, verb_has = utils.get_pronouns(sex) # Get needed pronouns
+        pronoun_subj, _, pronoun_poss, verb_is, verb_has = utils.get_pronouns(sex) # Correct
 
         # --- Build Description Parts ---
         description_parts = []
@@ -443,7 +443,7 @@ class CreationHandler:
         shell_color = traits.get("Shell Color", "").lower()
         skin_sentence_parts = []
         if skin_tone:
-             skin_sentence_parts.append(f"{pronoun_poss} skin has {utils.get_article(skin_tone)} {skin_tone} tone")
+            skin_sentence_parts.append(f"{pronoun_poss} skin has {utils.get_article(skin_tone)} {skin_tone} tone")
         if skin_pattern:
             skin_sentence_parts.append(f"is marked by {skin_pattern} patterns") # Changed phrasing
         if shell_color:
@@ -453,9 +453,9 @@ class CreationHandler:
             # Combine skin parts grammatically
             skin_desc = skin_sentence_parts[0]
             if len(skin_sentence_parts) > 1:
-                 skin_desc += " and " + skin_sentence_parts[1]
+                skin_desc += " and " + skin_sentence_parts[1]
             if len(skin_sentence_parts) > 2: # Max 3 assumed for now
-                 skin_desc += " and " + skin_sentence_parts[2]
+                skin_desc += " and " + skin_sentence_parts[2]
             description_parts.append(f"{pronoun_subj}'s body {skin_desc}.") # Form sentence
 
         # --- Head / Hair / Beard ---
@@ -479,7 +479,7 @@ class CreationHandler:
 
         # Add beard info
         if beard_style and beard_style not in ["none", "clean-shaven"]:
-             head_sentence_parts.append(f"and {utils.get_article(beard_style)} {beard_style} beard")
+            head_sentence_parts.append(f"and {utils.get_article(beard_style)} {beard_style} beard")
         elif beard_style == "clean-shaven":
             head_sentence_parts.append("and a clean-shaven face")
 

@@ -12,7 +12,7 @@ class Player:
     """
     Manages player account data (username, email, password hash).
     """
-    def __init__(self, dbid: int, username: str, email: str, hashed_password: str):
+    def __init__(self, dbid: int, username: str, email: str, hashed_password: str, is_admin: bool = False):
         """
         Initializes a player account object, typically from database data.
 

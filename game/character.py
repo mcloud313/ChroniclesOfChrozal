@@ -11,11 +11,13 @@ import aiosqlite
 from typing import TYPE_CHECKING, Optional, Dict, Any
 from . import database
 from . import utils
+from .item import Item
 
 # Use TYPE_CHECKING block for Room to avoid circular import errors
 # This makes the type checker happy but doesn't cause runtime import issues.
 if TYPE_CHECKING:
     from .room import Room
+    from .world import World
 
 log = logging.getLogger(__name__)
 
@@ -75,14 +77,78 @@ class Character:
         self.location_id: int = db_data['location_id'] # Store DB location ID
         self.location: Optional['Room'] = None
 
+        self.coinage: int = db_data['coinage'] # Load coinage
+
+        # Load inventory (List of template IDs)
+        try:
+            inv_str = db_data['inventory'] or '[]'
+            self.inventory: List[int] = json.loads(inv_str)
+            if not isinstance(self.inventory, list): #Ensure it's a list
+                log.warning("Character %s inventory loaded non-list, resetting: %r", self.dbid, inv_str)
+                self.inventory = []
+        except (json.JSONDecodeError, Typeerror):
+            log.warning("Character %s: Could not decode inventory JSON: %r", self.dbid, db_data.get('inventory','[]'))
+            self.inventory: List[int] = []
+
+        # Load equipment (dict mapping slot name to template ID)
+        try:
+            eq_str = db_data['equipment'] or '{}'
+            self.equipment: Dict[str, int] = json.loads(eq_str)
+            if not isinstance(self.equipment, dict): # Ensure its a dict
+                log.warning("Character %s equipment loaded non-dict, resetting: %r", self.dbid, eq_str)
+                self.equipment = {}
+        except (json.JSONDecodeError, TypeError):
+            log.warning("Character %s: Could not decode equipment JSON: %r", self.dbid, db_data.get('equipment','{}'))
+            self.equipment: Dict[str, int] = {}
+
         # Roundtime attribute
         self.roundtime: float = 0.0 # Time until next action possible
 
         # Add basic derived name property
         self.name = f"{self.first_name} {self.last_name}"
         self.calculate_initial_derived_attributes()
-
         log.debug("Character object initialized for %s (ID: %s)", self.name, self.dbid)
+
+    def get_max_weight(self) -> int:
+        """Calculates maximum carrying weight based on Might."""
+        might = self.stats.get("might", 10) # Default 10 might if missing
+        return might * 2
+
+    def get_current_weight(self) -> int:
+        """Calculates current weight carried from inventory and equipment."""
+        current_weight = 0
+        # Weight from inventory (loose items)
+        for item_template_id in self.inventory:
+            template = self.world.get_item_template(item_template_id)
+            if template:
+                try:
+                    # Need to parse stats JSON from the template Row
+                    stats_dict = json.loads(template['stats'] or '{}')
+                    current_weight += stats_dict.get("weight", 1) # Add item weight
+                except (json.JSONDecodeError, TypeError):
+                    log.warning("Could not parse stats for inventory item template %d for weight calc.", item_template_id)
+                    current_weight += 1 # Assume default weight 1 on error
+            else:
+                log.warning("Could not find item template %d in inventory for weight calc.", item_template_id)
+                # Decide: count as 0 weight, default 1, or raise error? Default 1 seems safest.
+                current_weight += 1
+
+        # Weight from equipment
+        for item_template_id in self.equipment.values():
+            template = self.world.get_item_template(item_template_id)
+            if template:
+                try:
+                    stats_dict = json.loads(template['stats'] or '{}')
+                    current_weight += stats_dict.get("weight", 1)
+                except (json.JSONDecodeError, TypeError):
+                    log.warning("Could not parse stats for equipment item template %d for weight calc.", item_template_id)
+                    current_weight += 1
+            else:
+                log.warning("Could not find item template %d in equipment for weight calc.", item_template_id)
+                current_weight += 1
+
+        # TODO: Add weight of coinage later if desired? Typically negligible.
+        return current_weight
 
     async def send(self, message: str):
         """
@@ -124,12 +190,7 @@ class Character:
             log.exception("Unexpected error sending to character %s", self.name, exc_info=True)
 
     async def save(self, db_conn: aiosqlite.Connection):
-        """
-        Gathers essential character data and saves it to the database.
-
-        Args:
-            db_conn: An active aiosqlite connection.
-        """
+        """Gathers essential character data and saves it to the database."""
         # Define V1 data to save
         data_to_save = {
             "location_id": self.location_id,
@@ -137,8 +198,13 @@ class Character:
             "essence": self.essence,
             "xp_pool": self.xp_pool,
             "xp_total": self.xp_total,
-            # Add stats/skills later if they need frequent saving
-            # Add inventory/equipment/coinage when implemented
+            "stats": json.dumps(self.stats), # Save current stats
+            "skills": json.dumps(self.skills), # Save current skills
+            "inventory": json.dumps(self.inventory), # Save list of template IDs
+            "equipment": json.dumps(self.equipment), # Save dict of {slot: template_id}
+            "coinage": self.coinage,
+            # Max HP/Essence are usually recalculated, not saved directly unless modified by effects
+            # Level, Description, Sex, Race, Class usually saved only when changed significantly
         }
 
         # Only proceed if there's actually data to save

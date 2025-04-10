@@ -4,7 +4,7 @@ Manages the game world's loaded state, including rooms and areas.
 
 import logging
 import aiosqlite
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, TYPE_CHECKING
 from . import database
 from .room import Room
 from .character import Character # Assuming character class is defined
@@ -22,7 +22,8 @@ class World:
         self.rooms: Dict[int, Room] = {}
         self.races: Dict[int, aiosqlite.Row] = {}
         self.classes: Dict[int, aiosqlite.Row] = {}
-        self.active_characters: Dict[int, Character] = {} # Add this {character_dbid: Character_object}
+        self.active_characters: Dict[int, Character] = {} # Add this {character_dbid: Character_object
+        self.item_templates: Dict[int, aiosqlite.Row] = {}
         # Add containers for active players/mobs later if needed
         log.info("World object initialized.")
 
@@ -38,6 +39,18 @@ class World:
         """
         log.info("Building world state from database...")
         load_success = True
+
+        try:
+            item_rows = await database.load_all_item_templates(db_conn)
+            if item_rows is None:
+                log.error("Failed to load item templates from database.")
+                load_success = False
+            else:
+                self.item_templates = {row['id']: row for row in item_rows}
+                log.info("Loaded %d item templates.", len(self.item_templates))
+        except Exception as e:
+            log.exception("Exception loading item templates: %s", e, exc_info=True)
+            load_success = False
 
         # 1. Load Areas
         try:
@@ -107,8 +120,10 @@ class World:
                 log.exception("Exception loading rooms: %s", e, exc_info=True)
                 load_success = False
                 
+        # Update final log message
         if load_success:
-            log.info("World build complete. %d Areas, %d Rooms loaded.", len(self.areas), len(self.rooms))
+            log.info("World build complete. %d Areas, %d Races, %d Classes, %d Item Templates, %d Rooms loaded.",
+                    len(self.areas), len(self.races), len(self.classes), len(self.item_templates), len(self.rooms))
         else:
             log.error("World build failed. Check previous errors.")
 
@@ -134,6 +149,10 @@ class World:
         if class_id is None: return "Unknown"
         class_data = self.classes.get(class_id)
         return class_data['name'] if class_data else "Unknown"
+
+    def get_item_template(self, template_id: int) -> Optional[aiosqlite.Row]:
+        """Safely retrieves Item Template data by its ID."""
+        return self.item_templates.get(template_id)
 
     def add_active_character(self, character: Character):
         """Adds a character to the active list."""

@@ -360,6 +360,7 @@ class ConnectionHandler:
             # Instantiate the Character object
             self.active_character = Character(
                 writer=self.writer,
+                #world=self.world,
                 db_data=char_data,
                 player_is_admin=self.player_account.is_admin)
             log.info("Character '%s' loaded for player %s (%s). Admin: %s",
@@ -486,7 +487,12 @@ class ConnectionHandler:
                         log.info("Creation successful (new char ID: %s). Loading character...", new_character_id)
                         char_data = await database.load_character_data(self.db_conn, new_character_id)
                         if char_data:
-                            self.active_character = Character(writer=self.writer, db_data=char_data)
+                            self.active_character = Character(
+                            writer=self.writer, 
+                            #world=self.world,
+                            db_data=char_data,
+                            player_is_admin=self.player_account.is_admin
+                            )
                             log.info("Newly created character '%s' loaded.", self.active_character.name)
                             await self._handle_post_load() # Place in world, transitions state to PLAYING
                         else:

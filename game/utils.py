@@ -142,3 +142,27 @@ def get_article(word: str) -> str:
         return "a" # Default if empty string passed
     # Simple check for common vowel sounds (lowercase)
     return "an" if word.lower()[0] in 'aeiou' else "a"
+
+def format_coinage(total_talons: int) -> str:
+    """Formats total lowest denomination into Crowns, Orbs, Shards, Talons"""
+    if total_talons < 0: return "Invalid Amount"
+    if total_talons == 0: return "0t"
+
+    talons_per_shard = 10
+    shards_per_orb = 10
+    orbs_per_crown = 10
+
+    talons = total_talons % talons_per_shard
+    total_shards = total_talons // talons_per_shard
+    shards = total_shards % shards_per_orb
+    total_orbs = total_shards // shards_per_orb
+    orbs = total_orbs % orbs_per_crown
+    crowns = total_orbs // orbs_per_crown
+
+    parts = []
+    if crowns > 0: parts.append(f"{crowns}c")
+    if orbs > 0: parts.append(f"{orbs}o")
+    if shards > 0: parts.append(f"{shards}s")
+    if talons > 0: parts.append(f"{talons}t")
+
+    return " ".join(parts) if parts else "0t"

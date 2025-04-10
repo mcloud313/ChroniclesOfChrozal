@@ -146,6 +146,22 @@ async def init_db(conn: aiosqlite.Connection):
         )
         log.info("Checked/Created 'classes' table.")
 
+        # --- Create items tamplate
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS item_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT DEFAULT 'An ordinary item.',
+            type TEXT NOT NULL, -- WEAPON, ARMOR, CONTAINER, CONSUMABLE, GENERAL, TREASURE, KEY, etc.
+            stats TEXT DEFAULT '{}', -- JSON: {wear_location: str|list, damage_base: int, damage_rng: int, armor: int, speed: float, weight: int, value: int}
+            flags TEXT DEFAULT '[]', -- JSON List: ["MAGICAL", "NODROP", "ROOM-OBJECT"]
+            damage_type TEXT, -- slash, pierce, bludgeon, fire, cold, etc. NULLable
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
         # --- Create characters table ---
         await conn.execute(
             """
@@ -168,6 +184,9 @@ async def init_db(conn: aiosqlite.Connection):
             stats TEXT DEFAULT '{}', -- JSON: {"might": 10, "agility": 10, ...}
             skills TEXT DEFAULT '{}', -- JSON: {"climb": 0, "appraise": 0, ...}
             location_id INTEGER DEFAULT 1, -- Default starting room ID
+            inventory TEXT NOT NULL DEFAULT '[]', -- JSON List of item_template_ids
+            equipment TEXT NOT NULL DEFAULT '{}',     -- JSON Dict {slot: item_template_id}
+            coinage INTEGER NOT NULL DEFAULT 0,   -- Total lowest denomination (Talons)
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_saved TIMESTAMP,
             UNIQUE (player_id, first_name, last_name), -- Character names unique per player account
@@ -478,6 +497,14 @@ async def load_all_races(conn: aiosqlite.Connection) -> list[aiosqlite.Row] | No
 async def load_all_classes(conn: aiosqlite.Connection) -> list[aiosqlite.Row] | None:
     """Fetches all available classes."""
     return await fetch_all(conn, "SELECT id, name, description FROM classes ORDER BY id")
+
+async def load_all_item_templates(conn: aiosqlite.Connection) -> list[aiosqlite.Row] | None:
+    """Fetches all rows from the item_templates table."""
+    return await fetch_all(conn, "SELECT * FROM item_templates ORDER BY id")
+
+async def load_item_template(conn: aiosqlite.Connection, template_id: int) -> aiosqlite.Row | None:
+    """Fetches a specific item template by its ID."""
+    return await fetch_one(conn, "SELECT * FROM item_templates WHERE id = ?", (template_id,))
 
 async def create_character(
     conn: aiosqlite.Connection,
