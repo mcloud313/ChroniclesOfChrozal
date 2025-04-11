@@ -141,9 +141,20 @@ async def award_xp(attacker: 'Character', defeated_mob: 'Mob'):
     xp_gain = defeated_mob.level * base_xp + random.randint(-base_xp//2, base_xp//2)
     xp_gain = max(1, xp_gain) # Ensure at least 1 XP
 
-    attacker.xp_pool += xp_gain
-    log.info("%s gains %d XP pool from defeating %s.", attacker.name, xp_gain, defeated_mob.name)
-    await attacker.send(f"You gain {xp_gain} experience points.")
+    intellect = attacker.stats.get("intellect", 10) # Default 10 int
+    xp_pool_cap = intellect * 100
+    current_pool = attacker.xp_pool
+
+    space_available = max(0, xp_pool_cap - current_pool)
+    actual_xp_added = min(xp_gain, space_available)
+    xp_lost = xp_gain - actual_xp_added
+
+    if actual_xp_added > 0:
+        attacker.xp_pool += actual_xp_added
+        await attacker.send(f"You gain {actual_xp_added} experience points into your pool.")
+    else:
+        await attacker.send("Your mind cannot hold any more raw experience right now.")
+        return
     # TODO: Distribute XP among party members later
 
 # --- Main Combat Resolution ---

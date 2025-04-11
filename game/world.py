@@ -250,3 +250,36 @@ class World:
         # Use configured rate per second, adjust by delta time
         absorb_rate = getattr(config, 'XP_ABSORB_RATE_PER_SEC', 10)
         xp_to_process_this_tick = absorb_rate * dt
+
+        chars_in_nodes = [
+            char for char in self.get_active_characters_list()
+            if char.location and "NODE" in char.location.flags and char.xp_pool > 0
+        ]
+
+        if not chars_in_nodes:
+            return
+
+        # log.debug("Processing XP absorption for %d characters.", len(chars_in_nodes)) # Optiona verbose log
+        for char in chars_in_nodes:
+            absorb_amount = min(char.xp_pool, xp_to_process_this_tick)
+            # Ensure we don't absorb tiny fractions if dt is small? Or allow float? Allow float for now.
+            absorb_amount = round(absorb_amount, 3) # Round to avoid tiny floats if needed
+
+            if absorb_amount > 0:
+                char.xp_pool -= absorb_amount
+                char.xp_total += absorb_amount
+                
+                # Simple message when pool becomes empty
+                if char.xp_pool <= 0:
+                    char.xp_pool = 0 #Ensures it doesn't go negative
+                    try:
+                        await char.send("You feel you have asborbed all you can for now.")
+                    except Exception: pass
+                
+                # Check for level up eligibility
+                needed_for_next = utils.xp_needed_for_level(char.level + 1)
+                if char.xp_total >= needed_for_next and char.level < config.MAX_LEVEL:
+                    # Optional: Send prompt only once per eligibility? Need another flag?
+                    # Let's defer the actual prompt/check to the ADVANCE command (Task 2)
+                    # or maybe the score command can show "(Ready to Advance!)"
+                    pass

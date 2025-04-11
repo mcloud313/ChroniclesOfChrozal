@@ -113,6 +113,7 @@ async def main():
                 ticker.subscribe(world.update_roundtimes)
                 ticker.subscribe(world.update_mob_ai)
                 ticker.subscribe(world.update_respawns)
+                ticker.subscribe(world.update_xp_absorption)
                 log.info("Subscribed world roundtime updates to ticker.")
 
             # --- Start Network Server ---
@@ -143,6 +144,7 @@ async def main():
                 ticker.unsubscribe(world.update_roundtimes)
                 ticker.unsubscribe(world.update_mob_ai) # <<< ADDED
                 ticker.unsubscribe(world.update_respawns)
+                ticker.unsubscribe(world.update_xp_absorption)
                 log.info("Unsubscribed world updates from ticker.")
             await ticker.stop_ticker()
             log.info("Game ticker stopped.")
