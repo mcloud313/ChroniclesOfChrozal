@@ -31,6 +31,8 @@ def get_item_template_from_world(world: 'World', template_id: int) -> Optional[d
 # --- Commands ---
 async def cmd_inventory(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Displays character inventory, equipment, weight, coinage."""
+    
+    log.debug("--- Starting cmd_inventory for %s ---", character.name)
     output = "\r\n" + "=" * 20 + " Inventory " + "=" * 20 + "\r\n"
 
     # Equipment
@@ -50,11 +52,14 @@ async def cmd_inventory(character: 'Character', world: 'World', db_conn: 'aiosql
         output += "Nothing.\r\n"
     else:
         output += "\r\n".join(equipped_items) + "\r\n"
+    
+    log.debug("cmd_inventory: Finished Equipment section.")
 
     output += "-\r\n" #Separator
 
     #Inventory (Loose items)
     output += "You are carrying:\r\n"
+    
     if not character.inventory:
         output += " Nothing.\r\n"
     else:
@@ -72,21 +77,27 @@ async def cmd_inventory(character: 'Character', world: 'World', db_conn: 'aiosql
                 display_name += f" (x{count})"
             item_names.append(display_name)
         output += ", ".join(item_names) + ".\r\n"
+        
+    log.debug("cmd_inventory: Finished Inventory section.")
 
-        output += "-\r\n" # Separator
+    output += "-\r\n" # Separator
 
-        # Coinage & Weight
-        max_w = character.get_max_weight()
-        curr_w = character.get_current_weight(world) # pass world
-        formatted_coinage = utils.format_coinage(character.coinage)
-        output += f" Coins: {formatted_coinage}\r\n"
-        output += f" Weight: {curr_w}/{max_w} stones"
-        # Add encumbrance status later?
+    # Coinage & Weight
+    max_w = character.get_max_weight()
+    log.debug("cmd_inventory: Calling get_current_weight...")
+    curr_w = character.get_current_weight(world)
+    log.debug("cmd_inventory: Got current weight: %s", curr_w)
+    formatted_coinage = utils.format_coinage(character.coinage)
+    log.debug("cmd_inventory: Got formatted coinage: %s", formatted_coinage)
+    output += f" Coins: {formatted_coinage}\r\n"
+    output += f" Weight: {curr_w}/{max_w} stones"
+    # Add encumbrance status later?
 
-        output += "=" * (40 + 11) + "r\n"
-
-        await character.send(output)
-        return True
+    output += "=" * (40 + 11) + "r\n"
+    log.debug("cmd_inventory: Attempting to send output...")
+    await character.send(output)
+    log.debug("cmd_inventory: Finished sending output.")
+    return True
     
 async def cmd_get(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Gets an item from the room."""
@@ -160,7 +171,7 @@ async def cmd_drop(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
     
     target_name = args_str.strip().lower()
     # Find the item template ID in inventory
-    template_id_to_drop = character.find_item_in_inventory_by_name(target_name)
+    template_id_to_drop = character.find_item_in_inventory_by_name(world, target_name)
 
     if template_id_to_drop is None:
         await character.send("You aren't carrying that.")
@@ -189,14 +200,14 @@ async def cmd_wear(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
         return True
     
     target_name = args_str.strip().lower()
-    template_id = character.find_item_in_inventory_by_name(target_name)
+    template_id = character.find_item_in_inventory_by_name(world, target_name)
 
     if template_id is None:
         await character.send("You aren't carrying that.")
         return True
     
     # Get item details
-    item = character.get_item_instance(template_id)
+    item = character.get_item_instance(world, template_id)
     if not item or item.item_type not in ["ARMOR", "CLOTHING", "SHIELD"]: # Add other wearables
         await character.send("You can't wear that.")
         return True
@@ -243,13 +254,12 @@ async def cmd_wield(character: 'Character', world: 'World', db_conn: 'aiosqlite.
         return True
     
     target_name = args_str.strip().lower()
-    template_id = character.find_item_in_inventory_by_name(target_name)
-
+    template_id = character.find_item_in_inventory_by_name(world, target_name)
     if template_id is None:
         await character.send("You aren't carrying that.")
         return True
     
-    item = character.get_item_instance(template_id)
+    item = character.get_item_instance(world, template_id)
     if not item or item.item_type != "WEAPON": # Simple check for now.
         await character.send("You can't wield that.")
         return True
@@ -297,7 +307,7 @@ async def cmd_remove(character: 'Character', world: 'World', db_conn: 'aiosqlite
     target_slot = args_str.strip().upper().replace(" ","_") # Convert "wield main" to WIELD_MAIN
 
     # Check if it's a valid slot being used
-    template_id = character.equipment.get(target_slot)
+    template_id = character.equipment.get(world, target_slot)
     if template_id is None:
         # Maybe they typed item name? Try finding by name in equipment
         found = character.find_item_in_equipment_by_name(args_str)
@@ -308,7 +318,7 @@ async def cmd_remove(character: 'Character', world: 'World', db_conn: 'aiosqlite
             return True
         
     # Get item details to check weight before moving to inventory
-    item = character.get_item_instance(template_id)
+    item = character.get_item_instance(world, template_id)
     item_weight = getattr(item, 'weight', 1) if item else 1
 
     # Check weight capacity
@@ -362,7 +372,7 @@ async def cmd_examine(character: 'Character', world: 'World', db_conn: 'aiosqlit
         return True
 
     # Get item instance
-    item = character.get_item_instance(template_id)
+    item = character.get_item_instance(world, template_id)
     if not item:
         await character.send("You look closer, but cannot make out the details.")
         return True

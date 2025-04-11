@@ -214,16 +214,26 @@ class Room:
 
         if not mobs_to_respawn:
             return # No dead mobs to check
+        log.debug("Room %d: Checking %d dead mobs for respawn.", self.dbid, len(mobs_to_respawn))
 
         respawned_count = 0
         for mob in mobs_to_respawn:
-            # Check if enough time has passed since death
-            if mob.time_of_death and (current_time - mob.time_of_death >= mob.respawn_delay):
-                mob.respawn() # Reset mob's state
+            log.debug("RESPAWN CHECK: Mob %d (%s) time_of_death is: %s",
+                mob.instance_id, mob.name, mob.time_of_death)
+            
+            if mob.time_of_death: # Ensure time_of_death is set
+                time_since_death = current_time - mob.time_of_death
+                respawn_ready = time_since_death >= mob.respawn_delay
+                log.debug("Mob %d (%s): Dead for %.1f sec. Needs %d sec. Ready: %s",
+                    mob.instance_id, mob.name, time_since_death, mob.respawn_delay, respawn_ready)
+                if respawn_ready:
+                    mob.respawn() # Reset mob's state
+                    respawned_count += 1
                 # Announce respawn? Optional, can be noisy.
-                # await self.broadcast(f"\r\nA {mob.name} suddenly appears!\r\n") # Example broadcast
-                respawned_count += 1
-
+                    await self.broadcast(f"\r\nA {mob.name} suddenly appears!\r\n") # Example broadcast
+                
+            else:
+                log.warning("Mob %d (%s) is dead but has no time_of_death set!", mob.instance_id, mob.name)
         if respawned_count > 0:
             log.debug("Room %d: Respawned %d mobs.", self.dbid, respawned_count)
 

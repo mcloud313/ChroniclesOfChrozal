@@ -7,7 +7,7 @@ import random
 import json
 import logging
 from . import utils
-from . import combat
+# from . import combat
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Set
 
 if TYPE_CHECKING:
@@ -52,9 +52,9 @@ class Mob:
     @property
     def dpr(self) -> int: return utils.calculate_modifier(self.stats.get("aura", 10)) + (utils.calculate_modifier(self.stats.get("persona", 10)) // 2)
     @property
-    def pds(self) -> int: return self.vit_mod * 2
+    def pds(self) -> int: return self.vit_mod
     @property
-    def sds(self) -> int: return utils.calculate_modifier(self.stats.get("aura", 10)) * 2
+    def sds(self) -> int: return utils.calculate_modifier(self.stats.get("aura", 10))
     @property
     def dv(self) -> int: return self.agi_mod * 2
 
@@ -127,10 +127,7 @@ class Mob:
 
     def die(self):
         """Handles mob death."""
-        if not self.is_alive(): return # Already dead
-
-        log.info("%s (Instance: %d) has died in Room %d.",
-                self.name.capitalize(), self.instance_id, self.location.dbid)
+        log.info("MOB DEATH: %s (Instance: %d) entering die() method.", self.name.capitalize(), self.instance_id) # Add entry log
         self.hp = 0
         self.target = None
         self.is_fighting = False
@@ -142,8 +139,8 @@ class Mob:
         """Resets mob state for respawning."""
         if self.is_alive(): return # Cannot respawn if alive
 
-        log.info("%s (Instance: %d) respawns in Room %d.",
-            self.name.capitalize(), self.instance_id, self.location.dbid)
+        log.info("RESPAWN: %s (Instance: %d) respawns in Room %d.",
+            self.name.capitalize(), self.instance_id, getattr(self.location,'dbid','?'))
         self.hp = self.max_hp
         self.target = None
         self.is_fighting = False
@@ -152,6 +149,7 @@ class Mob:
 
     async def simple_ai_tick(self, dt: float, world: 'World'): # <<< Add world param
         """Basic AI logic called by the ticker via Room/World."""
+        from . import combat # Moved import to prevent circular error
         if not self.is_alive(): return
 
         self.tick_roundtime(dt) # Decay roundtime first

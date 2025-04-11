@@ -68,7 +68,7 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
                 # Add item template ID to the room's item list
                 target.location.items.append(item_id)
                 # Try to get name for message
-                template = target.world.get_item_template(item_id) # Mob needs world ref? Pass it in. Or Room needs world ref. Pass world to handle_defeat.
+                template = world.get_item_template(item_id) # Mob needs world ref? Pass it in. Or Room needs world ref. Pass world to handle_defeat.
                 item_names.append(template['name'] if template else f"Item #{item_id}")
             log.info("%s dropped items: %s", target.name.capitalize(), item_names)
             # Announce item drops to room (excluding attacker for now?)
@@ -208,7 +208,11 @@ async def resolve_physical_attack(
         else:
             # Character unarmed attack
             attk_name = "punch"
-            wpn_speed = 2.0; wpn_base_dmg = 1; wpn_rng_dmg = 1; dmg_type = "bludgeon"
+            wpn_speed = 2.0
+            wpn_base_dmg = math.floor(attacker.might_mod /2)
+            wpn_base_dmg = max(0, wpn_base_dmg)
+            wpn_rng_dmg = 3
+            dmg_type = "bludgeon"
             # weapon variable remains None
 
     else: # Should not happen
@@ -263,7 +267,13 @@ async def resolve_physical_attack(
         else:
             total_random_damage = random.randint(1, wpn_rng_dmg)
 
-    pre_mitigation_damage = max(0, wpn_base_dmg + total_random_damage + stat_modifier)
+    # Apply full Might modifier ONLY if using a weapon or mob attack (for now)
+    # For unarmed, the base damage already incorporates half the modifier.
+    stat_modifier_to_add = 0
+    if weapon is not None or isinstance(attacker, Mob):
+        stat_modifier_to_add = attacker.might_mod
+    pre_mitigation_damage = wpn_base_dmg + total_random_damage + stat_modifier_to_add
+    pre_mitigation_damage = max(0, pre_mitigation_damage)
 
     # 7. Mitigation (remains the same, uses target_pds, target_av=0)
     defense_score = target_pds

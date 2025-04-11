@@ -356,7 +356,7 @@ async def init_db(conn: aiosqlite.Connection):
         default_mobs = [
             (1, "a giant rat", "A rodent of unusual size, its eyes gleam.", 1,
             json.dumps({"might": 5, "vitality": 5, "agility": 8}), 8, # stats, max_hp
-            json.dumps([{"name": "bite", "damage_base": 1, "damage_rng": 2, "speed": 2.5}]), # attacks
+            json.dumps([{"name": "bite", "damage_base": 2, "damage_rng": 3, "speed": 2.5}]), # attacks
             json.dumps({"coinage_max": 3, "items": [{"template_id": 7, "chance": 0.05}]}), # loot (bread)
             json.dumps([]), 60), # flags (empty), respawn_delay
             # Add more mobs: Goblin, Wolf etc.

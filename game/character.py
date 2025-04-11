@@ -66,11 +66,11 @@ class Character:
     @property
     def pds(self) -> int: # Physical Defense Score
         # Vitality Modifier * 2
-        return self.vit_mod * 2
+        return self.vit_mod
     @property
     def sds(self) -> int: # Spiritual Defense Score
         # Aura Modifier * 2
-        return self.aura_mod * 2
+        return self.aura_mod
     @property
     def dv(self) -> int: # Dodge Value
         # Agility Modifier * 2
@@ -206,7 +206,7 @@ class Character:
         name_lower = item_name.lower()
         for template_id in self.inventory:
             template = world.get_item_template(template_id)
-            if template and template['name'].lower() == name_lower:
+            if template and name_lower in template['name'].lower():
                 return template_id
 
     def find_item_in_equipment_by_name(self, world: 'World', item_name: str) -> Optional[Tuple[str, int]]:
@@ -214,7 +214,7 @@ class Character:
         name_lower = item_name.lower()
         for slot, template_id in self.equipment.items():
             template = world.get_item_template(template_id)
-            if template and template['name'].lower() == name_lower:
+            if template and name_lower in template['name'].lower():
                 return slot, template_id # Return slot name and template ID
         return None
 
