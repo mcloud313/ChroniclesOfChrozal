@@ -277,7 +277,7 @@ async def resolve_physical_attack(
     # 9. Send Messages (uses local vars now)
     hit_desc = "hit"
     crit_indicator = ""
-    if is crit:
+    if is_crit:
         hit_desc = "CRITICAlly HIT"
         crit_indicator = " CRITICAL!"
     attacker_pronoun_subj, _, attacker_pronoun_poss, _, _ = utils.get_pronouns(getattr(attacker, 'sex', None))

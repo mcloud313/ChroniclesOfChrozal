@@ -7,6 +7,7 @@ import random
 import json
 import logging
 from . import utils
+from . import combat
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Set
 
 if TYPE_CHECKING:

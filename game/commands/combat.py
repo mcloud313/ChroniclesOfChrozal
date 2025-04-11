@@ -8,13 +8,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..character import Character
     from ..world import World
-    
     import aiosqlite
 
 # Import combat logic handler
 from .. import combat as combat_logic
 #Import Item class if needed for weapon check
 from ..item import Item
+from ..mob import Mob
+from ..character import Character
 
 
 log = logging.getLogger(__name__)
@@ -92,6 +93,6 @@ async def cmd_attack(character: 'Character', world: 'World', db_conn: 'aiosqlite
             weapon = None # Can't attack with non-weapon
     
     # Resolve the attack
-    await combat_logic.resolve_physical_attack(character, target, weapon)
+    await combat_logic.resolve_physical_attack(character, target, weapon, world)
 
     return True # Keep connction active
