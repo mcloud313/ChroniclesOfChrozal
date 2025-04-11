@@ -10,6 +10,7 @@ from . import database
 from .room import Room
 from .character import Character # Assuming character class is defined
 from .mob import Mob
+from . import utils
 
 log = logging.getLogger(__name__)
 
@@ -268,6 +269,8 @@ class World:
             if absorb_amount > 0:
                 char.xp_pool -= absorb_amount
                 char.xp_total += absorb_amount
+                log.debug("Character %s absorbed %.2f XP (Pool: %.2f, Total: %.2f)",
+                    char.name, absorb_amount, char.xp_pool, char.xp_total)
                 
                 # Simple message when pool becomes empty
                 if char.xp_pool <= 0:

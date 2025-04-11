@@ -90,7 +90,7 @@ def calculate_modifier(stat_value: int) -> int:
         return -5 # Or some other default for very low stats
     return math.floor(stat_value / 5)
 
-def xp_to_next_level(level: int) -> int:
+def xp_needed_for_level(current_level: int) -> int:
     """
     Calculates the total XP required to reach the *next* level.
     Using simple linear formula for V1.
@@ -102,23 +102,26 @@ def xp_to_next_level(level: int) -> int:
         The total XP needed to attain level (level + 1).
         Returns a very large number for max level to prevent overflow issues.
     """
-    if level <= 1:
-        return 0 # XP for level 1
-    if level > config.MAX_LEVEL + 1:
-        return float('inf') # Effectively impossible threshold
+    max_level = getattr(config, 'MAX_LEVEL', 100)
+    if current_level >= max_level:
+        return float('inf') # Cannot advance further
 
-    # Formula: Base * (L-1)^Exp
+    target_level = current_level + 1
+    if target_level <= 1: # Should not happen if current_level starts at 1
+        return 0 # Level 1 requires 0 XP
+
+    base = getattr(config, 'XP_BASE', 1000)
+    exponent = getattr(config, 'XP_EXPONENT', 2.5)
+
     try:
-        # Use config values, provide defaults if not found
-        base = getattr(config, 'XP_BASE', 1000)
-        exponent = getattr(config, 'XP_EXPONENT', 2.5)
-        required = math.floor(base * ((level - 1) ** exponent))
+        # Calculate threshold needed TO REACH target_level
+        required = math.floor(base * ((target_level - 1) ** exponent))
         return required
     except OverflowError:
-        log.error("XP calculation overflow for level %d", level)
-        return float('inf') # Return infinity on overflow
-    except Exception: # Catch other math errors perhaps
-        log.exception("Error calculating XP for level %d", level, exc_info=True)
+        log.error("XP calculation overflow for target level %d", target_level)
+        return float('inf')
+    except Exception:
+        log.exception("Error calculating XP for target level %d", target_level, exc_info=True)
         return float('inf')
 
 def get_pronouns(sex: Optional[str]) -> tuple[str, str, str, str, str]:

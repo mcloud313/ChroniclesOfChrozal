@@ -153,7 +153,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     max_essence = character.max_essence
     xp_pool = character.xp_pool # unspent banked XP
     xp_total = character.xp_total # xp earned this level
-    xp_needed = utils.xp_to_next_level(level)
+    xp_needed = utils.xp_needed_for_level(level)
     coinage = character.coinage # Get from character attribute
     formatted_coinage = utils.format_coinage(coinage) # Use the util function
 
@@ -188,7 +188,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     output += f" HP   : {hp:>4}/{max_hp:<28} Carry: {curr_w:>2}/{max_carry_weight:<3} lbs\r\n"
     output += f" Essn : {essence:>4}/{max_essence:<31}\r\n"
     # Display XP Needed for *next* level, show current progress
-    output += f" XP   : {xp_total:>4}/{xp_needed:<28} Pool: {xp_pool}\r\n"
+    output += f" XP   : {int(xp_total):>4}/{xp_needed:<28} Pool: {int(xp_pool)}\r\n"
     output += " --- Attributes ---                 \r\n" # Adjusted spacing
     # Display 3 attributes per line
     output += f"{attributes_display[0]} {attributes_display[1]}\r\n"
