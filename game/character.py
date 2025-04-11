@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import aiosqlite
-from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple
+from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple, Union
 from . import database
 from . import utils
 from .item import Item
@@ -28,6 +28,54 @@ class Character:
     # hint network connection type
     writer: asyncio.StreamWriter
 
+    @property
+    def might_mod(self) -> int: return utils.calculate_modifier(self.stats.get("might", 10))
+
+    @property
+    def vit_mod(self) -> int: return utils.calculate_modifier(self.stats.get("vitality", 10))
+
+    @property
+    def agi_mod(self) -> int: return utils.calculate_modifier(self.stats.get("agility", 10))
+
+    @property
+    def int_mod(self) -> int: return utils.calculate_modifier(self.stats.get("intelligence", 10))
+
+    @property
+    def aura_mod(self) -> int: return utils.calculate_modifier(self.stats.get("aura", 10))
+
+    @property
+    def pers_mod(self) -> int: return utils.calculate_modifier(self.stats.get("persona", 10))
+
+    # Derived Combat Stats
+    @property
+    def mar(self) -> int: # Melee Attack Rating
+        # Might Modifier + 1/2 of Agility Modifier (floor division)
+        return self.might_mod + (self.agi_mod // 2)
+    @property
+    def rar(self) -> int: # Ranged Attack Rating
+        # Agility Modifier + 1/2 of Might Modifier
+        return self.agi_mod + (self.might_mod // 2)
+    @property
+    def apr(self) -> int: # Arcane Power Rating
+        # Intellect Modifier + 1/2 Aura Modifier
+        return self.int_mod + (self.aura_mod // 2)
+    @property
+    def dpr(self) -> int: # Divine Power Rating
+        # Aura Modifier + 1/2 Persona Modifier
+        return self.aura_mod + (self.pers_mod // 2)
+    @property
+    def pds(self) -> int: # Physical Defense Score
+        # Vitality Modifier * 2
+        return self.vit_mod * 2
+    @property
+    def sds(self) -> int: # Spiritual Defense Score
+        # Aura Modifier * 2
+        return self.aura_mod * 2
+    @property
+    def dv(self) -> int: # Dodge Value
+        # Agility Modifier * 2
+        return self.agi_mod * 2
+
     def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any], player_is_admin: bool = False):
         """
         Initializes a Character object from database data and network writer.
@@ -41,7 +89,7 @@ class Character:
 
         # --- Data loaded from DB ---
         self.writer: asyncio.StreamWriter = writer
-        self.is_admin: bool = player_is_admin  
+        self.is_admin: bool = player_is_admin
         self.dbid: int = db_data['id']
         self.player_id: int = db_data['player_id'] # Link to Player account
         self.first_name: str = db_data['first_name']
@@ -57,6 +105,9 @@ class Character:
         self.xp_pool: int = db_data['xp_pool'] # Unabsorbed XP
         self.xp_total: int = db_data['xp_total'] # Current level progress
         self.description: str = db_data['description']
+        self.status: str = 'ALIVE' # Possible values: ALIVE, DYING, DEAD
+        self.target: Optional[Union['Character', 'Mob']] = None # Who are we fighting? Needs Mob import below
+        self.is_fighting: bool = False # Add fighting flag
 
         # Load stats (JSON string -> dict)
         try:
@@ -157,7 +208,7 @@ class Character:
             template = world.get_item_template(template_id)
             if template and template['name'].lower() == name_lower:
                 return template_id
-            
+
     def find_item_in_equipment_by_name(self, world: 'World', item_name: str) -> Optional[Tuple[str, int]]:
         """Finds the first equipped template ID matching name (case-insensitive)."""
         name_lower = item_name.lower()
@@ -166,7 +217,7 @@ class Character:
             if template and template['name'].lower() == name_lower:
                 return slot, template_id # Return slot name and template ID
         return None
-    
+
     def find_item_anywhere_by_name(self, world: 'World', item_name: str) -> Optional[Tuple[str, int]]:
         """Finds item by name in equipment then inventory. Returns (location, template_id)."""
         # Check equipment first
@@ -180,7 +231,7 @@ class Character:
             return "inventory", inv_tid # Return "inventory", template_id
 
         return None
-    
+
     def get_item_instance(self, world: 'World', template_id: int) -> Optional[Item]:
         """Instantiates an Item object from a template ID."""
         template_data = world.get_item_template(template_id)
@@ -203,7 +254,7 @@ class Character:
             log.warning("Attempted to send to closed writer for character %s", self.name)
             # TODO: Handle cleanup / mark character for removal?
             return
-        
+
         # Ensure message ends with standard MUD newline (\r\n) for telnet clients
         if not message.endswith('\r\n'):
             if message.endswith('\n'):
@@ -294,7 +345,7 @@ class Character:
             self.location_id = new_location.dbid # Keep db id in sync
         log.debug("Character %s location updated from room %s to room %s",
                 self.name, old_loc_id, new_loc_id)
-    
+
     def calculate_initial_derived_attributes(self):
         """
         Calculates Max HP/Essence based on current stats and sets current HP/Essence.
@@ -329,6 +380,27 @@ class Character:
 
         log.debug("Character %s: Derived attributes calculated: MaxHP=%d, MaxEssence=%d",
                 self.name, self.max_hp, self.max_essence)
+
+    def is_alive(self) -> bool: # Add helper consistent with Mob
+        return self.hp > 0 and self.status != "DEAD" # DYING counts as alive for some checks
+
+    # # def get_total_armor_value(self) -> int:
+    # #     """Calculates total armor value from worn equipment."""
+    # #     total_av = 0
+    # #     if not hasattr(self, 'world'): return 0 # Safety check if world ref removed
+
+    #     for template_id in self.equipment.values():
+    #         template = self.world.get_item_template(template_id) # Needs world access! Refactor needed?
+    #          # *** NOTE: This get_total_armor_value method WILL require passing world if self.world removed ***
+    #          # *** OR Cache item instances in self.equipment instead of IDs ***
+    #          # *** For now, ASSUME self.world exists for simplicity of this step ***
+    #          # *** We will need to address this dependency ***
+    #         if template:
+    #             try:
+    #                 stats_dict = json.loads(template['stats'] or '{}')
+    #                 total_av += stats_dict.get("armor", 0)
+    #             except (json.JSONDecodeError, TypeError): pass # Ignore bad item stats
+    #     return total_av
 
     def __repr__(self) -> str:
             return f"<Character {self.dbid}: '{self.first_name} {self.last_name}'>"

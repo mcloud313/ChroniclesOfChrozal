@@ -225,7 +225,7 @@ class World:
         # log.debug("World ticking mob AI...") # Can be very verbose
         for room in list(self.rooms.values()): # Iterate copy
             try:
-                await room.mob_ai_tick(dt)
+                await room.mob_ai_tick(dt, self)
             except Exception:
                 log.exception("Error ticking AI in Room %d", room.dbid, exc_info=True)
 

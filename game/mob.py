@@ -6,6 +6,7 @@ import time
 import random
 import json
 import logging
+from . import utils
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Set
 
 if TYPE_CHECKING:
@@ -24,6 +25,38 @@ class Mob:
     # This ensures mobs that look the same are distinct entities
     next_instance_id = 1
 
+    @property
+    def might_mod(self) -> int: return utils.calculate_modifier(self.stats.get("might", 10))
+    # ... Add properties for vit_mod, agi_mod, int_mod, aura_mod, pers_mod ...
+    @property
+    def vit_mod(self) -> int: return utils.calculate_modifier(self.stats.get("vitality", 10))
+    @property
+    def agi_mod(self) -> int: return utils.calculate_modifier(self.stats.get("agility", 10))
+    @property
+    def int_mod(self) -> int: return utils.calculate_modifier(self.stats.get("intelligence", 10))
+
+    @property
+    def aura_mod(self) -> int: return utils.calculate_modifier(self.stats.get("aura", 10))
+
+    @property
+    def pers_mod(self) -> int: return utils.calculate_modifier(self.stats.get("persona", 10))
+
+    # Derived Combat Stats (using same formulas)
+    @property
+    def mar(self) -> int: return self.might_mod + (self.agi_mod // 2)
+    @property
+    def rar(self) -> int: return self.agi_mod + (self.might_mod // 2)
+    @property
+    def apr(self) -> int: return utils.calculate_modifier(self.stats.get("intellect", 10)) + (utils.calculate_modifier(self.stats.get("aura", 10)) // 2) # Calculate directly if mods not needed often
+    @property
+    def dpr(self) -> int: return utils.calculate_modifier(self.stats.get("aura", 10)) + (utils.calculate_modifier(self.stats.get("persona", 10)) // 2)
+    @property
+    def pds(self) -> int: return self.vit_mod * 2
+    @property
+    def sds(self) -> int: return utils.calculate_modifier(self.stats.get("aura", 10)) * 2
+    @property
+    def dv(self) -> int: return self.agi_mod * 2
+
     def __init__(self, template_data: Dict[str, Any], current_room: 'Room'):
         """
         Initializes a Mob instance from template data.
@@ -40,6 +73,8 @@ class Mob:
         self.description: str = template_data['description']
         self.level: int = template_data['level']
         self.max_hp: int = template_data['max_hp']
+        self.target: Optional['Character'] = None
+        self.is_fighting: bool = False
         # TODO: Apply variance to HP/stats later? For V1, use template directly.
         self.hp: int = self.max_hp
 
@@ -114,50 +149,50 @@ class Mob:
         self.roundtime = 0.0
         self.time_of_death = None
 
-    async def simple_ai_tick(self, dt: float):
+    async def simple_ai_tick(self, dt: float, world: 'World'): # <<< Add world param
         """Basic AI logic called by the ticker via Room/World."""
-        if not self.is_alive():
-            return # Dead mobs don't act
+        if not self.is_alive(): return
 
-        # Tick roundtime first
-        self.tick_roundtime(dt)
-        if self.roundtime > 0:
-            return # Still busy
+        self.tick_roundtime(dt) # Decay roundtime first
+        if self.roundtime > 0: return # Still busy
 
-        # Basic Retaliation / Action Logic
+        # --- Basic Retaliation / Action Logic ---
         if self.is_fighting and self.target:
+            # Check if target is still valid
             if not self.target.is_alive() or self.target.location != self.location:
-                # Target died or left room
                 log.debug("%s's target %s is gone. Stopping combat.", self.name, getattr(self.target,'name','?'))
                 self.target = None
                 self.is_fighting = False
+                return # Stop acting this tick
+
+            # If ready, attempt an attack (basic version)
+            attack_data = self.choose_attack()
+            if attack_data:
+                attk_name = attack_data.get("name", "attack")
+                # Call the main combat resolution function
+                log.debug("%s uses %s against %s!", self.name.capitalize(), attk_name, self.target.name)
+                # We need the combat module imported here
+                # We pass the attack_data dict instead of a weapon Item
+                await combat.resolve_physical_attack(self, self.target, attack_data, world) # Pass world
+                # Roundtime applied inside resolve_physical_attack now
             else:
-                # Attack target if ready
-                attack = self.choose_attack()
-                if attack:
-                    # We need the combat system here! Placeholder log.
-                    log.debug("%s attacks %s with %s!", self.name, self.target.name, attack.get('name','attack'))
-                    # Apply roundtime based on attack speed
-                    self.roundtime = attack.get('speed', 2.0)
-                    # In actual combat system: await combat_handler.resolve_attack(self, self.target, attack)
-                else:
-                    log.warning("%s is fighting but has no attacks defined!", self.name)
-                    # Apply a default cooldown?
-                    self.roundtime = 2.0
+                log.warning("%s is fighting but has no attacks defined!", self.name)
+                self.roundtime = 2.0 # Default cooldown if no attacks
 
         elif self.has_flag("AGGRESSIVE") and not self.is_fighting:
             # Find a player character in the room to attack
             potential_targets = [
-                char for char in self.location.characters if char.is_alive() # Check if character is alive
+                char for char in self.location.characters if char.is_alive()
             ]
             if potential_targets:
                 self.target = random.choice(potential_targets)
                 self.is_fighting = True
                 log.info("%s becomes aggressive towards %s!", self.name.capitalize(), self.target.name)
-                # Potentially start attack immediately or wait for next tick
-                # Let's attack immediately if roundtime is 0
+                # Optionally announce aggression to room?
+                # await self.location.broadcast(f"\r\n{self.name.capitalize()} growls and turns towards {self.target.name}!\r\n")
+                # Try to attack immediately if possible
                 if self.roundtime == 0.0:
-                    await self.simple_ai_tick(0.0) # Re-call AI tick to perform attack
+                    await self.simple_ai_tick(0.0, world) # Re-call with world
 
 
         # TODO: Add movement logic later if not STATIONARY

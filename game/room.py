@@ -228,13 +228,12 @@ class Room:
             log.debug("Room %d: Respawned %d mobs.", self.dbid, respawned_count)
 
     # --- Add Mob AI Tick Method ---
-    async def mob_ai_tick(self, dt: float):
+    async def mob_ai_tick(self, dt: float, world: 'World'):
         """Calls the AI tick method for all living mobs in the room."""
         living_mobs = [mob for mob in list(self.mobs) if mob.is_alive()] # Copy list
-        if not living_mobs:
-            return
+        if not living_mobs: return
 
-        tasks = [asyncio.create_task(mob.simple_ai_tick(dt)) for mob in living_mobs]
+        tasks = [asyncio.create_task(mob.simple_ai_tick(dt, world)) for mob in living_mobs]
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for i, result in enumerate(results):

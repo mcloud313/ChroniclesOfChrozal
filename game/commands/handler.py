@@ -15,6 +15,7 @@ from . import general as general_cmds
 from . import movement as movement_cmds
 from . import admin as admin_cmds
 from . import item as item_cmds
+from . import combat as combat_cmds
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +39,9 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "help": general_cmds.cmd_help,
     "score": general_cmds.cmd_score,
     "stats": general_cmds.cmd_score, # Alias
+    "attack": combat_cmds.cmd_attack,
+    "a": combat_cmds.cmd_attack, # Alias
+    "kill": combat_cmds.cmd_attack, # Alias
 
     # Movement Commands (Pass direction directly to the handler)
     "north": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "north"),
