@@ -252,7 +252,6 @@ class Character:
         """
         if not self.writer or self.writer.is_closing():
             log.warning("Attempted to send to closed writer for character %s", self.name)
-            # TODO: Handle cleanup / mark character for removal?
             return
 
         # Ensure message ends with standard MUD newline (\r\n) for telnet clients
@@ -277,7 +276,6 @@ class Character:
                 await self.writer.wait_closed()
             except Exception:
                 pass # Ignore errors during close
-            # TODO: Trigger player cleanup logic here (remove from room, save, etc.)
         except Exception as e:
             log.exception("Unexpected error sending to character %s", self.name, exc_info=True)
 

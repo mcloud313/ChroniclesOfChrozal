@@ -4,6 +4,7 @@ Manages the game world's loaded state, including rooms and areas.
 import time
 import logging
 import aiosqlite
+import config
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
 from . import database
 from .room import Room
@@ -238,3 +239,14 @@ class World:
                 await room.check_respawn(current_time)
             except Exception:
                 log.exception("Error checking respawns in Room %d", room.dbid, exc_info=True)
+
+    async def update_xp_absorption(self, dt: float):
+        """
+        Called by the game ticker to process XP pool absorption for character in nodes.
+
+        Args:
+            dt: Delta time (Seconds) since the last tick.
+        """
+        # Use configured rate per second, adjust by delta time
+        absorb_rate = getattr(config, 'XP_ABSORB_RATE_PER_SEC', 10)
+        xp_to_process_this_tick = absorb_rate * dt

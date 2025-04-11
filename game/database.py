@@ -227,7 +227,7 @@ async def init_db(conn: aiosqlite.Connection):
         except aiosqlite.Error as e:
             log.error("Failed to populate default classes: %s", e)
 
-        # --- V V V NEW: Create mob_templates table V V V ---
+        # --- Create mob_templates table ---
         await conn.execute(
             """
             CREATE TABLE IF NOT EXISTS mob_templates (
@@ -304,6 +304,7 @@ async def init_db(conn: aiosqlite.Connection):
         if not room_exists:
             log.info("Default room #1 not found, creating it.")
             exits_room1 = json.dumps({"north": 2, "northwest": 3})
+            flags_room1 = json.dumps(["NODE"]) # Mark as a node
             await conn.execute(
                 """INSERT INTO rooms (id, area_id, name, description, exits, flags)
                 VALUES (?, ?, ?, ?, ?, ?)""",

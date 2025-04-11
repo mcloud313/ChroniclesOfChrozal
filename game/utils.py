@@ -6,6 +6,7 @@ import random
 import hashlib
 import logging
 import math
+import config
 from typing import Optional
 
 # You might want other utilities here later (e.g. logging setup, decorators)
@@ -101,22 +102,24 @@ def xp_to_next_level(level: int) -> int:
         The total XP needed to attain level (level + 1).
         Returns a very large number for max level to prevent overflow issues.
     """
-    if level < 1:
-        return 1000 # XP for level 1
-    # TODO: Define MAX_LEVEL in config later
-    max_level = 100 # Example max level
-    if level >= max_level:
-        return float('inf') # Or sys.maxsize
+    if level <= 1:
+        return 0 # XP for level 1
+    if level > config.MAX_LEVEL + 1:
+        return float('inf') # Effectively impossible threshold
 
-    # Linear formula: 1->1000, 2->2000, etc. total XP needed *for that level*
-    # Often XP tables represent TOTAL XP accumulated. Let's assume this function
-    # returns the amount needed to *gain* the next level.
-    # Example: Level 1 needs 1000 XP (to reach L2). Level 2 needs 2000 more XP (to reach L3).
-    # Simpler: Total XP needed for level L = L * 1000
-    # Amount needed to GAIN next level (L+1) = (L+1)*1000 - L*1000 = 1000? No, that's flat.
-    # Let's use XP required for *current* level L = L * 1000. Player needs xp_total >= L*1000 to advance.
-    required = level * 1000
-    return required
+    # Formula: Base * (L-1)^Exp
+    try:
+        # Use config values, provide defaults if not found
+        base = getattr(config, 'XP_BASE', 1000)
+        exponent = getattr(config, 'XP_EXPONENT', 2.5)
+        required = math.floor(base * ((level - 1) ** exponent))
+        return required
+    except OverflowError:
+        log.error("XP calculation overflow for level %d", level)
+        return float('inf') # Return infinity on overflow
+    except Exception: # Catch other math errors perhaps
+        log.exception("Error calculating XP for level %d", level, exc_info=True)
+        return float('inf')
 
 def get_pronouns(sex: Optional[str]) -> tuple[str, str, str, str, str]:
     """
