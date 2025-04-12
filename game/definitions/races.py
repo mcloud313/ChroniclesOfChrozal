@@ -9,17 +9,17 @@ from typing import Dict
 RACIAL_STAT_MODIFIERS: Dict[str, Dict[str, int]] = {
     "chrozalin": {}, # Standard human - no adjustments
     "dwarf": {
-        "vitality": 10,    # +5 Vitality (+1 Modifier)
-        "persona": -5,    # -5 Persona (-1 Modifier)
-        "agility": -5,    # -5 Agility (-1 Modifier) - Optional example
+        "vitality": 4,    # +5 Vitality (+1 Modifier)
+        "persona": -2,    # -5 Persona (-1 Modifier)
+        "agility": -2,    # -5 Agility (-1 Modifier) - Optional example
     },
     "elf": {
-        "intellect": 5,     # +5 Agility (+1 Modifier)
-        "vitality": -5,   # -5 Vitality (-1 Modifier)
+        "intellect": 2,     # +5 Agility (+1 Modifier)
+        "vitality": -2,   # -5 Vitality (-1 Modifier)
     },
     "yan-tar": {          
-        "aura": 5,   # +5 Intellect (+1 Modifier)
-        "agility": -5,    # -5 Agility (-1 Modifier)
+        "aura": 2,   # +5 Intellect (+1 Modifier)
+        "agility": -2,    # -5 Agility (-1 Modifier)
     },
     # Add other races later
 }

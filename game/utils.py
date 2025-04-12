@@ -55,28 +55,26 @@ def verify_password(stored_hash: str, provided_password: str) -> bool:
     # Compare the hash of the provided password with the stored hash
     return stored_hash == hash_password(provided_password)
 
+def _roll_3d6() -> int:
+    """Rolls 3 six-sided dice and returns the sum."""
+    return sum(random.randint(1, 6) for _ in range(4))
+
+
 def generate_stat() -> int:
     """
-    Generates a single stat (10-35) weighted towards lower/mid values,
-    with increasing rarity for high values.
-    Based on user-defined probability bands.
+    Generates a single stat (10-35) using a scaled 3d6 roll.
+    This creates a bell curve distribution centered in the low 20s,
+    making high stats (30+) genuinely rare.
     """
-    roll = random.random() # 0.0 <= roll < 1.0
+    roll = _roll_3d6() # Result between 3 and 18
 
-    if roll < 0.30:  # 30% chance
-        return random.randint(10, 14) # Range: 10-14
-    elif roll < 0.55: # 25% chance (0.55 - 0.30)
-        return random.randint(15, 19) # Range: 15-19
-    elif roll < 0.75: # 20% chance (0.75 - 0.55)
-        return random.randint(20, 24) # Range: 20-24
-    elif roll < 0.90: # 15% chance (0.90 - 0.75)
-        return random.randint(25, 29) # Range: 25-29
-    elif roll < 0.97: # 7% chance (0.97 - 0.90)
-        return random.randint(30, 33) # Range: 30-33
-    elif roll < 0.99: # 2% chance (0.99 - 0.97)
-        return 34                 # Value: 34 (randint(34,34))
-    else:             # 1% chance (1.00 - 0.99)
-        return 35                 # Value: 35
+    # Scale the 3-18 result to the 10-35 range
+    # Formula: NewBase + floor((OldValue - OldBase) * ScaleFactor)
+    # ScaleFactor = (NewRange / OldRange) = (35-10) / (18-3) = 25 / 15 = 5 / 3
+    scaled_value = 10 + math.floor((roll - 3) * (5.0 / 3.0))
+
+    # Clamp result just in case of floating point nuances (shouldn't be needed)
+    return max(10, min(35, scaled_value))
 
 def generate_stat_set() -> list[int]:
     """Generates a set of 6 stats."""
@@ -90,7 +88,7 @@ def calculate_modifier(stat_value: int) -> int:
     """
     if stat_value < 1: # Handle potential invalid stats
         return -5 # Or some other default for very low stats
-    return math.floor(stat_value / 5)
+    return math.floor(stat_value / 3)
 
 def xp_needed_for_level(current_level: int) -> int:
     """

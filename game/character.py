@@ -190,7 +190,7 @@ class Character:
     def get_max_weight(self) -> int:
         """Calculates maximum carrying weight based on Might."""
         might = self.stats.get("might", 10) # Default 10 might if missing
-        return might * 3
+        return might * 10
 
     def get_current_weight(self, world: 'World') -> int:
         """Calculates current weight carried from inventory and equipment."""
