@@ -16,6 +16,7 @@ from . import movement as movement_cmds
 from . import admin as admin_cmds
 from . import item as item_cmds
 from . import combat as combat_cmds
+from . import skill as skill_cmds
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "help": general_cmds.cmd_help,
     "score": general_cmds.cmd_score,
     "stats": general_cmds.cmd_score, # Alias
+    "skills": general_cmds.cmd_skills,
     "attack": combat_cmds.cmd_attack,
     "a": combat_cmds.cmd_attack, # Alias
     "kill": combat_cmds.cmd_attack, # Alias
@@ -82,6 +84,11 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "drop": item_cmds.cmd_drop,
     "examine": item_cmds.cmd_examine,
     "exa": item_cmds.cmd_examine, # Alias
+    # --- ^ ^ ^ ---
+
+    # --- V V V Add Skill Spending Command V V V ---
+    "spend": skill_cmds.cmd_spend,
+    "invest": skill_cmds.cmd_spend, # Alias
     # --- ^ ^ ^ ---
 
     "@teleport": admin_cmds.cmd_teleport,

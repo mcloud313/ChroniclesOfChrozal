@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple, Union
 from . import database
 from . import utils
 from .item import Item
+from .definitions import skills as skill_defs
+
 
 # Use TYPE_CHECKING block for Room to avoid circular import errors
 # This makes the type checker happy but doesn't cause runtime import issues.
@@ -464,6 +466,30 @@ class Character:
     #                 total_av += stats_dict.get("armor", 0)
     #             except (json.JSONDecodeError, TypeError): pass # Ignore bad item stats
     #     return total_av
+
+    def get_skill_rank(self, skill_name: str) -> int:
+        """Gets the character's rank in a specific skill"""
+        return self.skills.get(skill_name.lower(), 0) # Return 0 if skill unknown
+
+    def get_skill_modifier(self, skill_name: str) -> int:
+        """
+        Calculates the total modifier for a skill check.
+        (skill rank + attribute modifier)
+        """
+        skill_name_lower = skill_name.lower()
+        rank = self.get_skill_rank(skill_name_lower)
+
+        # Find the governing attribute
+        attr_name = skill_defs.get_attribute_for_skill(skill_name_lower)
+        if not attr_name:
+            log.warning("No attribute mapping found for skill '%s'", skill_name_lower)
+            return rank # return just the rank if no attribute defined.
+        
+        # Get the attribute value and calculate its modifier
+        attr_value = self.stats.get(attr_name, 10) # Default 10 if stat missing
+        attr_mod = utils.calculate_modifier(attr_value)
+
+        return rank + attr_mod
 
     def __repr__(self) -> str:
             return f"<Character {self.dbid}: '{self.first_name} {self.last_name}'>"

@@ -493,6 +493,16 @@ class ConnectionHandler:
                             db_data=char_data,
                             player_is_admin=self.player_account.is_admin
                             )
+                            for skill_name in skill_defs.INITIAL_SKILLS:
+                                if skill_name not in self.active_character.skills:
+                                    self.active_character.skills[skill_name] = 0
+                            # Calculate initial skill points: 5 + Int Modifier
+                            int_mod = self.active_character.int_mod # Use the property
+                            initial_sp = 5 + int_mod
+                            self.active_character.unspent_skill_points = initial_sp
+                            log.info("Awarded %d initial skill points to %s.",
+                            initial_sp, self.active_character.name)
+                            await self.active_character.send(f"You gain {initial_sp} skill points to begin your journey!")
                             log.info("Newly created character '%s' loaded.", self.active_character.name)
                             await self._handle_post_load() # Place in world, transitions state to PLAYING
                         else:

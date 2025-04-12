@@ -172,7 +172,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
 
     # Derived Stats
     might_val = stats.get("might", 10)
-    max_carry_weight = might_val * 2
+    max_carry_weight = might_val * 3
     curr_w = character.get_current_weight(world)
 
     # Coinage (Deferred until Phase 3)
@@ -181,7 +181,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
 
     # --- Format Output ---
     # Using f-strings with padding for alignment
-    output = "\r\n" + "=" * 40 + "\r\n"
+    output = "\r\n" + "=" * 50 + "\r\n"
     output += f" Name : {char_name:<28} Sex: {char_sex}\r\n"
     output += f" Race : {race_name:<28} Class: {class_name}\r\n"
     output += f" Level: {level:<31}\r\n"
@@ -195,6 +195,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     output += f"{attributes_display[0]} {attributes_display[1]}\r\n"
     output += f"{attributes_display[2]} {attributes_display[3]}\r\n"
     output += f"{attributes_display[4]} {attributes_display[5]}\r\n"
+    output += f" Skill Pts: {character.unspent_skill_points:<25} Attrib Pts: {character.unspent_attribute_points}\r\n"
     output += f" Coins: {formatted_coinage:<31}\r\n"
     output += "=" * 40 + "\r\n"
 
@@ -269,3 +270,32 @@ async def cmd_advance(character: 'Character', world: 'World', db_conn:'aiosqlite
 
     return True # Keep connection active
 
+async def cmd_skills(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Displays the character's known skills and ranks."""
+
+    output = "\r\n" + "=" * 20 + " Skills " + "=" * 20 + "\r\n"
+    output += f" Unspent Skill Points: {character.unspent_skill_points}\r\n"
+    output += "-" * (40 + 8) + "\r\n"
+
+    if not character.skills:
+        output += " You have not learned any skills yet.\r\n"
+    else:
+        # Display skills, maybe sorted alphabetically
+        # Could enhance later to show governing attribute
+        skill_lines = []
+        for skill_name in sorted(character.skills.keys()):
+            rank = character.skills[skill_name]
+            if rank > 0: # Optionally only show skills with rank > 0
+                skill_lines.append(f" {skill_name.title():<25}: {rank}")
+        if not skill_lines:
+            output += " You have not trained any skills yet.\r\n"
+        else:
+            # Simple two-column display?
+            # This basic version just lists them. Could format better.
+            output += "\r\n".join(skill_lines) + "\r\n"
+
+    output += "=" * (40 + 8) + "\r\n"
+    await character.send(output)
+    return True
+
+            

@@ -7,7 +7,9 @@ import hashlib
 import logging
 import math
 import config
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+if TYPE_CHECKING:
+    from game.character import Character # Use relative path if needed '.character'
 
 # You might want other utilities here later (e.g. logging setup, decorators)
 
@@ -148,6 +150,41 @@ def get_article(word: str) -> str:
         return "a" # Default if empty string passed
     # Simple check for common vowel sounds (lowercase)
     return "an" if word.lower()[0] in 'aeiou' else "a"
+
+def skill_check(character: 'Character', skill_name: str, difficulty_mod: int = 0) -> bool:
+    """
+    Performs a skill check for a character against a difficulty. 
+    Rolls d100 <= Skill_Rank + Attribute_Modifier - Difficulty_Modifier
+
+    Args:
+        character: The character performing the check.
+        skill_name: The name of the skill being used (case-insensitive).
+        difficulty_mod: A modifier representing the check's difficulty.
+                        Positive values make it harder, negative easier, Defaults to 0.
+    """
+    skill_name = skill_name.lower()
+    if not hasattr(character, 'get_skill_modifier'):
+        log.error("skill_check: Character object missing get_skill_modifier method.")
+        return False # Cannot perform check
+
+    # Get the character's total modifier for the skill (Rank + Attr Mod)
+    skill_value = character.get_skill_modifier(skill_name)
+
+    # Calculate the target number to roll under/equal to
+    target_roll = skill_value - difficulty_mod
+    # Ensure there's always a small chance to succeed/fail? Not for V1.
+    # Clamp maybe? target_roll = max(1, min(99, target_roll)) # e.g. 1 always fails, 100 always passes
+
+    # Roll d100
+    roll = random.randint(1, 100)
+
+    success = (roll <= target_roll)
+
+    log.debug("SKILL CHECK: Char=%s, Skill=%s(%d), DiffMod=%d, TargetRoll=%d, Rolled=%d -> %s",
+            character.name, skill_name, skill_value, difficulty_mod, target_roll, roll,
+            "SUCCESS" if success else "FAILURE")
+
+    return success
 
 def format_coinage(total_talons: int) -> str:
     """Formats total lowest denomination into Crowns, Orbs, Shards, Talons"""
