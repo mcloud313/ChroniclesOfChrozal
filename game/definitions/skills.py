@@ -19,24 +19,24 @@ SKILL_ATTRIBUTE_MAP = {
     "athletics": "might",   # Implemented for complex obstacles
     "armor training": "vitality", # Implemented for getting more of your total AV
     "bartering": "persona",
-    "bladed weapons": "agility", 
-    "bludgeon weapons": "might", 
+    "bladed weapons": "agility", # Provides more MAR for every 25 points
+    "bludgeon weapons": "might", # Provides more MAR for every 25 points
     "climbing": "might", # Implemented for complex obstacles
     "concentration": "intellect", 
     "disable device": "intellect", 
-    "dodge": "agility",
+    "dodge": "agility", # Provides 1 DV for every 25 points
     "first aid": "intellect",
     "lockpicking": "agility",
     "magical devices": "intellect", 
     "martial arts": "agility", 
     "parrying": "agility",
-    "piercing weapons": "agility", 
+    "piercing weapons": "agility", # Provides more MAR for every 25 points
     "perception": "intellect", 
     "pickpocket": "agility",
     "piety": "aura", 
-    "projectile weapons": "agility", 
+    "projectile weapons": "agility", # Provies more RAR for every 25 points
     "runecrafting": "intellect", 
-    "shield usage": "might", 
+    "shield usage": "might", # Provides 1% block for every 25 points
     "spellcraft": "intellect", 
     "stealth": "agility",
     "swimming": "vitality", # Implemented for complex obstacles
