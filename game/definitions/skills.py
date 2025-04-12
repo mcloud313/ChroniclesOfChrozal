@@ -15,31 +15,31 @@ INITIAL_SKILLS = sorted([
 # Mapping from skill name (lowercase) to primary attribute name (lowercase)
 # Adjust these based on your game design!
 SKILL_ATTRIBUTE_MAP = {
-    "acrobatics": "agility",
-    "athletics": "might",
-    "armor training": "vitality", # Skill reduces penalties? Base mod?
+    "acrobatics": "agility", # Implemented for complex obstacles
+    "athletics": "might",   # Implemented for complex obstacles
+    "armor training": "vitality", # Implemented for getting more of your total AV
     "bartering": "persona",
-    "bladed weapons": "agility", # Or might? Or average? Agility for finesse.
-    "bludgeon weapons": "might", # Strength focus
-    "climbing": "might", # Or agility? Might fits strength needed.
-    "concentration": "intellect", # Or aura? Int for focus.
-    "disable device": "intellect", # Or agility? Int for understanding.
+    "bladed weapons": "agility", 
+    "bludgeon weapons": "might", 
+    "climbing": "might", # Implemented for complex obstacles
+    "concentration": "intellect", 
+    "disable device": "intellect", 
     "dodge": "agility",
     "first aid": "intellect",
     "lockpicking": "agility",
-    "magical devices": "intellect", # Using scrolls, wands etc.
-    "martial arts": "agility", # Dexterity/speed focus for unarmed
+    "magical devices": "intellect", 
+    "martial arts": "agility", 
     "parrying": "agility",
-    "piercing weapons": "agility", # Dexterity focus
-    "perception": "intellect", # Awareness, noticing details
+    "piercing weapons": "agility", 
+    "perception": "intellect", 
     "pickpocket": "agility",
-    "piety": "aura", # Connection to divine
-    "projectile weapons": "agility", # Aiming bows, crossbows
-    "runecrafting": "intellect", # Understanding runes
-    "shield usage": "might", # Strength to hold/maneuver
-    "spellcraft": "intellect", # Understanding magic theory (Mage) or aura (Cleric)? Let's use Intellect for general magic knowledge.
+    "piety": "aura", 
+    "projectile weapons": "agility", 
+    "runecrafting": "intellect", 
+    "shield usage": "might", 
+    "spellcraft": "intellect", 
     "stealth": "agility",
-    "swimming": "vitality", # Strength focus
+    "swimming": "vitality", # Implemented for complex obstacles
 }
 
 def get_attribute_for_skill(skill_name: str) -> Optional[str]:
