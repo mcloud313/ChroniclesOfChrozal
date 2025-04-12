@@ -47,7 +47,7 @@ TRAIT_OPTIONS = {
         # Elves typically don't have beards by default in many fantasies
         # "Beard Style": ["None"], # Optional: Add if Elven beards are possible
     },
-    "yan-ter": {
+    "yan-tar": {
         "Height": ["Short", "Average", "Stocky Average", "Broad Average"], # Added
         "Build": ["Stocky", "Solid", "Heavy", "Imposing"], # Added
         "Skin Pattern": ["Geometric", "Whorls", "Stripes", "Mottled", "Smooth", "Cracked Earth"], # Added more

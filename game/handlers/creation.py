@@ -19,6 +19,7 @@ from game.world import World
 log = logging.getLogger(__name__)
 try:
     from ..definitions import traits as trait_defs
+    from ..definitions import races as race_defs
 except ImportError:
     log.error("Could not import trait definitions! Creation menus will fail.")
     trait_defs = None
@@ -254,9 +255,9 @@ class CreationHandler:
 
         choice = choice.lower()
         if choice == 'keep':
-            # TODO: Show racial bonuses here before assignment?
-            # racial_bonus_text = self._get_racial_bonus_text()
-            # await self._send(racial_bonus_text)
+            race_name = self.creation_data.get("race_name", "Unknown")
+            bonus_text = race_defs.format_racial_modifiers(race_name)
+            await self._send("\r\n" + bonus_text) # Send the formatted bonus string
             await self._send("\r\nScores accepted. Now assign them.")
             self._available_scores = list(self.creation_data["base_stats"]) # Copy for assignment
             self._assigning_stat_index = 0 # Start assigning first stat
@@ -271,6 +272,32 @@ class CreationHandler:
     async def _handle_assign_stats(self):
         """Handles assigning one stat score at a time."""
         if self._assigning_stat_index >= len(self._stat_order):
+            log.debug("Creation: Base stats assigned: %s", self.creation_data['stats'])
+            log.info("Applying racial modifiers...")
+            race_name = self.creation_data.get("race_name", "").lower()
+            racial_mods = race_defs.get_racial_modifiers(race_name)
+            final_stats = self.creation_data["stats"] # Modify directly
+
+            apply_msgs = []
+            for stat, bonus in racial_mods.items():
+                if stat in final_stats:
+                    current_val = final_stats[stat]
+                    # Apply bonus, ensure stat doesn't drop below 1 (or a higher minimum if desired)
+                    final_stats[stat] = max(1, current_val + bonus)
+                    apply_msgs.append(f"{stat.capitalize()} adjusted by {bonus:+d} -> {final_stats[stat]}")
+                    log.debug("Applied %s %+d modifier. %s: %d -> %d",
+                            race_name, bonus, stat, current_val, final_stats[stat])
+                else:
+                    log.warning("Stat %s not found in assigned stats for racial modifier.", stat)
+
+            # Send feedback about applied modifiers
+            if apply_msgs:
+                await self._send("\r\nYour racial traits have adjusted your attributes:")
+                for msg in apply_msgs:
+                    await self._send(f" - {msg}")
+
+            log.debug("Final stats after racial mods: %s", self.creation_data["stats"])
+
             # All stats assigned, move on
             log.debug("Creation: Stats assigned for player %s: %s", self.player.dbid, self.creation_data['stats'])
             # Prepare for description building
@@ -529,8 +556,6 @@ class CreationHandler:
 
         return full_desc.strip()
 
-
-
     async def _handle_finalize(self):
         """Calculates derived stats, builds description, creates DB entry."""
         log.info("Finalizing character creation for player %s", self.player.dbid)
@@ -672,7 +697,7 @@ class CreationHandler:
                 # Prevent tight loop if a state doesn't change on error/invalid input
                 if self.state == current_state and current_state not in [CreationState.COMPLETE, CreationState.CANCELLED]:
                     await asyncio.sleep(0.1)
-            except Exception as e:
+            except Exception:
                 log.exception("Unexpected error during creation state %s for player %s:", current_state, self.player.dbid, exc_info=True)
                 await self._send("\r\nAn unexpected error occurred. Cancelling creation.")
                 self.state = CreationState.CANCELLED

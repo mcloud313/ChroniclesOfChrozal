@@ -17,6 +17,8 @@ from game.world import World
 from game import utils
 from game.commands import handler as command_handler
 from game.handlers.creation import CreationHandler, CreationState
+from game.definitions import skills as skill_defs
+from game.definitions import races as race_defs
 
 # Assume command handler will exist later
 # from ..comands import handler as command_handler
@@ -25,19 +27,20 @@ log = logging.getLogger(__name__)
 
 # Simple Message of the Day
 MOTD = """
-\r\n--- Welcome to Chronicles of Chrozal (Alpha) ---
-\r\n                 .''--''.
-\r\n                /        `.
-\r\n               |  O    O  |
-\r\n               `.________.'
-\r\n              .-'------'-.
-\r\n            .'   :-..-;   `.
-\r\n           /   .'      `.   \\
-\r\n          |   /          \\   |
-\r\n          \\   |          |   /
-\r\n           \\  \\.--""--.//  /
-\r\n            `._        _.'
-\r\n               `------'
+\r\n--- Welcome to Chronicles of Chrozal (Alpha 0.4) ---
+\r\n  
+\r\n  ___  _  _  ____   __   __ _  __  ___  __    ____  ____       
+\r\n / __)/ )( \(  _ \ /  \ (  ( \(  )/ __)(  )  (  __)/ ___)      
+\r\n( (__ ) __ ( )   /(  O )/    / )(( (__ / (_/\ ) _) \___ \      
+\r\n \___)\_)(_/(__\_) \__/ \_)__)(__)\___)\____/(____)(____/      
+\r\n                      __  ____                                 
+\r\n                     /  \(  __)                                
+\r\n                    (  O )) _)                                 
+\r\n                     \__/(__)                                  
+\r\n                        ___  _  _  ____   __  ____   __   __   
+\r\n                       / __)/ )( \(  _ \ /  \(__  ) / _\ (  )  
+\r\n                      ( (__ ) __ ( )   /(  O )/ _/ /    \/ (_/\
+\r\n                      \___)\_)(_/(__\_) \__/(____)\_/\_/\____/
 \r\n--------------------------------------------------
 \r\n"""
 
@@ -333,7 +336,7 @@ class ConnectionHandler:
             # TODO: Fetch Race/Class names later instead of showing IDs
             output += (f" {selection_num}. {char_row['first_name']} {char_row['last_name']} "
                     f"(Level {char_row['level']} R:{char_row['race_id']} C:{char_row['class_id']})\r\n") # Show IDs for now
-        output += "----------------------\r\n"
+        output += "---------------------------\r\n"
         output += "Enter the number of the character to play:"
 
         await self._send(output)
@@ -493,12 +496,23 @@ class ConnectionHandler:
                             db_data=char_data,
                             player_is_admin=self.player_account.is_admin
                             )
+
                             for skill_name in skill_defs.INITIAL_SKILLS:
                                 if skill_name not in self.active_character.skills:
                                     self.active_character.skills[skill_name] = 0
+
                             # Calculate initial skill points: 5 + Int Modifier
                             int_mod = self.active_character.int_mod # Use the property
                             initial_sp = 5 + int_mod
+
+                            # Add Racial Bonus for Chrozalin/Human
+                            race_name = self.world.get_race_name(self.active_character.race_id)
+                            if race_name.lower() == "chrozalin": # Check against your race name
+                                racial_bonus_sp = 5
+                                initial_sp += racial_bonus_sp
+                                log.info("Applying +%d racial skill point bonus for %s.",
+                                        racial_bonus_sp, race_name)
+
                             self.active_character.unspent_skill_points = initial_sp
                             log.info("Awarded %d initial skill points to %s.",
                             initial_sp, self.active_character.name)
