@@ -36,10 +36,16 @@ if not log.handlers:
 
 # Define some constants for key room IDs for easier linking
 TAVERN_ID = 10
+MARKET_ID = 11
+DOCKS_ID = 12
+TOWNHALL_ID = 13
+GATEHOUSE_ID = 14
 GRAVEYARD_ID = 15
+GRAVEYARD_PATH_ID = 16
+WEST_STREET_ID = 17
 ARMORY_ID = 18
-BEACH_ENTRANCE_ID = 25 # Room in town leading to beach
-BEACH_START_ID = 100 # First room on the beach
+BEACH_ENTRANCE_ID = 25
+BEACH_START_ID = 100
 
 # --- Core Async Database Functions
 async def connect_db(db_path: str = DATABASE_PATH) -> aiosqlite.Connection | None:
@@ -326,36 +332,174 @@ async def init_db(conn: aiosqlite.Connection):
         await conn.executemany("INSERT OR IGNORE INTO areas (id, name, description) VALUES (?, ?, ?)", default_areas)
 
         # Define Rooms (ID, AreaID, Name, Desc, Exits JSON, Flags JSON, Spawners JSON)
-        default_rooms = [
-            # Genesis Area
-            (1, 1, "The Void", "A featureless void. An exit shimmers to the north.", json.dumps({"north": TAVERN_ID}), json.dumps(["NODE"]), '{}'), # Exit to Tavern
+        default_rooms = default_rooms = [
+            # --- Genesis Area (Area 1) ---
+            (1, 1, "The Void",
+            "A featureless void stretches around you. To the north, something shimmers slightly.",
+            json.dumps({"north": TAVERN_ID}), # Simple Exit
+            json.dumps(["NODE"]),
+            '{}'),
 
-            # Seaside Town (Area 2)
-            (TAVERN_ID, 2, "The Salty Siren Tavern", "The air smells of stale ale, sweat, and the sea. A bar stretches along one wall. Exits lead south (to the void) and east (to West Street).", json.dumps({"south": 1, "east": 17}), json.dumps(["NODE", "INDOORS"]), '{}'), # Tavern is NODE, connects to West St
-            (11, 2, "Haven Market Square", "A bustling square with stalls (inactive). Streets lead west (West Street), north (Town Hall), south (Gatehouse), east (Armory), and southeast (Path to Beach).",
-            json.dumps({"west": 17, "north": 13, "south": 14, "east": ARMORY_ID, "southeast": BEACH_ENTRANCE_ID}), # Added SE exit, fixed West exit
-            json.dumps(["OUTDOORS"]), '{}'),
-            (12, 2, "Haven Docks", "The smell of salt and fish is strong here. Piers stretch out over the water. A path leads east.", json.dumps({"east": 17}), json.dumps(["OUTDOORS", "WET"]), '{}'), # Connects to West St
-            (13, 2, "Town Hall Entrance", "A sturdy wooden building. Market Square is south.", json.dumps({"south": 11}), json.dumps(["OUTDOORS"]), '{}'),
-            (14, 2, "South Gatehouse", "Guards stand watch. Market Square is north. The South Gate isn't functional yet.", json.dumps({"north": 11}), json.dumps(["OUTDOORS"]), '{}'),
-            (GRAVEYARD_ID, 2, "Haven Graveyard", "An eerie, quiet space filled with weathered headstones. A rusty gate leads east.", json.dumps({"east": 16}), json.dumps(["OUTDOORS"]), '{}'), # Respawn point
-            (16, 2, "Graveyard Path", "A path between the graveyard (west) and West Street (east).", json.dumps({"west": GRAVEYARD_ID, "east": 17}), json.dumps(["OUTDOORS"]), '{}'),
-            (17, 2, "West Street", "Connects the Docks (west), the Graveyard path (north), the Market Square (east), and the Tavern (south).", json.dumps({"west": 12, "north": 16, "east": 11, "south": TAVERN_ID}), json.dumps(["OUTDOORS"]), '{}'), # Connects multiple points
-            (ARMORY_ID, 2, "Haven Armory", "Racks of basic gear line the walls. Market Square is west.", json.dumps({"west": 11}), json.dumps(["INDOORS"]), '{}'),
-            # --- Add more town rooms as desired here (e.g., IDs 19-24) ---
-            (BEACH_ENTRANCE_ID, 2, "Path to the Beach", "A sandy path leads down towards the sounds of the surf to the east. Market square lies southeast.", json.dumps({"northwest": 11, "east": BEACH_START_ID}), json.dumps(["OUTDOORS"]), '{}'), # Corrected west exit to NW
+            # --- Seaside Town of Haven (Area 2) ---
+            (TAVERN_ID, 2, "The Salty Siren Tavern",
+            "The air smells of stale ale, sweat, and the sea. A bar stretches along one wall. Exits lead south (to the void) and east (to West Street).",
+            json.dumps({"south": 1, "east": WEST_STREET_ID}), # Simple Exits
+            json.dumps(["NODE", "INDOORS"]),
+            '{}'),
+            (MARKET_ID, 2, "Haven Market Square",
+            "A bustling square with stalls (inactive). Streets lead west (West Street), north (Town Hall), south (Gatehouse), east (Armory), and southeast (Path to Beach).",
+            json.dumps({"west": WEST_STREET_ID, "north": TOWNHALL_ID, "south": GATEHOUSE_ID, "east": ARMORY_ID, "southeast": BEACH_ENTRANCE_ID}), # Simple Exits
+            json.dumps(["OUTDOORS"]),
+            '{}'),
+            (DOCKS_ID, 2, "Haven Docks",
+            "The smell of salt and fish is strong here. Piers stretch out over the water. A path leads east.",
+            json.dumps({"east": WEST_STREET_ID}), # Simple Exit
+            json.dumps(["OUTDOORS", "WET"]),
+            '{}'),
+            (TOWNHALL_ID, 2, "Town Hall Entrance",
+            "A sturdy wooden building. Market Square is south.",
+            json.dumps({"south": MARKET_ID}), # Simple Exit
+            json.dumps(["OUTDOORS"]),
+            '{}'),
+            (GATEHOUSE_ID, 2, "South Gatehouse",
+            "Guards stand watch. Market Square is north. The South Gate isn't functional yet.",
+            json.dumps({"north": MARKET_ID}), # Simple Exit
+            json.dumps(["OUTDOORS"]),
+            '{}'),
+            (GRAVEYARD_ID, 2, "Haven Graveyard",
+            "An eerie, quiet space filled with weathered headstones. A rusty gate leads east.",
+            json.dumps({"east": GRAVEYARD_PATH_ID}), # Simple Exit
+            json.dumps(["OUTDOORS"]), # Respawn point
+            '{}'),
+            (GRAVEYARD_PATH_ID, 2, "Graveyard Path",
+            "A path between the graveyard (west) and West Street (east).",
+            json.dumps({"west": GRAVEYARD_ID, "east": WEST_STREET_ID}), # Simple Exits
+            json.dumps(["OUTDOORS"]),
+            '{}'),
+            (WEST_STREET_ID, 2, "West Street",
+            "Connects the Docks (west), the Graveyard path (north), the Market Square (east), and the Tavern (south).",
+            json.dumps({"west": DOCKS_ID, "north": GRAVEYARD_PATH_ID, "east": MARKET_ID, "south": TAVERN_ID}), # Simple Exits
+            json.dumps(["OUTDOORS"]),
+            '{}'),
+            (ARMORY_ID, 2, "Haven Armory",
+            "Racks of basic gear line the walls. Market Square is west.",
+            json.dumps({"west": MARKET_ID}), # Simple Exit
+            json.dumps(["INDOORS"]),
+            '{}'),
+            (BEACH_ENTRANCE_ID, 2, "Path to the Beach",
+            "A sandy path leads down towards the sounds of the surf to the east. Market square lies northwest.", # Updated description slightly
+            json.dumps({"northwest": MARKET_ID, "east": BEACH_START_ID}), # Simple Exits
+            json.dumps(["OUTDOORS"]),
+            '{}'),
 
-            # Beach Area (Area 3) - IDs 100+
-            (BEACH_START_ID, 3, "Sandy Shore", "Waves lap gently at the sand. The path back towards town is northwest. The beach stretches north and south.", json.dumps({"northwest": BEACH_ENTRANCE_ID, "north": 101, "south": 102}), json.dumps(["OUTDOORS", "WET"]), json.dumps({"2": {"max_present": 2}})), # Spawns Crabs
-            (101, 3, "North Beach", "More sand and dunes. The shore continues north and south.", json.dumps({"north": 103, "south": BEACH_START_ID}), json.dumps(["OUTDOORS", "WET"]), json.dumps({"2": {"max_present": 1}, "3": {"max_present": 1}})), # Crab, Sprite
-            (102, 3, "South Beach", "Tide pools dot the sand here. The shore continues north and south.", json.dumps({"north": BEACH_START_ID, "south": 104}), json.dumps(["OUTDOORS", "WET"]), json.dumps({"2": {"max_present": 2}, "4": {"max_present": 1}})), # Crabs, Turtle
-            (103, 3, "Rocky Outcropping (N)", "Sharp rocks jut out into the sea. The beach is south, and climbs further north.", json.dumps({"south": 101, "north": 105}), json.dumps(["OUTDOORS", "ROUGH_TERRAIN"]), json.dumps({"3": {"max_present": 2}})), # Sprites
-            (104, 3, "Turtle Nesting Ground (S)", "Depressions in the sand mark turtle nests. The beach is north. Sandy dunes lie south.", json.dumps({"north": 102, "south": 108}), json.dumps(["OUTDOORS", "WET"]), json.dumps({"4": {"max_present": 2}, "5": {"max_present": 1}})), # Turtles + King Turtle
-            (105, 3, "Northern Cliffs Base", "Steep cliffs rise to the north, slick with spray. The rocky beach continues south.", json.dumps({"south": 103, "climb cliff": 106}), json.dumps(["OUTDOORS", "ROUGH_TERRAIN", "WET"]), json.dumps({"3": {"max_present": 2}})), # Sprites, special exit
-            (106, 3, "Northern Cliff Ledge", "A narrow ledge partway up the cliff face. A small cave mouth leads inward. You can try to climb down.", json.dumps({"climb down": 105, "in": 107}), json.dumps(["OUTDOORS", "WINDY"]), '{}'), # Special exits
-            (107, 3, "Small Sea Cave", "A cramped, damp cave smelling of brine and guano. The only exit is out.", json.dumps({"out": 106}), json.dumps(["INDOORS", "DARK", "WET"]), json.dumps({"2": {"max_present": 1}})), # Crab
-            (108, 3, "Sandy Dunes", "Rolling dunes block view further south. The nesting ground is north.", json.dumps({"north": 104, "south": 109}), json.dumps(["OUTDOORS"]), json.dumps({"2": {"max_present": 3}})), # Crabs
-            (109, 3, "Shipwreck Debris", "The shattered remnants of a small ship lie half-buried in the sand. The dunes are north.", json.dumps({"north": 108}), json.dumps(["OUTDOORS", "WET"]), json.dumps({"4": {"max_present": 1}})), # Turtle
+            # --- Beach Area (Area 3) ---
+            (BEACH_START_ID, 3, "Sandy Shore",
+            "Waves lap gently at the sand. The path back towards town is northwest. The beach stretches north and south.",
+            json.dumps({"northwest": BEACH_ENTRANCE_ID, "north": 101, "south": 102}), # Simple Exits
+            json.dumps(["OUTDOORS", "WET"]),
+            json.dumps({"2": {"max_present": 2}})), # Spawns Crabs (Mob ID 2)
+            (101, 3, "North Beach",
+            "More sand and dunes. The shore continues north and south.",
+            json.dumps({"north": 103, "south": BEACH_START_ID}), # Simple Exits
+            json.dumps(["OUTDOORS", "WET"]),
+            json.dumps({"2": {"max_present": 1}, "3": {"max_present": 1}})), # Crab, Sprite
+            (102, 3, "South Beach",
+            "Tide pools dot the sand here. The shore continues north and south. A dark hole gapes in the sand.",
+            # Exit 'hole' requires skill check
+            json.dumps({
+                "north": BEACH_START_ID,
+                "south": 104,
+                "hole": { # <<< Complex Exit Definition Start
+                    "target": 4,
+                    "skill_check": {
+                        "skill": "acrobatics",
+                        "dc": 12,
+                        "fail_damage": 2,
+                        "fail_msg": "You tumble awkwardly into the hole!",
+                        "success_msg": "You carefully descend into the hole."
+                    }
+                } # <<< Complex Exit Definition End
+            }),
+            json.dumps(["OUTDOORS", "WET"]),
+            json.dumps({"2": {"max_present": 2}, "4": {"max_present": 1}})), # Crabs, Turtle
+            (103, 3, "Rocky Outcropping (N)",
+            "Sharp rocks jut out into the sea. The beach is south, and climbs further north.",
+            json.dumps({"south": 101, "north": 105}), # Simple Exits
+            json.dumps(["OUTDOORS", "ROUGH_TERRAIN"]),
+            json.dumps({"3": {"max_present": 2}})), # Sprites
+            (104, 3, "Turtle Nesting Ground (S)",
+            "Depressions in the sand mark turtle nests. The beach is north. Sandy dunes lie south.",
+            json.dumps({"north": 102, "south": 108}), # Simple Exits
+            json.dumps(["OUTDOORS", "WET"]),
+            json.dumps({"4": {"max_present": 2}, "5": {"max_present": 1}})), # Turtles + King Turtle
+            (4, 1, "A Damp Cave", # <--- Note: Back in Area 1 (Genesis) for this example room ID
+            "Water drips steadily in this small, dark cave. The only way out seems to be climbing up the hole you fell through.",
+            # Exit 'climb up' requires skill check
+            json.dumps({
+                "climb up": { # <<< Complex Exit Definition Start
+                    "target": 102, # Target is South Beach
+                    "skill_check": {
+                        "skill": "climbing",
+                        "dc": 12,
+                        "fail_damage": 3,
+                        "fail_msg": "You slip while climbing and fall back down!",
+                        "success_msg": "You manage to climb up out of the hole."
+                    }
+                } # <<< Complex Exit Definition End
+            }),
+            json.dumps(["INDOORS", "DARK", "WET"]),
+            '{}'), # No spawners here initially
+            (105, 3, "Northern Cliffs Base",
+            "Steep cliffs rise to the north, slick with spray. The rocky beach continues south.",
+            # Exit 'climb cliff' requires skill check
+            json.dumps({
+                "south": 103,
+                "climb cliff": { # <<< Complex Exit Definition Start
+                    "target": 106,
+                    "skill_check": {
+                        "skill": "climbing",
+                        "dc": 15, # Harder climb
+                        "fail_damage": 5,
+                        "fail_msg": "The slick rocks offer no purchase and you tumble down!",
+                        "success_msg": "You find handholds and scale the lower cliff face."
+                    }
+                } # <<< Complex Exit Definition End
+            }),
+            json.dumps(["OUTDOORS", "ROUGH_TERRAIN", "WET"]),
+            json.dumps({"3": {"max_present": 2}})), # Sprites
+            (106, 3, "Northern Cliff Ledge",
+            "A narrow ledge partway up the cliff face. A small cave mouth leads inward. You can try to climb down.",
+            # Exit 'climb down' requires skill check
+            json.dumps({
+                "in": 107,
+                "climb down": { # <<< Complex Exit Definition Start
+                    "target": 105,
+                    "skill_check": {
+                        "skill": "climbing",
+                        "dc": 10, # Easier going down
+                        "fail_damage": 2,
+                        "fail_msg": "You slip near the bottom and land hard!",
+                        "success_msg": "You carefully climb back down to the base."
+                    }
+                } # <<< Complex Exit Definition End
+            }),
+            json.dumps(["OUTDOORS", "WINDY"]),
+            '{}'),
+            (107, 3, "Small Sea Cave",
+            "A cramped, damp cave smelling of brine and guano. The only exit is out.",
+            json.dumps({"out": 106}), # Simple Exit
+            json.dumps(["INDOORS", "DARK", "WET"]),
+            json.dumps({"2": {"max_present": 1}})), # Crab
+            (108, 3, "Sandy Dunes",
+            "Rolling dunes block view further south. The nesting ground is north.",
+            json.dumps({"north": 104, "south": 109}), # Simple Exits
+            json.dumps(["OUTDOORS"]),
+            json.dumps({"2": {"max_present": 3}})), # Crabs
+            (109, 3, "Shipwreck Debris",
+            "The shattered remnants of a small ship lie half-buried in the sand. The dunes are north.",
+            json.dumps({"north": 108}), # Simple Exit
+            json.dumps(["OUTDOORS", "WET"]),
+            json.dumps({"4": {"max_present": 1}})), # Turtle
         ]
         await conn.executemany(
             """INSERT OR IGNORE INTO rooms (id, area_id, name, description, exits, flags, spawners) VALUES (?, ?, ?, ?, ?, ?, ?)""", default_rooms

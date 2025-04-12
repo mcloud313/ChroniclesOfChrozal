@@ -35,7 +35,8 @@ class Room:
 
         #Load exits (JSON string -> dict)
         try:
-            self.exits: Dict[str, int] = json.loads(db_data['exits'] or '{}')
+            # json.loads handles nested dicts/ints automatically
+            self.exits: Dict[str, Any] = json.loads(db_data['exits'] or '{}')
         except json.JSONDecodeError:
             log.warning(f"Room {self.dbid}: Could not decode exits JSON: {db_data['exits']}")
             self.exits: Dict[str, int] = {}

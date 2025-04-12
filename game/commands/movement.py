@@ -4,13 +4,15 @@ Movement commands.
 """
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Dict, Any
+from .. import utils
 
 if TYPE_CHECKING:
     from ..character import Character
     from ..world import World
     import aiosqlite
     from ..room import Room
+    
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +67,62 @@ async def cmd_move(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
 
     # Normalize direction just in case
     direction = direction.lower()
+    exit_data = character.location.exits.get(direction)
+
+    if exit_data is None:
+        await character.send("You can't go that way.")
+        return True
+    
+    target_room_id: Optional[int] = None
+    skill_check_data: Optional[Dict[str, Any]] = None
+
+    if isinstance(exit_data, int):
+        # Simple exit: value is the target room ID
+        target_room_id = exit_data
+    elif isinstance(exit_data, dict):
+        # Complex exit: value is a dictionary
+        target_room_id = exit_data.get('target')
+        if not isinstance(target_room_id, int):
+            log.error("Room %d exit '%s' dict has invalid target: %r", character.location.dbid, direction, target_room_id)
+            await character.send("The way forward seems broken.")
+            return True
+        skill_check_data = exit_data.get('skill_check') # Get skill check info if present
+    else:
+        # Invalid data format in exits JSON
+        log.error("Room %d exit '%s' has invalid data type: %r", character.location.dbid, direction, exit_data)
+        await character.send("The way forward seems confused.")
+        return True
+    
+    if skill_check_data and isinstance(skill_check_data, dict):
+        skill_name = skill_check_data.get('skill')
+        dc = skill_check_data.get('dc', 10) # Default DC 10 if missing
+
+        if not skill_name:
+            log.error("Room %d exit '%s' skill_check missing 'skill' key.", character.location.dbid, direction)
+            await character.send("The obstacle seems undefined.")
+            return True
+
+        log.debug("Performing skill check: Char=%s, Skill=%s, DC=%d", character.name, skill_name, dc)
+        # Use utils.skill_check, passing DC as the difficulty modifier
+        success = utils.skill_check(character, skill_name, difficulty_mod=dc)
+
+        character.roundtime = 10.0
+        log.debug("Applied 10.0s roundtime to %s for skill check exit attempt.", character.name)
+
+        if not success:
+            fail_msg = skill_check_data.get('fail_message', f"You fail the {skill_name} check.")
+            fail_damage = skill_check_data.get('fail_damage', 0)
+            await character.send(fail_msg)
+            if fail_damage > 0:
+                character.hp = max(0, character.hp - fail_damage) # Apply damage
+                await character.send(f"You take {fail_damage} damage!")
+                # TODO: Check for death immediately?
+                # if character.hp <= 0: await combat_logic.handle_defeat(...)
+            return True # Movement failed
+        else:
+            success_msg = skill_check_data.get('success_message', f"You succeed the {skill_name} check!")
+            await character.send(success_msg)
+            # Continue to movement after successful check
 
     target_room_id = character.location.exits.get(direction)
 
@@ -94,10 +152,65 @@ async def cmd_go(character: 'Character', world: 'World', db_conn: 'aiosqlite.Con
         return True
     
     exit_name = args_str.strip().lower() # Use the argument as the exit key
+    exit_data = character.location.exits.get(exit_name)
 
     if not exit_name:
         await character.send("Go where? (e.g., go hole, go doorway)")
         return True
+    
+    target_room_id: Optional[int] = None
+    skill_check_data: Optional[Dict[str, Any]] = None
+
+    if isinstance(exit_data, int):
+        target_room_id = exit_data
+    elif isinstance(exit_data, dict):
+        target_room_id = exit_data.get('target')
+        if not isinstance(target_room_id, int):
+            log.error("Room %d exit '%s' dict invalid target: %r", character.location.dbid, exit_name, target_room_id)
+            await character.send("The way forward seems broken.")
+            return True
+        skill_check_data = exit_data.get('skill_check')
+    else:
+        log.error("Room %d exit '%s' has invalid data type: %r", character.location.dbid, exit_name, exit_data)
+        await character.send("The way forward seems confused.")
+        return True
+
+    if skill_check_data and isinstance(skill_check_data, dict):
+        skill_name = skill_check_data.get('skill')
+        dc = skill_check_data.get('dc', 10)
+        if not skill_name:
+            log.error("Room %d exit '%s' skill_check missing 'skill' key.", character.location.dbid, exit_name)
+            await character.send("The obstacle seems undefined.")
+            return True
+
+        log.debug("Performing skill check: Char=%s, Skill=%s, DC=%d", character.name, skill_name, dc)
+        success = utils.skill_check(character, skill_name, difficulty_mod=dc)
+
+        character.roundtime = 10.0
+        log.debug("Applied 10.0s roundtime to %s for skill check exit attempt.", character.name)
+
+        if not success:
+            fail_msg = skill_check_data.get('fail_message', f"You fail the {skill_name} check.")
+            fail_damage = skill_check_data.get('fail_damage', 0)
+            await character.send(fail_msg)
+            if fail_damage > 0:
+                character.hp = max(0, character.hp - fail_damage)
+                await character.send(f"You take {fail_damage} damage!")
+                # TODO: Check for death
+            character.roundtime = 2.0
+            return True
+        else:
+            success_msg = skill_check_data.get('success_message', f"You succeed the {skill_name} check!")
+            await character.send(success_msg)
+
+    target_room = world.get_room(target_room_id)
+    if target_room is None:
+        log.error("Exit '%s' in room %d points to non-existent room %d!",
+                exit_name, character.location.dbid, target_room_id)
+        await character.send(f"You try to go '{exit_name}', but the way is blocked.")
+        return True
+
+    await _perform_move(character, world, target_room, exit_name)
     
     target_room_id = character.location.exits.get(exit_name)
 
