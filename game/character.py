@@ -3,7 +3,7 @@
 Represents a character in the game world, controlled by a player account.
 Holds in-game state, attributes, and connection information.
 """
-
+import random
 import asyncio
 import json
 import logging
@@ -20,6 +20,24 @@ if TYPE_CHECKING:
     from .world import World
 
 log = logging.getLogger(__name__)
+
+    # Define Hit Dice size per class ID {class_id: die_size}
+CLASS_HP_DIE = {
+    1: 10,  # Warrior: d10
+    2: 4,   # Mage: d4
+    3: 8,   # Cleric: d8
+    4: 6,   # Rogue: d6
+}
+DEFAULT_HP_DIE = 6 # Default if class not found
+
+CLASS_ESSENCE_DIE = {
+    1: 4,   # Warrior: d4
+    2: 10,  # Mage: d10
+    3: 8,   # Cleric: d8 (Assuming standard progression)
+    4: 6,   # Rogue: d6 (Assuming standard progression)
+}
+DEFAULT_ESSENCE_DIE = 4 # Default if class not found
+
 
 class Character:
     """
@@ -104,6 +122,8 @@ class Character:
         self.max_essence: int = db_data['max_essence']
         self.xp_pool: int = db_data['xp_pool'] # Unabsorbed XP
         self.xp_total: int = db_data['xp_total'] # Current level progress
+        self.unspent_skill_points: int = db_data['unspent_skill_points']
+        self.unspent_attribute_points: int = db_data['unspent_attribute_points']
         self.description: str = db_data['description']
         self.status: str = 'ALIVE' # Possible values: ALIVE, DYING, DEAD
         self.target: Optional[Union['Character', 'Mob']] = None # Who are we fighting? Needs Mob import below
@@ -163,7 +183,7 @@ class Character:
     def get_max_weight(self) -> int:
         """Calculates maximum carrying weight based on Might."""
         might = self.stats.get("might", 10) # Default 10 might if missing
-        return might * 2
+        return might * 3
 
     def get_current_weight(self, world: 'World') -> int:
         """Calculates current weight carried from inventory and equipment."""
@@ -288,6 +308,9 @@ class Character:
             "essence": self.essence,
             "xp_pool": self.xp_pool,
             "xp_total": self.xp_total,
+            "level": self.level,
+            "unspent_skill_points": self.unspent_skill_points,
+            "unspent_attribute_points": self.unspent_attribute_points,
             "stats": json.dumps(self.stats), # Save current stats
             "skills": json.dumps(self.skills), # Save current skills
             "inventory": json.dumps(self.inventory), # Save list of template IDs
@@ -346,38 +369,80 @@ class Character:
 
     def calculate_initial_derived_attributes(self):
         """
-        Calculates Max HP/Essence based on current stats and sets current HP/Essence.
-        Should be called after stats are loaded/set during __init__ or level up.
+        Sets initial Max HP/Essence based on stats AND max possible class die roll.
+        Called from __init__ and potentially other recalculations.
+        Also restores current HP/Essence to max.
         """
-        # Get base stats, defaulting to 10 if somehow missing after creation
-        # (Shouldn't happen with proper creation sequence)
-        might = self.stats.get("might", 10)
         vitality = self.stats.get("vitality", 10)
-        agility = self.stats.get("agility", 10)
-        intellect = self.stats.get("intellect", 10)
         aura = self.stats.get("aura", 10)
         persona = self.stats.get("persona", 10)
 
-        # Calculate modifiers using the utility function
-        mig_mod = utils.calculate_modifier(might)
         vit_mod = utils.calculate_modifier(vitality)
-        agi_mod = utils.calculate_modifier(agility)
-        int_mod = utils.calculate_modifier(intellect)
-        aur_mod = utils.calculate_modifier(aura)
-        per_mod = utils.calculate_modifier(persona)
+        aura_mod = utils.calculate_modifier(aura)
+        pers_mod = utils.calculate_modifier(persona)
 
-        # Calculate Max HP/Essence based on formulas
-        # TODO: Incorporate Level/Race/Class bonuses later
-        self.max_hp = 10 + vit_mod
-        self.max_essence = aur_mod + per_mod
+        # Get MAX die roll values for initial calculation
+        initial_hp_base = CLASS_HP_DIE.get(self.class_id, DEFAULT_HP_DIE) # Use max die value as base
+        initial_essence_base = CLASS_ESSENCE_DIE.get(self.class_id, DEFAULT_ESSENCE_DIE) # Use max die value as base
 
-        # Ensure HP/Essence aren't higher than the new Max values
-        # And set current HP/Essence to Max upon initialization/level up usually
+        # SET Max HP/Essence (Base is max die roll + modifier)
+        self.max_hp = initial_hp_base + vit_mod
+        self.max_essence = initial_essence_base + aura_mod + pers_mod # Add base essence roll too
+
+        # Clamp minimums? Should Max HP/Essence always be at least 1?
+        self.max_hp = max(1, self.max_hp)
+        self.max_essence = max(0, self.max_essence) # Essence can be 0
+
+        # Restore current HP/Essence to Max (could be initial or after stat change/level)
+        # Ensure current HP/Essence doesn't exceed new max if stats decreased somehow
+        self.hp = min(self.hp, self.max_hp)
+        self.essence = min(self.essence, self.max_essence)
+        # Generally restore fully on level up / init
         self.hp = self.max_hp
         self.essence = self.max_essence
 
-        log.debug("Character %s: Derived attributes calculated: MaxHP=%d, MaxEssence=%d",
+
+        log.debug("Character %s: Derived attributes calculated/updated: MaxHP=%d, MaxEssence=%d",
                 self.name, self.max_hp, self.max_essence)
+
+    def apply_level_up_gains(self) -> Tuple[int, int]:
+        """
+        Calculates HP/Essence gains based on class dice rolls and current modifiers,
+        updates max values, and restores current HP/Essence to new max.
+        Should be called AFTER level has been incremented.
+
+        Returns:
+            A tuple containing (hp_increase, essence_increase).
+        """
+        current_vit_mod = self.vit_mod
+        current_aura_mod = self.aura_mod
+        current_pers_mod = self.pers_mod
+
+        # Get die sizes for the character's class
+        hp_die_size = CLASS_HP_DIE.get(self.class_id, DEFAULT_HP_DIE)
+        essence_die_size = CLASS_ESSENCE_DIE.get(self.class_id, DEFAULT_ESSENCE_DIE)
+
+        # Roll the dice
+        hp_roll = random.randint(1, hp_die_size)
+        essence_roll = random.randint(1, essence_die_size)
+
+        # Calculate increase (ensure minimums)
+        hp_increase = max(1, hp_roll + current_vit_mod)
+        essence_increase = max(0, essence_roll + current_aura_mod)
+
+        # Apply increase to max values
+        self.max_hp += hp_increase
+        self.max_essence += essence_increase
+
+        # Restore current HP/Essence to new max
+        self.hp = self.max_hp
+        self.essence = self.max_essence
+
+        log.debug("Character %s Level Up Gains: HP Roll(d%d)=%d, Mod=%d -> +%d (New Max: %d); Essence Roll(d%d)=%d, Mod=%d -> +%d (New Max: %d)",
+                self.name, hp_die_size, hp_roll, current_vit_mod, hp_increase, self.max_hp,
+                essence_die_size, essence_roll, current_aura_mod + current_pers_mod, essence_increase, self.max_essence)
+
+        return hp_increase, essence_increase
 
     def is_alive(self) -> bool: # Add helper consistent with Mob
         return self.hp > 0 and self.status != "DEAD" # DYING counts as alive for some checks

@@ -3,6 +3,7 @@
 General player commands like look, say, quit, who help.
 """
 import logging
+import config
 from typing import TYPE_CHECKING
 from .. import utils
 
@@ -198,5 +199,73 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     output += "=" * 40 + "\r\n"
 
     await character.send(output)
+    return True # Keep connection active
+
+async def cmd_advance(character: 'Character', world: 'World', db_conn:'aiosqlite.Connection', args_str: str) -> bool:
+    """Handles the 'advance' command for levelling up."""
+    #1. Check location
+    if not character.location or "NODE" not in character.location.flags:
+        await character.send("You must be in a designated safe Node to consolidate your experience and advance.")
+        return True
+
+    #2. Check Max Level
+    max_level = getattr(config, 'MAX_LEVEL', 100)
+    if character.level >= max_level:
+        await character.send(f"You have already reached the maximum level ({max_level}).")
+        return True
+
+    #3. Check XP Eligibility
+    xp_needed = utils.xp_needed_for_level(character.level) # Gets threshold for NEXT level
+    if character.xp_total < xp_needed:
+        xp_more = xp_needed - character.xp_total
+        await character.send(f"You require {int(xp_more)} more experience to advance to level {character.level + 1}.")
+        return True
+
+    # 4. Increment Level
+    character.level += 1
+    log.info("Character %s (ID: %s) advanced to level %d!", character.name, character.dbid, character.level)
+
+    # --- Eligibie for Level Up
+    sp_gain = getattr(config, 'SKILL_POINTS_PER_LEVEL', 5)
+    character.unspent_skill_points += sp_gain
+    old_max_hp = character.max_hp
+    old_max_essence = character.max_essence
+
+    # 6. Award attribute point (every 4 levels)
+    ap_gain = 0
+    if character.level % 4 == 0:
+        ap_gain = 1
+        character.unspent_attribute_points += ap_gain
+
+    # 7. Apply Level Up Gains (Updates Max values and restores current HP/Essence)
+    #    This method performs the class die rolls + mods internally.
+    hp_gain, essence_gain = character.apply_level_up_gains()
+    # --- ^ ^ ^ ---
+
+    log.info("Character %s (ID: %s) advanced to level %d! Gains: HP+%d, Ess+%d, SP+%d, AP+%d",
+            character.name, character.dbid, character.level, hp_gain, essence_gain, sp_gain, ap_gain)
+
+    hp_increase = character.max_hp - old_max_hp
+    essence_increase = character.max_essence - old_max_essence
+
+    # 8. Format Feedback Message (Uses gains returned from apply_level_up_gains)
+    level_msg = ["\r\n{G*** CONGRATULATIONS! ***{x", # Added {x to reset color potentially
+                f"You have advanced to level {character.level}!",
+                 "=" * 30]
+
+    # Use hp_gain and essence_gain directly from the method call results
+    if hp_gain > 0: level_msg.append(f"Maximum HP increased by {hp_gain} (Now: {character.max_hp}).")
+    if essence_gain > 0: level_msg.append(f"Maximum Essence increased by {essence_gain} (Now: {character.max_essence}).")
+    if sp_gain > 0: level_msg.append(f"You gain {sp_gain} skill points (Total unspent: {character.unspent_skill_points}).")
+    if ap_gain > 0: level_msg.append(f"You gain {ap_gain} attribute point (Total unspent: {character.unspent_attribute_points}).")
+    level_msg.append("Use 'TRAIN <skill>' to spend skill points.")
+    if character.unspent_attribute_points > 0:
+        level_msg.append("Use '@setstat' or wait for attribute training command.") # Placeholder
+
+    await character.send("\r\n".join(level_msg))
+
+    # 9. Trigger immediate save after level up? Good practice.
+    await character.save(db_conn)
+
     return True # Keep connection active
 

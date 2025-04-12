@@ -182,6 +182,8 @@ async def init_db(conn: aiosqlite.Connection):
             max_essence INTEGER DEFAULT 20,
             xp_pool INTEGER DEFAULT 0, -- Unabsorbed XP
             xp_total INTEGER DEFAULT 0, -- XP accumulated within current level
+            unspent_skill_points INTEGER NOT NULL DEFAULT 0,
+            unspent_attribute_points INTEGER NOT NULL DEFAULT 0,
             stats TEXT DEFAULT '{}', -- JSON: {"might": 10, "agility": 10, ...}
             skills TEXT DEFAULT '{}', -- JSON: {"climb": 0, "appraise": 0, ...}
             location_id INTEGER DEFAULT 1, -- Default starting room ID
@@ -300,17 +302,18 @@ async def init_db(conn: aiosqlite.Connection):
 
         # Check for default room
         async with conn.execute("SELECT COUNT(*) FROM rooms WHERE id = 1") as cursor:
-            room_exists = (await cursor.fetchone())[0]
-        if not room_exists:
-            log.info("Default room #1 not found, creating it.")
+            room1_exists = (await cursor.fetchone())[0]
+        if not room1_exists:
+            log.info("Default Room #1 not found, creating it.")
             exits_room1 = json.dumps({"north": 2, "northwest": 3})
+            # --- V V V Add "NODE" flag V V V ---
             flags_room1 = json.dumps(["NODE"]) # Mark as a node
             await conn.execute(
-                """INSERT INTO rooms (id, area_id, name, description, exits, flags)
-                VALUES (?, ?, ?, ?, ?, ?)""",
-                (1, 1, "The Void", "A featureless void stretches around you. Something shimmers to the north. A faint path leads northwest.", exits_room1, json.dumps([]))
+                """INSERT INTO rooms (id, area_id, name, description, exits, flags, spawners)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (1, 1, "The Void", "...", exits_room1, flags_room1, json.dumps({})) # Use flags_room1
             )
-            log.info("Default Room #1 created.")
+            log.info("Default Room #1 created (NODE).") # Update log
 
         # *** NEW: Room 2 ("A Dusty Trail") ***
         async with conn.execute("SELECT COUNT(*) FROM rooms WHERE id = 2") as cursor:
@@ -357,7 +360,7 @@ async def init_db(conn: aiosqlite.Connection):
         default_mobs = [
             (1, "a giant rat", "A rodent of unusual size, its eyes gleam.", 1,
             json.dumps({"might": 5, "vitality": 5, "agility": 8}), 8, # stats, max_hp
-            json.dumps([{"name": "bite", "damage_base": 2, "damage_rng": 3, "speed": 2.5}]), # attacks
+            json.dumps([{"name": "bite", "damage_base": 2, "damage_rng": 4, "speed": 2.5}]), # attacks
             json.dumps({"coinage_max": 3, "items": [{"template_id": 7, "chance": 0.05}]}), # loot (bread)
             json.dumps([]), 60), # flags (empty), respawn_delay
             # Add more mobs: Goblin, Wolf etc.
@@ -535,7 +538,8 @@ async def save_character_data(conn: aiosqlite.Connection, character_id: int, dat
     valid_columns = [
         "location_id", "hp", "essence", "xp_pool", "xp_total", "level",
         "stats", "skills", "description", "sex", "race_id", "class_id",
-        "max_hp", "max_essence", "inventory", "equipment", "coinage"
+        "max_hp", "max_essence", "inventory", "equipment", "coinage",
+        "unspent_skill_points", "unspent_attribute_points",
         # Add others as needed, remove ones that shouldn't be updated here
     ]
 

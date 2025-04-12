@@ -42,6 +42,8 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "attack": combat_cmds.cmd_attack,
     "a": combat_cmds.cmd_attack, # Alias
     "kill": combat_cmds.cmd_attack, # Alias
+    "advance": general_cmds.cmd_advance, # <<< ADD THIS
+    "level": general_cmds.cmd_advance,   # <<< Optional alias
 
     # Movement Commands (Pass direction directly to the handler)
     "north": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "north"),

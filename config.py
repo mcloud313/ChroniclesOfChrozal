@@ -11,5 +11,6 @@ ENCODING = "utf-8"  # Encoding for network communication
 # --- Leveling & XP ---
 MAX_LEVEL = 100 # Maximum attainable character level
 XP_BASE = 1000 # Base XP for calculation (XP for Level 2)
-XP_EXPONENT = 2.5 # Exponent for level curve (e.g. 1.5=Shallow, 2.0 quadratic, 2,5=STEEPER)
+XP_EXPONENT = 2.0 # Exponent for level curve (e.g. 1.5=Shallow, 2.0 quadratic, 2,5=STEEPER)
 XP_ABSORB_RATE_PER_SEC = 1
+SKILL_POINTS_PER_LEVEL = 5
