@@ -2,6 +2,7 @@
 """
 Commands related to items, inventory, and equipment.
 """
+import math
 import logging
 from typing import TYPE_CHECKING, Optional, Dict
 import json # Needed for parsing item stats

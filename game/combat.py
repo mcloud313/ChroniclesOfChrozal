@@ -162,9 +162,7 @@ async def award_xp(attacker: 'Character', defeated_mob: 'Mob'):
     # TODO: Distribute XP among party members later
 
 # --- Main Combat Resolution ---
-async def resolve_physical_attack(
-    attacker: Union['Character', 'Mob'],
-    target: Union['Character', 'Mob'],
+async def resolve_physical_attack(attacker: Union['Character', 'Mob'], target: Union['Character', 'Mob'],
     # Use the more generic name 'attack_source' to handle mob attack dicts
     attack_source: Optional[Union[Item, Dict[str, Any]]],
     world: 'World' 
@@ -223,10 +221,10 @@ async def resolve_physical_attack(
         else:
             # Character unarmed attack
             attk_name = "punch"
-            wpn_speed = 2.0
+            wpn_speed = 1.0
             wpn_base_dmg = math.floor(attacker.might_mod /2)
             wpn_base_dmg = max(0, wpn_base_dmg)
-            wpn_rng_dmg = 3
+            wpn_rng_dmg = 1
             dmg_type = "bludgeon"
             # weapon variable remains None
 
@@ -296,25 +294,38 @@ async def resolve_physical_attack(
     mitigated_damage1 = max(0, pre_mitigation_damage - defense_score)
     final_damage = mitigated_damage1 
 
-    # Define physical types - add others later if needed
+    # Apply Armor Value (AV) for Physical Damage
     physical_damage_types = ["physical", "slash", "pierce", "bludgeon"]
     if dmg_type and dmg_type.lower() in physical_damage_types:
-        target_av = 0
-        if hasattr(target, 'get_total_av'): #Check if target (Char or Mob) has the method
+        base_av = 0
+        effective_av = 0
+        armor_training_rank = 0
+
+        if hasattr(target, 'get_total_av') and hasattr(target, 'get_skill_rank'):
             try:
-                # Call the target's AV calculation method, passing world
-                target_av = target.get_total_av(world)
-            except Exception: #Safety catch
-                log.exception("Error getting AV for target %s", target.name)
+                base_av = target.get_total_av(world) # Get the raw AV from gear
+                if base_av > 0: # Only calculate effective AV if wearing armor
+                    armor_training_rank = target.get_skill_rank("armor training")
+                    # Calculate multiplier: 20% base + 1% per rank, capped at 100%
+                    av_multiplier = min(1.0, 0.20 + (armor_training_rank * 0.01))
+                    effective_av = math.floor(base_av * av_multiplier) # Use effective value
+
+                    log.debug("Applying AV: Dmg %d reduced by Eff.AV %d (BaseAV: %d, AT Rank: %d, Mult: %.2f)",
+                            mitigated_damage1, effective_av, base_av, armor_training_rank, av_multiplier)
+                else:
+                    log.debug("Applying AV: Target has 0 Base AV.") # No AV to apply
+
+            except Exception as e:
+                log.exception("Error getting/calculating AV for target %s: %s", target.name, e)
+                effective_av = 0 # Default to 0 AV on error
+
         else:
-            log.warning("Target %s has no get_total_av method.", target.name)
-        
-        log.debug("Applying AV: Damage %d reduced by AV %d", final_damage, target_av)
-        final_damage = max(0, final_damage - target_av) # Subtract AV
+            log.warning("Target %s missing get_total_av or get_skill_rank method.", target.name)
+            effective_av = 0 # Mobs likely have get_total_av returning 0
+
+        final_damage = max(0, mitigated_damage1 - effective_av) # Subtract Effective AV
 
     # TODO: Add Barrier mitigation for magic later
-    # TODO: Armor Value needs to be limited based off Armor Training Skill
-
     # 8. Apply Damage (remains the same)
     target.hp -= final_damage
     target.hp = max(0, target.hp)
@@ -348,8 +359,18 @@ async def resolve_physical_attack(
     if isinstance(target, Character): await target.send(dmg_msg_target)
     if attacker.location: await attacker.location.broadcast(f"\r\n{dmg_msg_room}\r\n", exclude={attacker, target})
 
-    # 10. Apply Roundtime to Attacker (uses local wpn_speed)
-    attacker.roundtime = wpn_speed
+    # 10. Apply Roundtime to Attacker (uses local wpn_speed and applies armor penalty
+    base_rt = wpn_speed # Base RT from weapon/attack
+    rt_penalty = 0.0
+    if isinstance(attacker, Character): # Only characters wear armor for now
+        total_av = attacker.get_total_av(world)
+        rt_penalty = math.floor(total_av / 20) * 1.0
+    final_rt = base_rt + rt_penalty
+    attacker.roundtime = final_rt
+    log.debug("Applied %.1fs roundtime to %s for attack (Base: %.1f, AV Pen: %.1f)",
+            final_rt, attacker.name, base_rt, rt_penalty)
+    if rt_penalty > 0 and isinstance(attacker, Character):
+        await attacker.send(f"Your armor slightly hinders your attack (+{rt_penalty:.1f}s).")
 
     # 11. Check Defeat (passes world correctly now)
     if target.hp <= 0: # Use <= 0 for safety

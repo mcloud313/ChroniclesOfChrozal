@@ -2,7 +2,7 @@
 """
 Movement commands.
 """
-
+import math
 import logging
 from typing import TYPE_CHECKING, Optional, Dict, Any
 from .. import utils
@@ -53,7 +53,13 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
     look_string = target_room.get_look_string(character)
     await character.send(look_string)
 
-    character.roundtime = 1.0
+    base_rt = 1.0 # Base movement roundtime
+    total_av = character.get_total_av(world)
+    rt_penalty = math.floor(total_av / 20) * 1.0 # +1.0s RT per 20 AV
+    final_rt = base_rt + rt_penalty
+    character.roundtime = final_rt
+    if rt_penalty > 0:
+        await character.send(f"Your armor slows your movement (+{rt_penalty:.1f}s).")
 
 # --- Command Function ---
 

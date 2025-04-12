@@ -2,6 +2,7 @@
 """
 General player commands like look, say, quit, who help.
 """
+import math
 import logging
 import config
 from typing import TYPE_CHECKING
