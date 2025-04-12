@@ -11,6 +11,7 @@ import hashlib # For password hashing (example)
 import asyncio
 import aiosqlite
 import config
+import math
 from . import utils
 
 # Assuming config.py exists in the parent directory
@@ -180,6 +181,7 @@ async def init_db(conn: aiosqlite.Connection):
             max_hp INTEGER DEFAULT 50,
             essence INTEGER DEFAULT 20,
             max_essence INTEGER DEFAULT 20,
+            spiritual_tether INTEGER,
             xp_pool INTEGER DEFAULT 0, -- Unabsorbed XP
             xp_total INTEGER DEFAULT 0, -- XP accumulated within current level
             unspent_skill_points INTEGER NOT NULL DEFAULT 0,
@@ -597,57 +599,37 @@ async def load_mob_template(conn: aiosqlite.Connection, template_id: int) -> aio
     return await fetch_one(conn, "SELECT * FROM mob_templates WHERE id = ?", (template_id,))
 
 async def create_character(
-    conn: aiosqlite.Connection,
-    player_id: int,
-    first_name: str,
-    last_name: str,
-    sex: str,
-    race_id: int, 
-    class_id: int,
-    stats_json: str, 
-    skills_json: str,
-    description: str,
-    hp: int, 
-    max_hp: int,
-    essence: int,
-    max_essence: int,
-    location_id: int = 1 # Default location
+    conn: aiosqlite.Connection, player_id: int, first_name: str, last_name: str, sex: str,
+    race_id: int, class_id: int, stats_json: str, skills_json: str, description: str,
+    hp: int, max_hp: int, essence: int, max_essence: int, location_id: int = 1
 ) -> int | None:
-    """
-    Creates a new character record in the database.
-
-    Args:
-        conn: Active aiosqlite connection.
-        player_id: ID of the owning player account.
-        first_name: Character's first name.
-        last_name: Character's last name.
-        sex: Character's chosen sex ('Male', 'Female', 'They/Them', etc.)
-        race_id: ID of the character's race.
-        class_id: ID of the character's class.
-        stats_json: JSON string representing base stats.
-        skills_json: JSON string representing initial skills.
-        description: Generated character description string.
-        hp: Initial HP value.
-        max_hp: Initial Max HP value.
-        essence: Initial Essence value.
-        max_essence: Initial Max Essence value.
-        location_id: Starting location ID (defaults to 1).
-
-    Returns:
-        The dbid of the newly created character, or None on error.
-    """
+    """ Creates a new character record, calculating initial spiritual tether. """
     query = """
         INSERT INTO characters (
-        player_id, first_name, last_name, sex, race_id, class_id,
-        stats, skills, description, hp, max_hp, essence, max_essence,
-        location_id
-        -- level, xp_pool, xp_total use DB defaults
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            player_id, first_name, last_name, sex, race_id, class_id,
+            stats, skills, description, hp, max_hp, essence, max_essence,
+            location_id, spiritual_tether -- Added tether to insert
+            -- level, xp_pool, xp_total use DB defaults (1, 0, 0)
+            -- points use DB defaults (0, 0) - awarded after creation by handler
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) -- Added placeholder for tether
     """
+    # --- Calculate initial tether ---
+    initial_tether = 1 # Default minimum
+    try:
+        stats_dict = json.loads(stats_json or '{}')
+        aura = stats_dict.get("aura", 10)
+        aura_mod = utils.calculate_modifier(aura)
+        # Level is 1 initially, floor(1/4) = 0
+        initial_tether = max(1, aura_mod + math.floor(1 / 4))
+        initial_tether = max(1, aura_mod) # Simplified for level 1
+    except Exception as e:
+        log.error("Error calculating initial tether for new character: %s", e)
+        initial_tether = 1 # Fallback to minimum
+
     params = (
         player_id, first_name, last_name, sex, race_id, class_id,
         stats_json, skills_json, description, hp, max_hp, essence, max_essence,
-        location_id
+        location_id, initial_tether # Added tether value
     )
 
     try:
@@ -662,6 +644,7 @@ async def create_character(
             log.error("Character creation for player %s failed, execute_query returned %s",
             player_id, new_char_id)
             return None
+        
     except Exception as e:
         # Catch potential errors during creation (like UNIQUE constraint violation maybe?)
         log.exception("Exception during character creation for player %s: %s", player_id, e, exc_info=True)

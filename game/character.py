@@ -3,6 +3,8 @@
 Represents a character in the game world, controlled by a player account.
 Holds in-game state, attributes, and connection information.
 """
+import math
+import time
 import random
 import asyncio
 import json
@@ -126,6 +128,9 @@ class Character:
         self.xp_total: int = db_data['xp_total'] # Current level progress
         self.unspent_skill_points: int = db_data['unspent_skill_points']
         self.unspent_attribute_points: int = db_data['unspent_attribute_points']
+        self.spiritual_tether: int = db_data.get('spiritual_tether', 1) # Load, default 1
+        self.status: str = "ALIVE" # Start alive when loaded/created
+        self.death_timer_ends_at: Optional[float] = None # Timer not active initially
         self.description: str = db_data['description']
         self.status: str = 'ALIVE' # Possible values: ALIVE, DYING, DEAD
         self.target: Optional[Union['Character', 'Mob']] = None # Who are we fighting? Needs Mob import below
@@ -313,6 +318,7 @@ class Character:
             "level": self.level,
             "unspent_skill_points": self.unspent_skill_points,
             "unspent_attribute_points": self.unspent_attribute_points,
+            "spiritual_tehter": self.spiritual_tether,
             "stats": json.dumps(self.stats), # Save current stats
             "skills": json.dumps(self.skills), # Save current skills
             "inventory": json.dumps(self.inventory), # Save list of template IDs
@@ -352,6 +358,19 @@ class Character:
             # Catch any other unexpected errors during the save process
             # Log the actual exception object 'e'
             log.exception("Unexpected error saving character %s (ID: %s): %s", self.name, self.dbid, e, exc_info=True)
+
+    def respawn(self):
+        """Resets character state after death"""
+        log.info("RESPAWN: Character %s (ID %s) is respawning.", self.name, self.dbid)
+        self.hp = self.max_hp
+        self.essence = self.max_essence
+        self.status = 'ALIVE'
+        self.target = None
+        self.is_fighting = False
+        self.death_timer_ends_at = None
+        self.roundtime = 0.0
+        # Optionally add a short respawn sickness roundtime?
+
 
     def update_location(self, new_location: Optional['Room']):
         """

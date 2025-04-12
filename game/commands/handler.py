@@ -138,6 +138,15 @@ async def process_command(character: Character, world: World, db_conn: aiosqlite
     if not command_verb:
         return True # Ignore empty input, keep connection active
     
+    if character.status == "DYING":
+        await character.send("You are dying and cannot act!")
+        return True
+    elif character.status == "DEAD":
+        # Allow specific commands later? Like 'PRAY' RESPAWN?
+        if command_verb not in ["quit"]:
+            await character.send("You are dead and cannot do that.")
+            return True
+
     if character.roundtime > 0:
         # Provide feedback with remaining time, formatted to one decimal place
         await character.send(f"You are still recovering for {character.roundtime:.1f} seconds.")

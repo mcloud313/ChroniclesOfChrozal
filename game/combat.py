@@ -89,8 +89,12 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
             target.status = "DYING"
             target.is_fighting = False
             target.target = None
-            # TODO: Implement death timer start later (Phase 4)
-            # target.death_timer_ends_at = time.monotonic() + target.vit_mod # Example
+            # Calculate death timer based on Vitality score
+            vit_score = target.stats.get('vitality', 10)
+            timer_duration = float(vit_score) * 2 # Example: 1 second per vit point
+            target.death_timer_ends_at = time.monotonic() + timer_duration
+
+            log.info("Character %s is now DYING (Timer: %.1f s).", target.name, timer_duration)
 
             # Drop Coinage (calculate 10%)
             coinage_to_drop = int(target.coinage * 0.10)

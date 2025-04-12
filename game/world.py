@@ -241,6 +241,88 @@ class World:
             except Exception:
                 log.exception("Error checking respawns in Room %d", room.dbid, exc_info=True)
 
+    async def update_death_timers(self, dt: float):
+        """
+        Called by the ticker to check DYING charcters and transition them to DEAD.
+        """
+        current_time = time.monotonic()
+        # Iterate over a copy as respawn modifies the active list
+        dying_chars = [char for char in self.get_active_characters_list() if char.status == 'DYING']
+
+        if not dying_chars: return
+
+        log.debug("World: Checking death timers for %d characters...", len(dying_chars))
+
+        for char in dying_chars:
+            if char.death_timer_ends_at is None:
+                log.error("Character %s is DYING but has no death_timer_ends_at set!", char.name)
+                # Set a default timer or move to DEAD? Let's move to DEAD for safety.
+                char.status = "DEAD"
+                char.death_timer_ends_at = None # Clear just in case
+                log.info("Character %s moved to DEAD state due to missing timer.", char.name)
+                await self.respawn_character(char) # Trigger respawn immediately
+                continue
+
+            if current_time >= char.death_timer_ends_at:
+                log.info("Character %s death timer expired.", char.name)
+                char.status = "DEAD"
+                char.death_timer_ends_at = None # Clear timer
+
+                # Decrement Spiritual Tether
+                try:
+                    initial_tether = char.spiritual_tether
+                    char.spiritual_tether = max(0, initial_tether - 1)
+                    log.info("Character %s tether decreased from %d to %d.",
+                            char.name, initial_tether, char.spiritual_tether)
+                    await char.send("{RYour connection to the living world weakens...{x")
+                    
+                    # Check for permanent death (V1 just logs)
+                    if char.spiritual_tether <= 0:
+                        log.critical("!!! PERMANENT DEATH: Character %s (%s, ID: %s) has reached 0 spiritual tether!",
+                                    char.name, getattr(char.player, 'username', '?'), char.dbid)
+                        # TODO: Implement actual permadeath later (delete char? special state?)
+                        await char.send("{R*** Your soul feels irrevocably severed! ***{x") # Color later
+                except Exception:
+                    log.exception("Error decrementing spiritual tether for %s:", char.name, exc_info=True)
+
+                await self.respawn_character(char)
+
+    async def respawn_character(self, character: Character):
+        """Handles moving character to respawn point and resetting state."""
+        log.info("Processing respawn for %s...", character.name)
+
+        # 1. Determine Respawn Location (Room 1 for V1)
+        respawn_room_id = 1 # TODO: Make configurable or based on player choices later
+        respawn_room = self.get_room(respawn_room_id)
+
+        if not respawn_room:
+            log.critical("!!! Respawn Room ID %d not found! Cannot respawn %s.", respawn_room_id, character.name)
+            # What to do here? Leave them dead? Disconnect? Log critical error.
+            await character.send("Your soul cannot find its way back... (Respawn room missing!)")
+            # Maybe try default room 1 again? Assume room 1 must exist.
+            respawn_room = self.get_room(1)
+            if not respawn_room: return # Give up if Room 1 is missing
+
+        # 2. Remove from current location (if any)
+        old_room = character.location
+        if old_room and old_room != respawn_room:
+            log.debug("Removing %s from old room %d before respawn.", character.name, old_room.dbid)
+            # Announce departure? "The body of X fades away..."
+            # await old_room.broadcast(f"\r\n{character.name}'s form fades away...\r\n", exclude={character})
+            old_room.remove_character(character)
+
+        # 3. Move to Respawn Room & Reset State
+        character.update_location(respawn_room)
+        respawn_room.add_character(character)
+        character.respawn() # Calls method on Character object to reset vitals/status
+
+        # 4. Notify Player
+        await character.send("{WYou feel yourself drawn back to the mortal plane...{x") # Color later
+        # Send look of the respawn room
+        look_string = respawn_room.get_look_string(character)
+        await character.send(look_string)
+        # Optionally broadcast arrival in respawn room? Might be spammy.
+
     async def update_xp_absorption(self, dt: float):
         """
         Called by the game ticker to process XP pool absorption for character in nodes.
