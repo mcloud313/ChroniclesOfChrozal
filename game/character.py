@@ -128,7 +128,7 @@ class Character:
         self.xp_total: int = db_data['xp_total'] # Current level progress
         self.unspent_skill_points: int = db_data['unspent_skill_points']
         self.unspent_attribute_points: int = db_data['unspent_attribute_points']
-        self.spiritual_tether: int = db_data.get('spiritual_tether', 1) # Load, default 1
+        self.spiritual_tether: int = db_data['spiritual_tether']
         self.status: str = "ALIVE" # Start alive when loaded/created
         self.death_timer_ends_at: Optional[float] = None # Timer not active initially
         self.description: str = db_data['description']

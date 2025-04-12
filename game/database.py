@@ -34,6 +34,13 @@ if not log.handlers:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
+# Define some constants for key room IDs for easier linking
+TAVERN_ID = 10
+GRAVEYARD_ID = 15
+ARMORY_ID = 18
+BEACH_ENTRANCE_ID = 25 # Room in town leading to beach
+BEACH_START_ID = 100 # First room on the beach
+
 # --- Core Async Database Functions
 async def connect_db(db_path: str = DATABASE_PATH) -> aiosqlite.Connection | None:
     """
@@ -69,11 +76,13 @@ async def connect_db(db_path: str = DATABASE_PATH) -> aiosqlite.Connection | Non
 
 async def init_db(conn: aiosqlite.Connection):
     """
-    Initializes the database schema asynchronously if tables don't exist.
-    Creates areas, players, rooms, characters tables and default entries.
+    Initializes the database schema AND populates it with default + test data.
+    Assumes it's potentially running on an empty DB file.
     Args:
         conn: An active aosqlite.Connection object.
     """
+    log.info("--- Running Database Initialization and Seeding ---")
+    # --- Phase 1: Schema Creation ---
     try:
         # --- Create areas table ---
         await conn.execute(
@@ -163,6 +172,28 @@ async def init_db(conn: aiosqlite.Connection):
             )
             """
         )
+        log.info("Checked/Created items_templates table.")
+
+        # --- Create mob_templates table ---
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mob_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                description TEXT DEFAULT 'A creature.',
+                level INTEGER NOT NULL DEFAULT 1,
+                stats TEXT DEFAULT '{}', -- JSON: {might: 10, vit: 10, agi: 10...}
+                max_hp INTEGER NOT NULL DEFAULT 10,
+                attacks TEXT DEFAULT '[]', -- JSON: [{"name": "hit", "damage_base": 1, "damage_rng": 1, "speed": 2.0}]
+                loot TEXT DEFAULT '{}', -- JSON: {"coinage_max": 5, "items": [{"template_id": 7, "chance": 0.1}]}
+                flags TEXT DEFAULT '[]', -- JSON: ["AGGRESSIVE", "STATIONARY"]
+                respawn_delay_seconds INTEGER DEFAULT 300, -- Time to respawn after death
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                -- Add faction, behaviors etc. later
+            )
+            """
+        )
+        log.info("Checked/Created 'mob_templates' table.")
 
         # --- Create characters table ---
         await conn.execute(
@@ -204,12 +235,13 @@ async def init_db(conn: aiosqlite.Connection):
         )
         log.info("Checked/Created 'characters' table.")
 
-        # --- Populate Default Races ---
-        default_races = [
-            (1, "Chrozalin", "Versatile and adaptable."),
-            (2, "Dwarf", "Sturdy and resilient."),
-            (3, "Elf", "Graceful and long-lived."),
-            (4, "Yan-ter", "Wise and patient turtlefolk.")
+        # --- Phase 2: Populate Base Lookups (Races, Classes) ---
+        log.info("Step 2: Populating Races and Classes...")
+        default_races = [ # Use 'Chrozalin' now based on feedback
+            (1, "Chrozalin", "Versatile humans, common throughout the lands."),
+            (2, "Dwarf", "Stout and hardy mountain folk."),
+            (3, "Elf", "Graceful, long-lived forest dwellers."),
+            (4, "Yan-tar", "Ancient, wise turtle-like people.")
         ]
         try:
             # Use INSERT OR IGNORE to avoid errors if they already exist
@@ -220,10 +252,10 @@ async def init_db(conn: aiosqlite.Connection):
 
         # --- Populate Default Classes ---
         default_classes = [
-            (1, "Warrior", "Master of martial combat."),
-            (2, "Mage", "Wielder of arcane energies."),
-            (3, "Cleric", "Agent of divine power."),
-            (4, "Rogue", "Master of stealth and skill.")
+            (1, "Warrior", "Master of weapons and armor."),
+            (2, "Mage", "Controller of arcane energies."),
+            (3, "Cleric", "Channeler of divine power."),
+            (4, "Rogue", "Agent of stealth and skill.")
         ]
         try:
             await conn.executemany("INSERT OR IGNORE INTO classes(id, name, description) VALUES(?, ?, ?)", default_classes)
@@ -231,57 +263,26 @@ async def init_db(conn: aiosqlite.Connection):
         except aiosqlite.Error as e:
             log.error("Failed to populate default classes: %s", e)
 
-        # --- Create mob_templates table ---
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS mob_templates (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE NOT NULL,
-                description TEXT DEFAULT 'A creature.',
-                level INTEGER NOT NULL DEFAULT 1,
-                stats TEXT DEFAULT '{}', -- JSON: {might: 10, vit: 10, agi: 10...}
-                max_hp INTEGER NOT NULL DEFAULT 10,
-                attacks TEXT DEFAULT '[]', -- JSON: [{"name": "hit", "damage_base": 1, "damage_rng": 1, "speed": 2.0}]
-                loot TEXT DEFAULT '{}', -- JSON: {"coinage_max": 5, "items": [{"template_id": 7, "chance": 0.1}]}
-                flags TEXT DEFAULT '[]', -- JSON: ["AGGRESSIVE", "STATIONARY"]
-                respawn_delay_seconds INTEGER DEFAULT 300, -- Time to respawn after death
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                -- Add faction, behaviors etc. later
-            )
-            """
-        )
-        log.info("Checked/Created 'mob_templates' table.")
-        # --- ^ ^ ^ ---
-
-        # --- V V V Populate Default Item Templates V V V ---
+        # --- Phase 3: Populate Item Templates ---
+        log.info("Step 3: Populating Item Templates...")
         default_items = [
-            (1, "a rusty dagger", "A simple dagger, pitted with rust.", "WEAPON",
-            json.dumps({"wear_location": "WIELD_MAIN", "damage_base": 2, "damage_rng": 4, "speed": 1.5, "weight": 1, "value": 5}),
-            json.dumps([]), "pierce"),
-            (2, "a cloth shirt", "A basic shirt made of rough cloth.", "ARMOR",
-            json.dumps({"wear_location": "TORSO", "armor": 1, "weight": 1, "value": 10}),
-            json.dumps([]), None),
-            (3, "a small pouch", "A simple leather pouch. Doesn't hold much.", "GENERAL", # Changed type from CONTAINER for V1
-            json.dumps({"weight": 0, "value": 2}),
-            json.dumps([]), None),
-            (4, "heavy work boots", "Sturdy boots, scuffed from use.", "ARMOR",
-            json.dumps({"wear_location": "FEET", "armor": 1, "speed": 0.2, "weight": 3, "value": 20}),
-            json.dumps([]), None),
-            (5, "an iron ring", "A plain band of iron.", "ARMOR",
-            json.dumps({"wear_location": ["FINGER_L", "FINGER_R"], "armor": 0, "weight": 0, "value": 10}),
-            json.dumps([]), None),
-            (6, "a wooden shield", "A simple round shield made of wood.", "SHIELD", # Changed type
-            json.dumps({"wear_location": "WIELD_OFF", "armor": 2, "speed": 0.5, "weight": 5, "value": 30}),
-            json.dumps([]), None),
-            (7, "stale bread", "Looks barely edible.", "FOOD", # Changed type from CONSUMABLE
-            json.dumps({"weight": 0, "value": 1}), # Add consume effect later {effect: 'heal_hp', amount: 2} ?
-            json.dumps([]), None),
-            (8, "cloth trousers", "Simple trousers made of the same rough cloth as the shirt.", "ARMOR",
-            json.dumps({"wear_location": "LEGS", "armor": 1, "weight": 1, "value": 10}), # AV 1
-            json.dumps([]), None),
-            (9, "a leather cap", "A worn leather cap offering minimal protection.", "ARMOR",
-            json.dumps({"wear_location": "HEAD", "armor": 1, "weight": 1, "value": 15}), # AV 1
-            json.dumps([]), None),
+            (1, "a rusty dagger", "Simple, pitted.", "WEAPON", json.dumps({"wear_location": "WIELD_MAIN", "damage_base": 2, "damage_rng": 4, "speed": 1.5, "weight": 1, "value": 5}), json.dumps([]), "pierce"),
+            (2, "a cloth shirt", "Basic protection.", "ARMOR", json.dumps({"wear_location": "TORSO", "armor": 1, "weight": 1, "value": 10}), json.dumps([]), None),
+            (3, "a small pouch", "Holds small items.", "GENERAL", json.dumps({"weight": 0, "value": 2}), json.dumps([]), None), # Type GENERAL now
+            (4, "heavy work boots", "Scuffed but sturdy.", "ARMOR", json.dumps({"wear_location": "FEET", "armor": 1, "speed": 0.2, "weight": 3, "value": 20}), json.dumps([]), None),
+            (5, "an iron ring", "A plain band.", "ARMOR", json.dumps({"wear_location": ["FINGER_L", "FINGER_R"], "armor": 0, "weight": 0, "value": 10}), json.dumps([]), None),
+            (6, "a wooden shield", "Offers basic defense.", "SHIELD", json.dumps({"wear_location": "WIELD_OFF", "armor": 2, "block_chance": 0.1, "speed": 0.5, "weight": 5, "value": 30}), json.dumps([]), None), # Added block_chance
+            (7, "stale bread", "Looks barely edible.", "FOOD", json.dumps({"weight": 0, "value": 1}), json.dumps([]), None),
+            (8, "cloth trousers", "Simple leg coverings.", "ARMOR", json.dumps({"wear_location": "LEGS", "armor": 1, "weight": 1, "value": 10}), json.dumps([]), None),
+            (9, "a leather cap", "Minimal head protection.", "ARMOR", json.dumps({"wear_location": "HEAD", "armor": 1, "weight": 1, "value": 15}), json.dumps([]), None),
+            (10, "a short sword", "A standard sidearm.", "WEAPON", json.dumps({"wear_location": "WIELD_MAIN", "damage_base": 3, "damage_rng": 6, "speed": 2.0, "weight": 3, "value": 25}), json.dumps([]), "slash"),
+            (11, "leather gloves", "Protects the hands.", "ARMOR", json.dumps({"wear_location": "HANDS", "armor": 1, "weight": 0, "value": 12}), json.dumps([]), None),
+            (12, "a healing salve", "A soothing, minty balm.", "CONSUMABLE", json.dumps({"weight": 0, "value": 25, "effect": "heal_hp", "amount": 20}), json.dumps([]), None), # Example potion
+            (13, "a silver locket", "A simple silver locket.", "ARMOR", json.dumps({"wear_location": "NECK", "armor": 0, "weight": 0, "value": 50}), json.dumps([]), None),
+            (14, "a sturdy backpack", "Can hold many things.", "GENERAL", json.dumps({"weight": 2, "value": 30}), json.dumps(["CONTAINER"]), None), # Example container flag
+            (15, "a waterskin", "Holds water.", "DRINK", json.dumps({"weight": 1, "value": 5, "effect": "quench_thirst"}), json.dumps([]), None), # Example drink
+            (16, "a ruby gemstone", "A glittering red gem.", "TREASURE", json.dumps({"weight": 0, "value": 100}), json.dumps([]), None), # Example treasure
+            # Add 10-15 more varied items...
         ]
         try:
             # Use INSERT OR IGNORE to avoid errors if items somehow already exist
@@ -291,108 +292,142 @@ async def init_db(conn: aiosqlite.Connection):
                 VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 default_items
             )
-            log.info("Checked/Populated default item templates.")
+            log.info("Item Templates populated.")
         except aiosqlite.Error as e:
             log.error("Failed to populate default item templates: %s", e)
-        # --- ^ ^ ^ End Populate Items ^ ^ ^ ---
+
+        # --- Phase 4: Populate Mob Templates ---
+        log.info("Step 4: Populating Mob Templates...")
+        # Add templates for Crab, Sprite, Turtle, King Turtle for the beach
+        default_mobs = [
+            # ID 1: Giant Rat (Keep for testing)
+            (1, "a giant rat", "...", 1, json.dumps({"might": 5, "vitality": 5, "agility": 8}), 8, json.dumps([{"name": "bite", "damage_base": 3, "damage_rng": 3, "speed": 2.5}]), json.dumps({"coinage_max": 3, "items": [{"template_id": 7, "chance": 0.05}]}), json.dumps([]), 60),
+            # Beach Mobs (IDs 2-5)
+            (2, "a giant crab", "Its claws click menacingly.", 2, json.dumps({"might": 8, "vitality": 10, "agility": 6}), 15, json.dumps([{"name": "pinch", "damage_base": 2, "damage_rng": 5, "speed": 3.0}]), json.dumps({"coinage_max": 5, "items": []}), json.dumps(["AGGRESSIVE"]), 90),
+            (3, "a mischievous sea sprite", "It flits around, trailing seawater.", 3, json.dumps({"might": 4, "vitality": 6, "agility": 12, "intellect": 10}), 12, json.dumps([{"name": "water jet", "damage_base": 1, "damage_rng": 4, "speed": 2.0, "damage_type": "cold"}]), json.dumps({"coinage_max": 8, "items": [{"template_id": 16, "chance": 0.02}]}), json.dumps(["AGGRESSIVE"]), 120),
+            (4, "a giant snapping turtle", "Its beak looks powerful enough to snap bone.", 4, json.dumps({"might": 10, "vitality": 14, "agility": 4}), 25, json.dumps([{"name": "snap", "damage_base": 4, "damage_rng": 6, "speed": 4.0}]), json.dumps({"coinage_max": 15, "items": []}), json.dumps(["AGGRESSIVE"]), 180),
+            (5, "a HUGE king snapping turtle", "Ancient and immense, barnacles coat its shell.", 6, json.dumps({"might": 15, "vitality": 20, "agility": 3}), 50, json.dumps([{"name": "CRUSHING bite", "damage_base": 6, "damage_rng": 8, "speed": 5.0}]), json.dumps({"coinage_max": 50, "items": [{"template_id": 6, "chance": 0.1}]}), json.dumps(["AGGRESSIVE"]), 600), # Elite example
+        ]
+        await conn.executemany(
+            """INSERT OR IGNORE INTO mob_templates (id, name, description, level, stats, max_hp, attacks, loot, flags, respawn_delay_seconds) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", default_mobs
+        )
+        log.info("Mob Templates populated.")
+
+        # --- Phase 5: Populate World Geometry (Areas, Rooms) ---
 
         # --- Create Default Area and Room if they don't exist ---
-        # Check for default area
-        async with conn.execute("SELECT COUNT(*) FROM areas WHERE id = 1") as cursor:
-            area_exists = (await cursor.fetchone())[0]
-        if not area_exists:
-            log.info("Default Area #1 not found, creating it.")
-            await conn.execute(
-                "INSERT INTO areas (id, name, description) VALUES (?, ?, ?)",
-                (1, "The Genesis Area", "A placeholder area for lonely rooms.")
-            )
-            log.info("Default area #1 created.")
-
-        # Check for default room
-        async with conn.execute("SELECT COUNT(*) FROM rooms WHERE id = 1") as cursor:
-            room1_exists = (await cursor.fetchone())[0]
-        if not room1_exists:
-            log.info("Default Room #1 not found, creating it.")
-            exits_room1 = json.dumps({"north": 2, "northwest": 3})
-            # --- V V V Add "NODE" flag V V V ---
-            flags_room1 = json.dumps(["NODE"]) # Mark as a node
-            await conn.execute(
-                """INSERT INTO rooms (id, area_id, name, description, exits, flags, spawners)
-                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (1, 1, "The Void", "...", exits_room1, flags_room1, json.dumps({})) # Use flags_room1
-            )
-            log.info("Default Room #1 created (NODE).") # Update log
-
-        # *** NEW: Room 2 ("A Dusty Trail") ***
-        async with conn.execute("SELECT COUNT(*) FROM rooms WHERE id = 2") as cursor:
-            room2_exists = (await cursor.fetchone())[0]
-        if not room2_exists:
-            log.info("Default Room #2 not found, creating it.")
-            exits_room2 = json.dumps({"south": 1, "hole": 4})
-            # Add a spawner for mob template #1 (e.g., a rat), max 1 present
-            spawners_room2 = json.dumps({ "1": {"max_present": 1} }) # Spawn Mob Template 1
-            await conn.execute(
-                """INSERT INTO rooms (id, area_id, name, description, exits, flags, spawners)
-                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (2, 1, "A Dusty Trail", "A dusty trail stretches before you. The void lies south. There is a dark hole in the ground here.", exits_room2, json.dumps(["outdoors"]), spawners_room2) 
-            )
-            log.info("Default Room #2 created with exit south.")
-
-        # *** NEW: Room 3 ("A Windy Ridge") *** - Exits: Southeast (to R1)
-        async with conn.execute("SELECT COUNT(*) FROM rooms WHERE id = 3") as cursor:
-            room3_exists = (await cursor.fetchone())[0]
-        if not room3_exists:
-            log.info("Default Room #3 not found, creating it.")
-            exits_room3 = json.dumps({"southeast": 1})
-            await conn.execute(
-                """INSERT INTO rooms (id, area_id, name, description, exits, flags)
-                    VALUES (?, ?, ?, ?, ?, ?)""",
-                (3, 1, "A Windy Ridge", "A blustery wind whips around you on this rocky ridge. A path leads back southeast.", exits_room3, json.dumps(["outdoors", "windy"]))
-            )
-            log.info("Default Room #3 created.")
-
-        # *** NEW: Room 4 ("A Damp Cave") *** - Exits: Climb Up (to R2)
-        async with conn.execute("SELECT COUNT(*) FROM rooms WHERE id = 4") as cursor:
-            room4_exists = (await cursor.fetchone())[0]
-        if not room4_exists:
-            log.info("Default Room #4 not found, creating it.")
-            # --- V V V SPECIAL EXIT NAME V V V ---
-            exits_room4 = json.dumps({"climb up": 2})
-            await conn.execute(
-                """INSERT INTO rooms (id, area_id, name, description, exits, flags)
-                    VALUES (?, ?, ?, ?, ?, ?)""",
-                (4, 1, "A Damp Cave", "Water drips steadily in this small, dark cave. The only way out seems to be climbing up the hole you fell through.", exits_room4, json.dumps(["indoors", "dark", "wet"]))
-            )
-            log.info("Default Room #4 created.")
-
-        default_mobs = [
-            (1, "a giant rat", "A rodent of unusual size, its eyes gleam.", 1,
-            json.dumps({"might": 5, "vitality": 5, "agility": 8}), 8, # stats, max_hp
-            json.dumps([{"name": "bite", "damage_base": 2, "damage_rng": 4, "speed": 2.5}]), # attacks
-            json.dumps({"coinage_max": 3, "items": [{"template_id": 7, "chance": 0.05}]}), # loot (bread)
-            json.dumps([]), 60), # flags (empty), respawn_delay
-            # Add more mobs: Goblin, Wolf etc.
+        default_areas = [
+            (1, "The Genesis Area", "Void and testing grounds."),
+            (2, "Seaside Town of Haven", "A bustling port town."),
+            (3, "Sandy Beach", "The coastline near Haven.")
         ]
-        try:
-            await conn.executemany(
-                """INSERT OR IGNORE INTO mob_templates
-                (id, name, description, level, stats, max_hp, attacks, loot, flags, respawn_delay_seconds)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                default_mobs
-            )
-            log.info("Checked/Populated default mob templates.")
-        except aiosqlite.Error as e:
-            log.error("Failed to populate default mob templates: %s", e)
+        await conn.executemany("INSERT OR IGNORE INTO areas (id, name, description) VALUES (?, ?, ?)", default_areas)
+
+        # Define Rooms (ID, AreaID, Name, Desc, Exits JSON, Flags JSON, Spawners JSON)
+        default_rooms = [
+            # Genesis Area
+            (1, 1, "The Void", "A featureless void. An exit shimmers to the north.", json.dumps({"north": TAVERN_ID}), json.dumps(["NODE"]), '{}'), # Exit to Tavern
+
+            # Seaside Town (Area 2)
+            (TAVERN_ID, 2, "The Salty Siren Tavern", "The air smells of stale ale, sweat, and the sea. A bar stretches along one wall. Exits lead south (to the void) and east (to West Street).", json.dumps({"south": 1, "east": 17}), json.dumps(["NODE", "INDOORS"]), '{}'), # Tavern is NODE, connects to West St
+            (11, 2, "Haven Market Square", "A bustling square with stalls (inactive). Streets lead west (West Street), north (Town Hall), south (Gatehouse), east (Armory), and southeast (Path to Beach).",
+            json.dumps({"west": 17, "north": 13, "south": 14, "east": ARMORY_ID, "southeast": BEACH_ENTRANCE_ID}), # Added SE exit, fixed West exit
+            json.dumps(["OUTDOORS"]), '{}'),
+            (12, 2, "Haven Docks", "The smell of salt and fish is strong here. Piers stretch out over the water. A path leads east.", json.dumps({"east": 17}), json.dumps(["OUTDOORS", "WET"]), '{}'), # Connects to West St
+            (13, 2, "Town Hall Entrance", "A sturdy wooden building. Market Square is south.", json.dumps({"south": 11}), json.dumps(["OUTDOORS"]), '{}'),
+            (14, 2, "South Gatehouse", "Guards stand watch. Market Square is north. The South Gate isn't functional yet.", json.dumps({"north": 11}), json.dumps(["OUTDOORS"]), '{}'),
+            (GRAVEYARD_ID, 2, "Haven Graveyard", "An eerie, quiet space filled with weathered headstones. A rusty gate leads east.", json.dumps({"east": 16}), json.dumps(["OUTDOORS"]), '{}'), # Respawn point
+            (16, 2, "Graveyard Path", "A path between the graveyard (west) and West Street (east).", json.dumps({"west": GRAVEYARD_ID, "east": 17}), json.dumps(["OUTDOORS"]), '{}'),
+            (17, 2, "West Street", "Connects the Docks (west), the Graveyard path (north), the Market Square (east), and the Tavern (south).", json.dumps({"west": 12, "north": 16, "east": 11, "south": TAVERN_ID}), json.dumps(["OUTDOORS"]), '{}'), # Connects multiple points
+            (ARMORY_ID, 2, "Haven Armory", "Racks of basic gear line the walls. Market Square is west.", json.dumps({"west": 11}), json.dumps(["INDOORS"]), '{}'),
+            # --- Add more town rooms as desired here (e.g., IDs 19-24) ---
+            (BEACH_ENTRANCE_ID, 2, "Path to the Beach", "A sandy path leads down towards the sounds of the surf to the east. Market square lies southeast.", json.dumps({"northwest": 11, "east": BEACH_START_ID}), json.dumps(["OUTDOORS"]), '{}'), # Corrected west exit to NW
+
+            # Beach Area (Area 3) - IDs 100+
+            (BEACH_START_ID, 3, "Sandy Shore", "Waves lap gently at the sand. The path back towards town is northwest. The beach stretches north and south.", json.dumps({"northwest": BEACH_ENTRANCE_ID, "north": 101, "south": 102}), json.dumps(["OUTDOORS", "WET"]), json.dumps({"2": {"max_present": 2}})), # Spawns Crabs
+            (101, 3, "North Beach", "More sand and dunes. The shore continues north and south.", json.dumps({"north": 103, "south": BEACH_START_ID}), json.dumps(["OUTDOORS", "WET"]), json.dumps({"2": {"max_present": 1}, "3": {"max_present": 1}})), # Crab, Sprite
+            (102, 3, "South Beach", "Tide pools dot the sand here. The shore continues north and south.", json.dumps({"north": BEACH_START_ID, "south": 104}), json.dumps(["OUTDOORS", "WET"]), json.dumps({"2": {"max_present": 2}, "4": {"max_present": 1}})), # Crabs, Turtle
+            (103, 3, "Rocky Outcropping (N)", "Sharp rocks jut out into the sea. The beach is south, and climbs further north.", json.dumps({"south": 101, "north": 105}), json.dumps(["OUTDOORS", "ROUGH_TERRAIN"]), json.dumps({"3": {"max_present": 2}})), # Sprites
+            (104, 3, "Turtle Nesting Ground (S)", "Depressions in the sand mark turtle nests. The beach is north. Sandy dunes lie south.", json.dumps({"north": 102, "south": 108}), json.dumps(["OUTDOORS", "WET"]), json.dumps({"4": {"max_present": 2}, "5": {"max_present": 1}})), # Turtles + King Turtle
+            (105, 3, "Northern Cliffs Base", "Steep cliffs rise to the north, slick with spray. The rocky beach continues south.", json.dumps({"south": 103, "climb cliff": 106}), json.dumps(["OUTDOORS", "ROUGH_TERRAIN", "WET"]), json.dumps({"3": {"max_present": 2}})), # Sprites, special exit
+            (106, 3, "Northern Cliff Ledge", "A narrow ledge partway up the cliff face. A small cave mouth leads inward. You can try to climb down.", json.dumps({"climb down": 105, "in": 107}), json.dumps(["OUTDOORS", "WINDY"]), '{}'), # Special exits
+            (107, 3, "Small Sea Cave", "A cramped, damp cave smelling of brine and guano. The only exit is out.", json.dumps({"out": 106}), json.dumps(["INDOORS", "DARK", "WET"]), json.dumps({"2": {"max_present": 1}})), # Crab
+            (108, 3, "Sandy Dunes", "Rolling dunes block view further south. The nesting ground is north.", json.dumps({"north": 104, "south": 109}), json.dumps(["OUTDOORS"]), json.dumps({"2": {"max_present": 3}})), # Crabs
+            (109, 3, "Shipwreck Debris", "The shattered remnants of a small ship lie half-buried in the sand. The dunes are north.", json.dumps({"north": 108}), json.dumps(["OUTDOORS", "WET"]), json.dumps({"4": {"max_present": 1}})), # Turtle
+        ]
+        await conn.executemany(
+            """INSERT OR IGNORE INTO rooms (id, area_id, name, description, exits, flags, spawners) VALUES (?, ?, ?, ?, ?, ?, ?)""", default_rooms
+        )
+        log.info("Areas & Rooms populated.")
+
+        # --- Phase 6: Create Test Player Accounts ---
+        log.info("Step 6: Creating Test Player Accounts...")
+        test_players = [
+            ("tester", utils.hash_password("password"), "tester@example.com", 0), # Normal user
+            ("admin", utils.hash_password("password"), "admin@example.com", 1), # Admin user
+        ]
+        # Use direct INSERT assuming clean DB for test accounts
+        await conn.executemany(
+            """INSERT INTO players (username, hashed_password, email, is_admin) VALUES (?, ?, ?, ?)""", test_players
+        )
+        log.info("Test player accounts created.")
+
+        # --- Phase 7: Create Test Characters ---
+        log.info("Step 7: Creating Test Characters...")
+        # Get IDs - assume 1 & 2 if DB was clean
+        async with conn.execute("SELECT id FROM players WHERE username='tester'") as cursor:
+            player1_id = (await cursor.fetchone())[0]
+        async with conn.execute("SELECT id FROM players WHERE username='admin'") as cursor:
+            player2_id = (await cursor.fetchone())[0]
+
+        # Character 1: Testone Testone (Chrozalin Warrior)
+        char1_stats = {"might": 18, "vitality": 16, "agility": 14, "intellect": 10, "aura": 10, "persona": 12}
+        char1_skills = {"bladed weapons": 5, "shield usage": 3}
+        char1_equip = {"WIELD_MAIN": 1, "TORSO": 2, "FEET": 4} # Dagger, Shirt, Boots
+        char1_inv = [3, 7, 16] # Pouch, Bread, Ruby
+        char1_aura_mod = utils.calculate_modifier(char1_stats['aura'])
+        char1_tether = max(1, char1_aura_mod) # Level 1
+
+        # Character 2: Admin Ad Minson (Elf Mage)
+        char2_stats = {"might": 12, "vitality": 14, "agility": 16, "intellect": 18, "aura": 15, "persona": 15}
+        char2_skills = {"spellcraft": 5, "magical devices": 3}
+        char2_equip = {"HEAD": 9} # Leather Cap
+        char2_inv = [12, 5] # Healing Salve, Iron Ring
+        char2_aura_mod = utils.calculate_modifier(char2_stats['aura'])
+        char2_tether = max(1, char2_aura_mod) # Level 1
+
+        test_characters = [
+            (player1_id, "Testone", "Testone", "Male", 1, 1, json.dumps(char1_stats), json.dumps(char1_skills), "A generic Chrozalin.", 18, 18, 5, 5, char1_tether, json.dumps(char1_inv), json.dumps(char1_equip), 50), # P1, F, L, Sex, R_ID, C_ID, Stats, Skills, Desc, HP, MaxHP, Ess, MaxEss, Tether, Inv, Equip, Coinage
+            (player2_id, "Admin", "Adminson", "They/Them", 3, 2, json.dumps(char2_stats), json.dumps(char2_skills), "Looks administratively important.", 10, 10, 15, 15, char2_tether, json.dumps(char2_inv), json.dumps(char2_equip), 1000), # P2, F, L, Sex, R_ID, C_ID, Stats, Skills, Desc, HP, MaxHP, Ess, MaxEss, Tether, Inv, Equip, Coinage
+        ]
+        # Use direct INSERT, assumes clean DB & create_character logic verified elsewhere
+        # Need to calculate HP/MaxHP etc based on Character logic before insert? Yes.
+        # Let's manually calc for seed:
+        # Char1: War(10)+VitMod(3)=13 HP? User has 18/18. Aura(2)+Pers(2)=4 Ess? User has 5/5. Needs recalc based on formula/class base.
+        # Char2: Mage(4)+VitMod(2)=6 HP? User has 10/10. Aura(3)+Pers(3)=6 Ess? User has 15/15.
+        # Okay, need to calc HP/Ess based on the stats assigned here and class bases.
+        # Recalc based on ClassHP + VitMod, ClassEssDieMax + AuraMod + PersMod
+        # Char1 (War): HP = 10 + utils.calculate_modifier(16) = 10 + 3 = 13. Ess = 4 + utils.calculate_modifier(10) + utils.calculate_modifier(12) = 4 + 2 + 2 = 8? No, Class Base Essence is 0 for War -> Ess = 0 + 2 + 2 = 4.
+        # Char2 (Mage): HP = 4 + utils.calculate_modifier(14) = 4 + 2 = 6. Ess = 10 + utils.calculate_modifier(15) + utils.calculate_modifier(15) = 10 + 3 + 3 = 16.
+        # Update test_characters data with these calculated values:
+        test_characters = [
+            (player1_id, "Testone", "Testone", "Male", 1, 1, json.dumps(char1_stats), json.dumps(char1_skills), "A generic Chrozalin.", 13, 13, 4, 4, char1_tether, json.dumps(char1_inv), json.dumps(char1_equip), 50),
+            (player2_id, "Admin", "Adminson", "They/Them", 3, 2, json.dumps(char2_stats), json.dumps(char2_skills), "Looks important.", 6, 6, 16, 16, char2_tether, json.dumps(char2_inv), json.dumps(char2_equip), 1000),
+        ]
+        await conn.executemany(
+            """INSERT INTO characters (player_id, first_name, last_name, sex, race_id, class_id, stats, skills, description, hp, max_hp, essence, max_essence, spiritual_tether, inventory, equipment, coinage, location_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", # Added location_id default override (Tavern)
+            [(c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12], c[13], c[14], c[15], c[16], TAVERN_ID) for c in test_characters] # Start in Tavern
+        )
+        log.info("Test characters created.")
 
         await conn.commit()
-        log.info("Database initialization check complete.")
+        log.info("--- Database Initialization and Seeding Complete ---")
 
     except aiosqlite.Error as e:
-        log.error("Database initialization error: %s", e, exc_info=True)
-        try:
-            await conn.rollback()  # Rollback changes if error occurs during init
-        except aiosqlite.Error as rb_e:
-            log.error("Rollback failed: %s", rb_e, exc_info=True)
+        log.error("Database initialization/seeding error: %s", e, exc_info=True)
+        try: await conn.rollback()
+        except Exception as rb_e: log.error("Rollback failed: %s", rb_e)
 
 async def execute_query(
     conn: aiosqlite.Connection, query: str, params: tuple = ()
