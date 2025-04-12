@@ -160,6 +160,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
 
     # Attribute and Modifiers
     stats = character.stats # The dict like {'might': 15, ....}
+    tether = character.spiritual_tether
     attributes_display = []
     stat_order = ["might", "vitality", "agility", "intellect", "aura", "persona"]
     modifiers = {} # Store modifiers for reuse
@@ -185,11 +186,11 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     output += f" Name : {char_name:<28} Sex: {char_sex}\r\n"
     output += f" Race : {race_name:<28} Class: {class_name}\r\n"
     output += f" Level: {level:<31}\r\n"
-    output += "=" * 40 + "\r\n"
-    output += f" HP   : {hp:>4}/{max_hp:<28} Carry: {curr_w:>2}/{max_carry_weight:<3} lbs\r\n"
+    output += "=" * 50 + "\r\n"
+    output += f" HP   : {hp:>4}/{max_hp:<28} Carry: {curr_w:>2}/{max_carry_weight:<3} stones\r\n"
     output += f" Essn : {essence:>4}/{max_essence:<31}\r\n"
-    # Display XP Needed for *next* level, show current progress
     output += f" XP   : {int(xp_total):>4}/{xp_needed:<28} Pool: {int(xp_pool)}\r\n"
+    output += f" Tether: {tether:<30}\r\n" # Adjust padding if needed
     output += " --- Attributes ---                 \r\n" # Adjusted spacing
     # Display 3 attributes per line
     output += f"{attributes_display[0]} {attributes_display[1]}\r\n"
@@ -197,7 +198,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     output += f"{attributes_display[4]} {attributes_display[5]}\r\n"
     output += f" Skill Pts: {character.unspent_skill_points:<25} Attrib Pts: {character.unspent_attribute_points}\r\n"
     output += f" Coins: {formatted_coinage:<31}\r\n"
-    output += "=" * 40 + "\r\n"
+    output += "=" * 50 + "\r\n"
 
     await character.send(output)
     return True # Keep connection active
