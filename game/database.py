@@ -276,6 +276,12 @@ async def init_db(conn: aiosqlite.Connection):
             (7, "stale bread", "Looks barely edible.", "FOOD", # Changed type from CONSUMABLE
             json.dumps({"weight": 0, "value": 1}), # Add consume effect later {effect: 'heal_hp', amount: 2} ?
             json.dumps([]), None),
+            (8, "cloth trousers", "Simple trousers made of the same rough cloth as the shirt.", "ARMOR",
+            json.dumps({"wear_location": "LEGS", "armor": 1, "weight": 1, "value": 10}), # AV 1
+            json.dumps([]), None),
+            (9, "a leather cap", "A worn leather cap offering minimal protection.", "ARMOR",
+            json.dumps({"wear_location": "HEAD", "armor": 1, "weight": 1, "value": 15}), # AV 1
+            json.dumps([]), None),
         ]
         try:
             # Use INSERT OR IGNORE to avoid errors if items somehow already exist

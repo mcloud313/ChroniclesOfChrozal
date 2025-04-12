@@ -201,6 +201,11 @@ class Mob:
         """Check if the mob has a specific flag (case-insensitive)."""
         return flag_name.upper() in self.flags
 
+    def get_total_av(self, world: 'World') -> int:
+        """Mobs don't wear armor in V1. Returns 0."""
+        # TODO: Mobs should definitely get some armor value eventually...
+        return 0
+
     def __repr__(self) -> str:
         return f"<Mob Inst:{self.instance_id} Tmpl:{self.template_id} '{self.name}' HP:{self.hp}/{self.max_hp}>"
 

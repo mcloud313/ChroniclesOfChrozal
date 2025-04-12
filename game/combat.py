@@ -292,8 +292,28 @@ async def resolve_physical_attack(
 
     # 7. Mitigation (remains the same, uses target_pds, target_av=0)
     defense_score = target_pds
+    # TODO: Check dmg_type later for PDS vs SDS (magic defense)
     mitigated_damage1 = max(0, pre_mitigation_damage - defense_score)
-    final_damage = max(0, mitigated_damage1 - target_av) # AV is 0 for V1
+    final_damage = mitigated_damage1 
+
+    # Define physical types - add others later if needed
+    physical_damage_types = ["physical", "slash", "pierce", "bludgeon"]
+    if dmg_type and dmg_type.lower() in physical_damage_types:
+        target_av = 0
+        if hasattr(target, 'get_total_av'): #Check if target (Char or Mob) has the method
+            try:
+                # Call the target's AV calculation method, passing world
+                target_av = target.get_total_av(world)
+            except Exception: #Safety catch
+                log.exception("Error getting AV for target %s", target.name)
+        else:
+            log.warning("Target %s has no get_total_av method.", target.name)
+        
+        log.debug("Applying AV: Damage %d reduced by AV %d", final_damage, target_av)
+        final_damage = max(0, final_damage - target_av) # Subtract AV
+
+    # TODO: Add Barrier mitigation for magic later
+    # TODO: Armor Value needs to be limited based off Armor Training Skill
 
     # 8. Apply Damage (remains the same)
     target.hp -= final_damage

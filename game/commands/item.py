@@ -276,7 +276,7 @@ async def cmd_wield(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     if currently_wielded_id is not None:
         # Automatically unwield previous item - move it to inventory
         # Check weight first!
-        prev_item = character.get_item_instance(currently_wielded_id)
+        prev_item = character.get_item_instance(world, currently_wielded_id)
         prev_weight = getattr(prev_item, 'weight', 1) if prev_item else 1
         if character.get_current_weight(world) + prev_weight > character.get_max_weight() * 2:
             await character.send("You don't have enough carrying capacity to unwield your current item first!")
@@ -307,10 +307,10 @@ async def cmd_remove(character: 'Character', world: 'World', db_conn: 'aiosqlite
     target_slot = args_str.strip().upper().replace(" ","_") # Convert "wield main" to WIELD_MAIN
 
     # Check if it's a valid slot being used
-    template_id = character.equipment.get(world, target_slot)
+    template_id = character.equipment.get(target_slot)
     if template_id is None:
         # Maybe they typed item name? Try finding by name in equipment
-        found = character.find_item_in_equipment_by_name(args_str)
+        found = character.find_item_in_equipment_by_name(world, args_str)
         if found:
             target_slot, template_id = found
         else:

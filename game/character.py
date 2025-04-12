@@ -468,23 +468,30 @@ class Character:
     def is_alive(self) -> bool: # Add helper consistent with Mob
         return self.hp > 0 and self.status != "DEAD" # DYING counts as alive for some checks
 
-    # # def get_total_armor_value(self) -> int:
-    # #     """Calculates total armor value from worn equipment."""
-    # #     total_av = 0
-    # #     if not hasattr(self, 'world'): return 0 # Safety check if world ref removed
+    def get_total_av(self, world: 'World') -> int:
+        """Calculates total armor value (AV) from worn equipment."""
+        total_av = 0
+        if not self.equipment: # No equipment worn
+            return 0
+        
+        for slot, template_id in self.equipment.items():
+            # skip non-armor/shield items if any happen to be equipped? Or assume only armor/shields provide AV
+            template = world.get_item_template(template_id)
+            if template:
+                # Check if items type should contribute to AV (ARMOR or SHIELD typically)
+                item_type = template['type'].upper() # Get type from template row
+                if item_type in ["ARMOR", "SHIELD"]: # ONly count these types for now.
+                    try:
+                        stats_dict = json.loads(template['stats'] or '{}')
+                        total_av += stats_dict.get("armor", 0) # Add items armor value
+                    except (json.JSONDecodeError, TypeError):
+                        log.warning("Could not parse stats for equipped item template %d (Slot: %s) for AV calc.", template_id, slot)
+                # Else: Log non-armor items in slot if needed
+            else:
+                log.warning("Could not find item template %d in equipment slot %s for AV calc.", template_id, slot)
 
-    #     for template_id in self.equipment.values():
-    #         template = self.world.get_item_template(template_id) # Needs world access! Refactor needed?
-    #          # *** NOTE: This get_total_armor_value method WILL require passing world if self.world removed ***
-    #          # *** OR Cache item instances in self.equipment instead of IDs ***
-    #          # *** For now, ASSUME self.world exists for simplicity of this step ***
-    #          # *** We will need to address this dependency ***
-    #         if template:
-    #             try:
-    #                 stats_dict = json.loads(template['stats'] or '{}')
-    #                 total_av += stats_dict.get("armor", 0)
-    #             except (json.JSONDecodeError, TypeError): pass # Ignore bad item stats
-    #     return total_av
+            log.debug("Character %s calculated Total AV: %d", self.name, total_av)
+            return total_av
 
     def get_skill_rank(self, skill_name: str) -> int:
         """Gets the character's rank in a specific skill"""
