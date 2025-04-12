@@ -177,9 +177,11 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     max_carry_weight = might_val * 3
     curr_w = character.get_current_weight(world)
 
-    # Coinage (Deferred until Phase 3)
-    # coinage = character.coinage # Need this attribute added later
-    # formatted_coinage = utils.format_coinage(coinage) # Need this util later
+    # --- Calculate Armor Values ---
+    total_av = character.get_total_av(world)
+    armor_training_rank = character.get_skill_rank("armor training")
+    av_multiplier = min(1.0, 0.20 + (armor_training_rank * 0.01))
+    effective_av = math.floor(total_av * av_multiplier)
 
     # --- Format Output ---
     # Using f-strings with padding for alignment
@@ -189,6 +191,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     output += f" Level: {level:<31}\r\n"
     output += "=" * 50 + "\r\n"
     output += f" HP   : {hp:>4}/{max_hp:<28} Carry: {curr_w:>2}/{max_carry_weight:<3} stones\r\n"
+    output += f" Armor: {effective_av:>4}/{total_av:<28} (Effective/Total)\r\n"
     output += f" Essn : {essence:>4}/{max_essence:<31}\r\n"
     output += f" XP   : {int(xp_total):>4}/{xp_needed:<28} Pool: {int(xp_pool)}\r\n"
     output += f" Tether: {tether:<30}\r\n" # Adjust padding if needed

@@ -146,19 +146,22 @@ class Character:
 
         # Load spells/abilities
         try:
-            spells_str = db_data.get('known_spells', '[]') # Use get for safety
+            # Check if key exists before accessing, provide default '[]' if not
+            spells_str = db_data['known_spells'] if 'known_spells' in db_data.keys() else '[]'
             self.known_spells: List[str] = json.loads(spells_str or '[]')
             if not isinstance(self.known_spells, list): self.known_spells = []
-        except (json.JSONDecodeError, TypeError):
-            log.warning("Character %s: Could not decode known_spells JSON: %r", self.dbid, db_data.get('known_spells','[]'))
+        except (json.JSONDecodeError, TypeError, KeyError): # Added KeyError just in case keys() check fails somehow
+            log.warning("Character %s: Could not decode/load known_spells JSON: %r", self.dbid, db_data.get('known_spells','[]')) # Use .get() safely in log msg
             self.known_spells: List[str] = []
 
+        # Load known_abilities (list of ability names/IDs)
         try:
-            abilities_str = db_data.get('known_abilities', '[]') # Use get for safety
+            # Check if key exists before accessing, provide default '[]' if not
+            abilities_str = db_data['known_abilities'] if 'known_abilities' in db_data.keys() else '[]'
             self.known_abilities: List[str] = json.loads(abilities_str or '[]')
             if not isinstance(self.known_abilities, list): self.known_abilities = []
-        except (json.JSONDecodeError, TypeError):
-            log.warning("Character %s: Could not decode known_abilities JSON: %r", self.dbid, db_data.get('known_abilities','[]'))
+        except (json.JSONDecodeError, TypeError, KeyError):
+            log.warning("Character %s: Could not decode/load known_abilities JSON: %r", self.dbid, db_data.get('known_abilities','[]'))
             self.known_abilities: List[str] = []
 
         # Load skills (JSON string -> dict)
@@ -488,28 +491,35 @@ class Character:
 
     def get_total_av(self, world: 'World') -> int:
         """Calculates total armor value (AV) from worn equipment."""
+        log.debug("Calculating Total AV for %s", self.name) # Log entry
         total_av = 0
         if not self.equipment: # No equipment worn
             return 0
         
+        log.debug("Equipment contents: %s", self.equipment) # See what slots/IDs are equipped
         for slot, template_id in self.equipment.items():
             # skip non-armor/shield items if any happen to be equipped? Or assume only armor/shields provide AV
             template = world.get_item_template(template_id)
             if template:
+                template_dict = dict(template) # Easier to work with dict
                 # Check if items type should contribute to AV (ARMOR or SHIELD typically)
                 item_type = template['type'].upper() # Get type from template row
+                log.debug("Checking slot [%s], item ID %d, type %s", slot, template_id, item_type)
                 if item_type in ["ARMOR", "SHIELD"]: # ONly count these types for now.
                     try:
+                        stats_str = template_dict.get('stats', '{}')
                         stats_dict = json.loads(template['stats'] or '{}')
-                        total_av += stats_dict.get("armor", 0) # Add items armor value
+                        item_av = stats_dict.get("armor", 0)
+                        log.debug(" -> Found armor value: %d in stats: %s", item_av, stats_dict) # See extracted AV
+                        total_av += item_av
                     except (json.JSONDecodeError, TypeError):
                         log.warning("Could not parse stats for equipped item template %d (Slot: %s) for AV calc.", template_id, slot)
                 # Else: Log non-armor items in slot if needed
             else:
                 log.warning("Could not find item template %d in equipment slot %s for AV calc.", template_id, slot)
 
-            log.debug("Character %s calculated Total AV: %d", self.name, total_av)
-            return total_av
+            log.debug("Character %s final calculated Total AV: %d", self.name, total_av) # Log final value
+        return total_av
 
     def get_skill_rank(self, skill_name: str) -> int:
         """Gets the character's rank in a specific skill"""
