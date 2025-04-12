@@ -2,13 +2,14 @@
 """
 Represents Mob (Mobile Object / Non-Player Character) instances.
 """
+import math
 import time
 import random
 import json
 import logging
 from . import utils
 # from . import combat
-from typing import TYPE_CHECKING, Optional, Dict, Any, List, Set
+from typing import TYPE_CHECKING, Optional, Dict, Any, List, Set, Union
 
 if TYPE_CHECKING:
     import aiosqlite
@@ -60,7 +61,7 @@ class Mob:
 
     def __init__(self, template_data: Dict[str, Any], current_room: 'Room'):
         """
-        Initializes a Mob instance from template data.
+        Initializes a Mob instance from template data, applying variance.
 
         Args:
             template_data: A dictionary derived from the mob_templates row.
@@ -69,47 +70,82 @@ class Mob:
         self.instance_id: int = Mob.next_instance_id
         Mob.next_instance_id += 1
 
+        # --- Store basic template info ---
         self.template_id: int = template_data['id']
-        self.name: str = template_data['name'] # Usually includes 'a'/'an' e.g. "a giant rat"
+        self.name: str = template_data['name']
         self.description: str = template_data['description']
         self.level: int = template_data['level']
-        self.max_hp: int = template_data['max_hp']
-        self.target: Optional['Character'] = None
-        self.is_fighting: bool = False
-        # TODO: Apply variance to HP/stats later? For V1, use template directly.
-        self.hp: int = self.max_hp
+        self.location: 'Room' = current_room # Initial location
 
-        self.location: 'Room' = current_room
+        # --- Load Variance Data ---
+        variance_dict: Dict[str, int] = {}
+        try:
+            variance_str = template_data.get('variance', '{}') or '{}'
+            variance_dict = json.loads(variance_str)
+        except (json.JSONDecodeError, TypeError):
+            log.warning("Mob template %d (%s): Could not decode variance JSON: %r",
+            self.template_id, self.name, template_data.get('variance', '{}'))
 
-        # Load stats, attacks, loot, flags, respawn delay
+        hp_var_pct = variance_dict.get("max_hp_pct", 0)
+        stats_var_pct = variance_dict.get("stats_pct", 0)
+
+        # --- Load and Apply Variance to Max HP ---
+        template_max_hp: int = template_data.get('max_hp', 10)
+        if hp_var_pct > 0:
+            hp_multiplier = 1.0 + random.uniform(-hp_var_pct / 100.0, hp_var_pct / 100.0)
+            self.max_hp = max(1, math.floor(template_max_hp * hp_multiplier))
+        else:
+            self.max_hp = max(1, template_max_hp)
+        self.hp: int = self.max_hp # Start at full randomized health
+
+        # --- Load and Apply Variance to Stats ---
+        self.stats: Dict[str, int] = {} # Initialize instance stats
         try:
-            self.stats: Dict[str, int] = json.loads(template_data['stats'] or '{}')
+            template_stats: Dict[str, int] = json.loads(template_data.get('stats', '{}') or '{}')
+            for stat_name, base_value in template_stats.items():
+                if stats_var_pct > 0:
+                    stat_multiplier = 1.0 + random.uniform(-stats_var_pct / 100.0, stats_var_pct / 100.0)
+                    self.stats[stat_name] = max(1, math.floor(base_value * stat_multiplier))
+                else:
+                    self.stats[stat_name] = base_value
         except (json.JSONDecodeError, TypeError):
-            self.stats = {}
+            log.warning("Mob template %d (%s): Could not decode stats JSON: %r",
+                        self.template_id, self.name, template_data.get('stats', '{}'))
+            # Ensure stats dict exists even if parse fails
+            if not hasattr(self, 'stats'): self.stats = {}
+
+        # Add default 10 for any core stats missing from template/parsing
+        for core_stat in ["might", "vitality", "agility", "intellect", "aura", "persona"]:
+            if core_stat not in self.stats:
+                self.stats[core_stat] = 10
+                log.debug("Mob template %d (%s): Assigning default 10 for missing stat '%s'",
+                        self.template_id, self.name, core_stat)
+
+        log.debug("Applied Variance: HP %d -> %d, Stats %d%%. Final Stats: %s",
+                template_max_hp, self.max_hp, stats_var_pct, self.stats)
+
+        # --- Load other template data (attacks, loot, flags, respawn) ---
         try:
-            self.attacks: List[Dict[str, Any]] = json.loads(template_data['attacks'] or '[]')
-        except (json.JSONDecodeError, TypeError):
-            self.attacks = []
+            self.attacks: List[Dict[str, Any]] = json.loads(template_data.get('attacks', '[]') or '[]')
+        except (json.JSONDecodeError, TypeError): self.attacks = []
         try:
-            self.loot_table: Dict[str, Any] = json.loads(template_data['loot'] or '{}')
-        except (json.JSONDecodeError, TypeError):
-            self.loot_table = {}
+            self.loot_table: Dict[str, Any] = json.loads(template_data.get('loot', '{}') or '{}')
+        except (json.JSONDecodeError, TypeError): self.loot_table = {}
         try:
-            flags_list = json.loads(template_data['flags'] or '[]')
+            flags_list = json.loads(template_data.get('flags', '[]') or '[]')
             self.flags: Set[str] = set(flag.upper() for flag in flags_list)
-        except (json.JSONDecodeError, TypeError):
-            self.flags = set()
+        except (json.JSONDecodeError, TypeError): self.flags = set()
 
-        self.respawn_delay: int = template_data['respawn_delay_seconds']
+        self.respawn_delay: int = template_data.get('respawn_delay_seconds', 300)
 
-        # Runtime State
-        self.target: Optional['Character'] = None # Current combat target
+        # --- Initialize Runtime State ---
+        self.target: Optional[Union['Character', 'Mob']] = None # Corrected hint
         self.is_fighting: bool = False
         self.roundtime: float = 0.0
-        self.time_of_death: Optional[float] = None # Timestamp when killed
+        self.time_of_death: Optional[float] = None
 
-        log.debug("Mob instance created: %s (Instance: %d, Template: %d) in Room %d",
-                self.name, self.instance_id, self.template_id, self.location.dbid)
+        log.debug("Mob instance created: %s (Instance: %d, Template: %d, HP: %d/%d) in Room %d",
+                self.name, self.instance_id, self.template_id, self.hp, self.max_hp, self.location.dbid)
 
     def is_alive(self) -> bool:
         return self.hp > 0 and self.time_of_death is None

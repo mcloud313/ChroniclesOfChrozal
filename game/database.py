@@ -194,6 +194,7 @@ async def init_db(conn: aiosqlite.Connection):
                 loot TEXT DEFAULT '{}', -- JSON: {"coinage_max": 5, "items": [{"template_id": 7, "chance": 0.1}]}
                 flags TEXT DEFAULT '[]', -- JSON: ["AGGRESSIVE", "STATIONARY"]
                 respawn_delay_seconds INTEGER DEFAULT 300, -- Time to respawn after death
+                variance TEXT DEFAULT '{}', -- << ADDED JSON: {"max_hp_pct": 10, "stats_pct": 5}
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 -- Add faction, behaviors etc. later
             )
@@ -308,16 +309,45 @@ async def init_db(conn: aiosqlite.Connection):
         log.info("Step 4: Populating Mob Templates...")
         # Add templates for Crab, Sprite, Turtle, King Turtle for the beach
         default_mobs = [
-            # ID 1: Giant Rat (Keep for testing)
-            (1, "a giant rat", "...", 1, json.dumps({"might": 5, "vitality": 5, "agility": 8}), 8, json.dumps([{"name": "bite", "damage_base": 3, "damage_rng": 3, "speed": 2.5}]), json.dumps({"coinage_max": 3, "items": [{"template_id": 7, "chance": 0.05}]}), json.dumps([]), 60),
-            # Beach Mobs (IDs 2-5)
-            (2, "a giant crab", "Its claws click menacingly.", 2, json.dumps({"might": 8, "vitality": 10, "agility": 6}), 15, json.dumps([{"name": "pinch", "damage_base": 2, "damage_rng": 5, "speed": 3.0}]), json.dumps({"coinage_max": 5, "items": []}), json.dumps(["AGGRESSIVE"]), 90),
-            (3, "a mischievous sea sprite", "It flits around, trailing seawater.", 3, json.dumps({"might": 4, "vitality": 6, "agility": 12, "intellect": 10}), 12, json.dumps([{"name": "water jet", "damage_base": 1, "damage_rng": 4, "speed": 2.0, "damage_type": "cold"}]), json.dumps({"coinage_max": 8, "items": [{"template_id": 16, "chance": 0.02}]}), json.dumps(["AGGRESSIVE"]), 120),
-            (4, "a giant snapping turtle", "Its beak looks powerful enough to snap bone.", 4, json.dumps({"might": 10, "vitality": 14, "agility": 4}), 25, json.dumps([{"name": "snap", "damage_base": 4, "damage_rng": 6, "speed": 4.0}]), json.dumps({"coinage_max": 15, "items": []}), json.dumps(["AGGRESSIVE"]), 180),
-            (5, "a HUGE king snapping turtle", "Ancient and immense, barnacles coat its shell.", 6, json.dumps({"might": 15, "vitality": 20, "agility": 3}), 50, json.dumps([{"name": "CRUSHING bite", "damage_base": 6, "damage_rng": 8, "speed": 5.0}]), json.dumps({"coinage_max": 50, "items": [{"template_id": 6, "chance": 0.1}]}), json.dumps(["AGGRESSIVE"]), 600), # Elite example
+            # ID 1: Giant Rat
+            (1, "a giant rat", "A rodent of unusual size, its eyes gleam.", 1,
+            json.dumps({"might": 5, "vitality": 5, "agility": 8}), 8, # stats, max_hp
+            json.dumps([{"name": "bite", "damage_base": 3, "damage_rng": 3, "speed": 2.5}]), # attacks (kept buffed version)
+            json.dumps({"coinage_max": 3, "items": [{"template_id": 7, "chance": 0.05}]}), # loot (bread)
+            json.dumps([]), 60, # flags, respawn_delay
+            json.dumps({"max_hp_pct": 20, "stats_pct": 10})), # <<< Added Variance
+            # ID 2: Giant Crab
+            (2, "a giant crab", "Its claws click menacingly.", 2,
+            json.dumps({"might": 8, "vitality": 10, "agility": 6}), 15, # stats, max_hp
+            # --- Reduced Damage ---
+            json.dumps([{"name": "pinch", "damage_base": 1, "damage_rng": 4, "speed": 3.0}]), # Changed base 2->1, rng 5->4
+            json.dumps({"coinage_max": 5, "items": []}), # loot
+            json.dumps(["AGGRESSIVE"]), 90, # flags, respawn_delay
+            json.dumps({"max_hp_pct": 15, "stats_pct": 10})), # <<< Added Variance
+            # ID 3: Sea Sprite
+            (3, "a mischievous sea sprite", "It flits around, trailing seawater.", 3,
+            json.dumps({"might": 4, "vitality": 6, "agility": 12, "intellect": 10}), 12, # stats, max_hp
+            json.dumps([{"name": "water jet", "damage_base": 1, "damage_rng": 4, "speed": 2.0, "damage_type": "cold"}]), # attacks
+            json.dumps({"coinage_max": 8, "items": [{"template_id": 16, "chance": 0.02}]}), # loot (ruby)
+            json.dumps(["AGGRESSIVE"]), 120, # flags, respawn_delay
+            json.dumps({"max_hp_pct": 10, "stats_pct": 15})), # <<< Added Variance
+            # ID 4: Giant Snapping Turtle
+            (4, "a giant snapping turtle", "Its beak looks powerful enough to snap bone.", 4,
+            json.dumps({"might": 10, "vitality": 14, "agility": 4}), 25, # stats, max_hp
+            json.dumps([{"name": "snap", "damage_base": 4, "damage_rng": 6, "speed": 4.0}]), # attacks
+            json.dumps({"coinage_max": 15, "items": []}), # loot
+            json.dumps(["AGGRESSIVE"]), 180, # flags, respawn_delay
+            json.dumps({"max_hp_pct": 10, "stats_pct": 5})), # <<< Added Variance
+            # ID 5: King Snapping Turtle
+            (5, "a HUGE king snapping turtle", "Ancient and immense, barnacles coat its shell.", 6,
+            json.dumps({"might": 15, "vitality": 20, "agility": 3}), 50, # stats, max_hp
+            json.dumps([{"name": "CRUSHING bite", "damage_base": 6, "damage_rng": 8, "speed": 5.0}]), # attacks
+            json.dumps({"coinage_max": 50, "items": [{"template_id": 6, "chance": 0.1}]}), # loot (shield)
+            json.dumps(["AGGRESSIVE"]), 600, # flags, respawn_delay
+            json.dumps({"max_hp_pct": 10, "stats_pct": 5})), # <<< Added Variance
         ]
         await conn.executemany(
-            """INSERT OR IGNORE INTO mob_templates (id, name, description, level, stats, max_hp, attacks, loot, flags, respawn_delay_seconds) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", default_mobs
+            """INSERT OR IGNORE INTO mob_templates (id, name, description, level, stats, max_hp, attacks, loot, flags, respawn_delay_seconds, variance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", default_mobs
         )
         log.info("Mob Templates populated.")
 
