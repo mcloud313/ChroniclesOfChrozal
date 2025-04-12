@@ -144,6 +144,23 @@ class Character:
                         self.dbid, self.first_name, db_data['stats'])
             self.stats: Dict[str, int] = {} # Default to empty if invalid
 
+        # Load spells/abilities
+        try:
+            spells_str = db_data.get('known_spells', '[]') # Use get for safety
+            self.known_spells: List[str] = json.loads(spells_str or '[]')
+            if not isinstance(self.known_spells, list): self.known_spells = []
+        except (json.JSONDecodeError, TypeError):
+            log.warning("Character %s: Could not decode known_spells JSON: %r", self.dbid, db_data.get('known_spells','[]'))
+            self.known_spells: List[str] = []
+
+        try:
+            abilities_str = db_data.get('known_abilities', '[]') # Use get for safety
+            self.known_abilities: List[str] = json.loads(abilities_str or '[]')
+            if not isinstance(self.known_abilities, list): self.known_abilities = []
+        except (json.JSONDecodeError, TypeError):
+            log.warning("Character %s: Could not decode known_abilities JSON: %r", self.dbid, db_data.get('known_abilities','[]'))
+            self.known_abilities: List[str] = []
+
         # Load skills (JSON string -> dict)
         try:
             self.skills: Dict[str, int] = json.loads(db_data['skills'] or '{}')
@@ -318,9 +335,11 @@ class Character:
             "level": self.level,
             "unspent_skill_points": self.unspent_skill_points,
             "unspent_attribute_points": self.unspent_attribute_points,
-            "spiritual_tehter": self.spiritual_tether,
+            "spiritual_tether": self.spiritual_tether,
             "stats": json.dumps(self.stats), # Save current stats
             "skills": json.dumps(self.skills), # Save current skills
+            "known_spells": json.dumps(self.known_spells),
+            "known_abilities": json.dumps(self.known_abilities),
             "inventory": json.dumps(self.inventory), # Save list of template IDs
             "equipment": json.dumps(self.equipment), # Save dict of {slot: template_id}
             "coinage": self.coinage,
@@ -370,7 +389,6 @@ class Character:
         self.death_timer_ends_at = None
         self.roundtime = 0.0
         # Optionally add a short respawn sickness roundtime?
-
 
     def update_location(self, new_location: Optional['Room']):
         """

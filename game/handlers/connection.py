@@ -19,6 +19,7 @@ from game.commands import handler as command_handler
 from game.handlers.creation import CreationHandler, CreationState
 from game.definitions import skills as skill_defs
 from game.definitions import races as race_defs
+from game.definitions import classes as class_defs
 
 # Assume command handler will exist later
 # from ..comands import handler as command_handler
@@ -27,7 +28,7 @@ log = logging.getLogger(__name__)
 
 # Simple Message of the Day
 MOTD = """
-\r\n--- Welcome to Chronicles of Chrozal (Alpha 0.4) ---
+\r\n--- Welcome to Chronicles of Chrozal (Alpha 0.41) ---
 \r\n  
 \r\n  ___  _  _  ____   __   __ _  __  ___  __    ____  ____       
 \r\n / __)/ )( \(  _ \ /  \ (  ( \(  )/ __)(  )  (  __)/ ___)      
@@ -512,6 +513,17 @@ class ConnectionHandler:
                                 initial_sp += racial_bonus_sp
                                 log.info("Applying +%d racial skill point bonus for %s.",
                                         racial_bonus_sp, race_name)
+                                
+                            # Ensure class_defs is imported: from game.definitions import classes as class_defs
+                            class_name = self.world.get_class_name(self.active_character.class_id)
+                            skill_bonuses = class_defs.get_starting_skill_bonuses(class_name)
+                            if skill_bonuses:
+                                log.debug("Applying starting skill bonuses for %s (%s)", class_name, self.active_character.name)
+                                for skill_name, bonus in skill_bonuses.items():
+                                    current_rank = self.active_character.skills.get(skill_name, 0)
+                                    self.active_character.skills[skill_name] = current_rank + bonus
+                                    log.debug(" -> %s: +%d (New Rank: %d)", skill_name, bonus, self.active_character.skills[skill_name])
+                                await self.active_character.send("Your chosen class grants you initial proficiency in certain skills!")
 
                             self.active_character.unspent_skill_points = initial_sp
                             log.info("Awarded %d initial skill points to %s.",
@@ -540,7 +552,7 @@ class ConnectionHandler:
                 # Small sleep to prevent tight loop on error/staying in same state without read
                 if self.state != ConnectionState.DISCONNECTED and self.state != ConnectionState.PLAYING:
                     await asyncio.sleep(0.1)
-        except Exception as e:
+        except Exception:
             #Catch-all for unexpected errors in the handler logic
             log.exception("Unexpected error in Connectionhandler for %s:", self.addr, exc_info=True)
         finally:

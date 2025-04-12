@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 try:
     from ..definitions import traits as trait_defs
     from ..definitions import races as race_defs
+    from ..definitions import classes as class_defs
 except ImportError:
     log.error("Could not import trait definitions! Creation menus will fail.")
     trait_defs = None
@@ -557,8 +558,9 @@ class CreationHandler:
         return full_desc.strip()
 
     async def _handle_finalize(self):
-        """Calculates derived stats, builds description, creates DB entry."""
+        """Calculates derived stats, builds description, gets starting skills/abilities, creates DB entry."""
         log.info("Finalizing character creation for player %s", self.player.dbid)
+        class_name = self.creation_data.get('class_name') # Needed for lookup
 
         # 1. Build Description String
         self.creation_data["description"] = self._build_description_string()
@@ -591,6 +593,14 @@ class CreationHandler:
         essence = max_essence # Start full
 
         log.debug("Calculated initial stats: MaxHP=%d, MaxEssence=%d", max_hp, max_essence)
+
+        starting_spells = class_defs.get_starting_spells(class_name)
+        starting_abilities = class_defs.get_starting_abilities(class_name)
+        known_spells_json = json.dumps(starting_spells)
+        known_abilities_json = json.dumps(starting_abilities)
+        log.debug("Assigning starting spells: %s, abilities: %s", starting_spells, starting_abilities)
+
+
 
         # 3. Prepare data for DB insert
         try:

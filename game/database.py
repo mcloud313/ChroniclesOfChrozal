@@ -219,6 +219,8 @@ async def init_db(conn: aiosqlite.Connection):
             unspent_attribute_points INTEGER NOT NULL DEFAULT 0,
             stats TEXT DEFAULT '{}', -- JSON: {"might": 10, "agility": 10, ...}
             skills TEXT DEFAULT '{}', -- JSON: {"climb": 0, "appraise": 0, ...}
+            known_spells TEXT NOT NULL DEFAULT '[]',
+            known_abilities TEXT NOT NULL DEFAULT '[]',
             location_id INTEGER DEFAULT 1, -- Default starting room ID
             inventory TEXT NOT NULL DEFAULT '[]', -- JSON List of item_template_ids
             equipment TEXT NOT NULL DEFAULT '{}',     -- JSON Dict {slot: item_template_id}
@@ -381,8 +383,8 @@ async def init_db(conn: aiosqlite.Connection):
             player2_id = (await cursor.fetchone())[0]
 
         # Character 1: Testone Testone (Chrozalin Warrior)
-        char1_stats = {"might": 18, "vitality": 16, "agility": 14, "intellect": 10, "aura": 10, "persona": 12}
-        char1_skills = {"bladed weapons": 5, "shield usage": 3}
+        char1_stats = {"might": 16, "vitality": 14, "agility": 12, "intellect": 10, "aura": 8, "persona": 8}
+        char1_skills = {"bladed weapons": 10, "shield usage": 10, "armor training": 20}
         char1_equip = {"WIELD_MAIN": 1, "TORSO": 2, "FEET": 4} # Dagger, Shirt, Boots
         char1_inv = [3, 7, 16] # Pouch, Bread, Ruby
         char1_aura_mod = utils.calculate_modifier(char1_stats['aura'])
@@ -582,8 +584,8 @@ async def save_character_data(conn: aiosqlite.Connection, character_id: int, dat
         "location_id", "hp", "essence", "xp_pool", "xp_total", "level",
         "stats", "skills", "description", "sex", "race_id", "class_id",
         "max_hp", "max_essence", "inventory", "equipment", "coinage",
-        "unspent_skill_points", "unspent_attribute_points",
-        # Add others as needed, remove ones that shouldn't be updated here
+        "unspent_skill_points", "unspent_attribute_points", "known_spells",
+        "known_abilities"
     ]
 
     for key, value in data.items():
@@ -642,17 +644,18 @@ async def load_mob_template(conn: aiosqlite.Connection, template_id: int) -> aio
 async def create_character(
     conn: aiosqlite.Connection, player_id: int, first_name: str, last_name: str, sex: str,
     race_id: int, class_id: int, stats_json: str, skills_json: str, description: str,
-    hp: int, max_hp: int, essence: int, max_essence: int, location_id: int = 1
+    hp: int, max_hp: int, essence: int, max_essence: int, known_spells_json: str = '[]',
+    known_abilities_json: str = '[]', location_id: int = 1, spiritual_tether: int = 1
 ) -> int | None:
     """ Creates a new character record, calculating initial spiritual tether. """
     query = """
         INSERT INTO characters (
             player_id, first_name, last_name, sex, race_id, class_id,
             stats, skills, description, hp, max_hp, essence, max_essence,
-            location_id, spiritual_tether -- Added tether to insert
+            known_spells, known_abilities, location_id, spiritual_tether,
             -- level, xp_pool, xp_total use DB defaults (1, 0, 0)
             -- points use DB defaults (0, 0) - awarded after creation by handler
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) -- Added placeholder for tether
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     # --- Calculate initial tether ---
     initial_tether = 1 # Default minimum
@@ -662,7 +665,7 @@ async def create_character(
         aura_mod = utils.calculate_modifier(aura)
         # Level is 1 initially, floor(1/4) = 0
         initial_tether = max(1, aura_mod + math.floor(1 / 4))
-        initial_tether = max(1, aura_mod) # Simplified for level 1
+        initial_tether = max(1, aura_mod) 
     except Exception as e:
         log.error("Error calculating initial tether for new character: %s", e)
         initial_tether = 1 # Fallback to minimum
@@ -670,7 +673,7 @@ async def create_character(
     params = (
         player_id, first_name, last_name, sex, race_id, class_id,
         stats_json, skills_json, description, hp, max_hp, essence, max_essence,
-        location_id, initial_tether # Added tether value
+        location_id, spiritual_tether, known_spells_json, known_abilities_json
     )
 
     try:

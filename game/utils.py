@@ -55,10 +55,9 @@ def verify_password(stored_hash: str, provided_password: str) -> bool:
     # Compare the hash of the provided password with the stored hash
     return stored_hash == hash_password(provided_password)
 
-def _roll_3d6() -> int:
-    """Rolls 3 six-sided dice and returns the sum."""
+def _roll_4d6() -> int:
+    """Rolls 4 six-sided dice and returns the sum."""
     return sum(random.randint(1, 6) for _ in range(4))
-
 
 def generate_stat() -> int:
     """
@@ -66,15 +65,8 @@ def generate_stat() -> int:
     This creates a bell curve distribution centered in the low 20s,
     making high stats (30+) genuinely rare.
     """
-    roll = _roll_3d6() # Result between 3 and 18
-
-    # Scale the 3-18 result to the 10-35 range
-    # Formula: NewBase + floor((OldValue - OldBase) * ScaleFactor)
-    # ScaleFactor = (NewRange / OldRange) = (35-10) / (18-3) = 25 / 15 = 5 / 3
-    scaled_value = 10 + math.floor((roll - 3) * (5.0 / 3.0))
-
-    # Clamp result just in case of floating point nuances (shouldn't be needed)
-    return max(10, min(35, scaled_value))
+    roll = _roll_4d6() # Result between 3 and 18
+    return roll
 
 def generate_stat_set() -> list[int]:
     """Generates a set of 6 stats."""
