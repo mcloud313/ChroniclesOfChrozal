@@ -209,6 +209,17 @@ class Mob:
             log.error("Mob %s (%s) tried to move to non-existent room %d from room %d.",
                     self.instance_id, self.name, target_room_id, self.location.dbid)
             return
+        
+        current_area_id = self.location.area_id
+        target_area_id = target_room.area_id
+
+        if current_area_id != target_area_id:
+            log.debug("Mob %d (%s) tried to move from Area %d to Area %d via '%s'. Preventing cross-area movement.",
+                    self.instance_id, self.name, current_area_id, target_area_id, direction)
+            # Mob doesn't get feedback, just doesn't move.
+            # We might apply roundtime here anyway to prevent getting stuck trying the same exit?
+            self.roundtime = 1.0 # Apply small RT for failed area change attempt
+            return # Stop the move function
 
         current_room = self.location
         mob_name_cap = self.name.capitalize()
