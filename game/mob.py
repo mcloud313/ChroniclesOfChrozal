@@ -137,6 +137,7 @@ class Mob:
         except (json.JSONDecodeError, TypeError): self.flags = set()
 
         self.respawn_delay: int = template_data.get('respawn_delay_seconds', 300)
+        self.movement_chance: float = template_data.get('movement_chance', 0.0)
 
         # --- Initialize Runtime State ---
         self.target: Optional[Union['Character', 'Mob']] = None # Corrected hint
@@ -183,6 +184,58 @@ class Mob:
         self.roundtime = 0.0
         self.time_of_death = None
 
+    async def move(self, direction: str, world: 'World'):
+        """Handles the logic for a mob moving to an adjacent room."""
+        if not self.is_alive() or not self.location:
+            return
+
+        target_room_id = None
+        exit_data = self.location.exits.get(direction.lower())
+
+        # Mobs only use simple exits for now (value is int)
+        if isinstance(exit_data, int):
+            target_room_id = exit_data
+        # Ignore complex exits (dict) for mob movement in V1
+        # else: log.debug("Mob %s found complex exit %s, ignoring for movement.", self.instance_id, direction)
+
+        if target_room_id is None:
+            # This shouldn't happen if we only choose from valid simple exits, but safety check
+            log.warning("Mob %s (%s) tried to move invalid direction %s from room %d.",
+                        self.instance_id, self.name, direction, self.location.dbid)
+            return
+
+        target_room = world.get_room(target_room_id)
+        if target_room is None:
+            log.error("Mob %s (%s) tried to move to non-existent room %d from room %d.",
+                    self.instance_id, self.name, target_room_id, self.location.dbid)
+            return
+
+        current_room = self.location
+        mob_name_cap = self.name.capitalize()
+
+        # 1. Announce departure
+        departure_msg = f"\r\n{mob_name_cap} leaves {direction}.\r\n"
+        await current_room.broadcast(departure_msg) # Send to everyone including mob? Or exclude? Let's send to all for now.
+
+        # 2. Remove mob from old room
+        current_room.remove_mob(self)
+
+        # 3. Update mob's location reference
+        self.location = target_room # Update internal location reference
+
+        # 4. Add mob to new room
+        target_room.add_mob(self)
+
+        # 5. Announce arrival
+        arrival_msg = f"\r\n{mob_name_cap} arrives.\r\n"
+        await target_room.broadcast(arrival_msg)
+
+        # 6. Apply roundtime for moving
+        self.roundtime = 2.0 # Example fixed move roundtime for mobs
+
+        log.info("Mob %d (%s) moved from Room %d to Room %d via '%s'.",
+                self.instance_id, self.name, current_room.dbid, target_room.dbid, direction)
+
     async def simple_ai_tick(self, dt: float, world: 'World'): # <<< Add world param
         """Basic AI logic called by the ticker via Room/World."""
         from . import combat # Moved import to prevent circular error
@@ -199,6 +252,21 @@ class Mob:
                 self.target = None
                 self.is_fighting = False
                 return # Stop acting this tick
+            
+        # --- Movement Logic (if NOT fighting and can move) ---
+        elif not self.is_fighting and self.movement_chance > 0 and not self.has_flag("STATIONARY"):
+            if random.random() < self.movement_chance:
+                #Attempt to move
+                possible_exits = [
+                    direction for direction, target in self.location.exits.items()
+                    if isinstance(target, int) #only chose simple integer exits
+                ]
+                if possible_exits:
+                    chosen_direction = random.choice(possible_exits)
+                    log.debug("Mob %d (%s) decided to move %s.", self.instance_id, self.name, chosen_direction)
+                    await self.move(chosen_direction, world)
+                    # Return after attempting move to prevent AGGRESSIVE check this tick
+                    return
 
             # If ready, attempt an attack (basic version)
             attack_data = self.choose_attack()
