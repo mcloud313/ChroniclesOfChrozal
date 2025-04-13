@@ -71,12 +71,14 @@ class Room:
     def add_character(self, character: Any):
         """Adds a character object to the room"""
         self.characters.add(character)
-        log.debug(f"Character {getattr(character, 'name', 'Unknown')} entered Room {self.dbid} ({self.name})")
+        log.debug("ROOM %d STATE: Added %s. Current characters: %s",
+            self.dbid, character.name, {c.name for c in self.characters})
     
     def remove_character(self, character: Any):
         """Removes a character object from the room"""
         self.characters.discard(character) # discard doesn't raise error if not found
-        log.debug(f"Character {getattr(character, 'name', 'Unknown')} left Room {self.dbid} ({self.name})")
+        log.debug("ROOM %d STATE: Removed %s. Remaining characters: %s",
+            self.dbid, character.name, {c.name for c in self.characters})
 
     def get_look_string(self, looker_character: Any) -> str:
         """

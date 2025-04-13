@@ -61,7 +61,7 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
             # target.location.items.append(COIN_ITEM_ID?) # Needs design
             # For simplicity now, maybe award directly to attacker?
             if isinstance(attacker, Character):
-                log.debug("Awarding %d coinage directly to %s.", dropped_coinage, attacker.name)
+                #log.debug("Awarding %d coinage directly to %s.", dropped_coinage, attacker.name)
                 # TODO: Check purse limit later
                 attacker.coinage += dropped_coinage
                 await attacker.send(f"You loot {dropped_coinage} talons from the corpse.")

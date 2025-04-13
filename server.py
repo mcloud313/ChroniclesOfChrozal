@@ -16,7 +16,7 @@ from game.handlers.connection import ConnectionHandler
 from game import ticker
 
 # Configure basic logging
-log_level = logging.DEBUG # Or load from config: getattr(config, 'LOG_LEVEL', logging.INFO)
+log_level = logging.INFO # Or load from config: getattr(config, 'LOG_LEVEL', logging.INFO)
 log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 logging.basicConfig(level=log_level, format=log_format)
 
@@ -37,12 +37,6 @@ async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.Stream
     """
     addr = writer.get_extra_info('peername', 'Unknown Address')
     log.info("Connection received from %s", addr)
-
-    # --- V V V ADD DEBUG LOGS HERE V V V ---
-    log.debug("HANDLER: Entry check - world object: %s (ID: %s)", world, id(world) if world else 'None')
-    log.debug("HANDLER: Entry check - db_conn object: %s (ID: %s)", db_conn, id(db_conn) if db_conn else 'None')
-    # --- ^ ^ ^ END DEBUG LOGS ^ ^ ^ ---
-
 
     if not world or not db_conn: # Safety check
         log.error("Server not fully initialized (world or db_conn missing). Refusing connection from %s.", addr)

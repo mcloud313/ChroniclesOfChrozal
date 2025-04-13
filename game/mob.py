@@ -242,7 +242,7 @@ class Mob:
         await target_room.broadcast(arrival_msg)
 
         # 6. Apply roundtime for moving
-        self.roundtime = 2.0 # Example fixed move roundtime for mobs
+        self.roundtime = 4.0 # Example fixed move roundtime for mobs
 
         log.info("Mob %d (%s) moved from Room %d to Room %d via '%s'.",
                 self.instance_id, self.name, current_room.dbid, target_room.dbid, direction)
@@ -266,8 +266,6 @@ class Mob:
             # Check if target is still valid first
             target_is_valid = self.target.is_alive() and hasattr(self.target, 'location') and self.target.location == self.location
             if not target_is_valid:
-                log.debug("%s's target %s is no longer valid (Dead or wrong location). Stopping combat.",
-                        self.name, getattr(self.target, 'name', '?'))
                 self.target = None
                 self.is_fighting = False
                 return # <<< ADDED/CONFIRMED return statement here
@@ -288,8 +286,8 @@ class Mob:
                     self.roundtime = 2.0 # Default cooldown
 
         # --- Movement Logic (if NOT fighting and can move) ---
-        # Use elif to ensure mob doesn't try to move in the same tick it started fighting
-        elif not self.is_fighting and self.movement_chance > 0 and not self.has_flag("STATIONARY"):
+        if not self.is_fighting and self.movement_chance > 0 and not self.has_flag("STATIONARY"):
+            is_aggressive = self.has_flag("AGGRESSIVE")
             if random.random() < self.movement_chance:
                 possible_exits = [
                     direction for direction, target in self.location.exits.items()
@@ -297,14 +295,23 @@ class Mob:
                 ]
                 if possible_exits:
                     chosen_direction = random.choice(possible_exits)
-                    log.debug("Mob %d (%s) decided to move %s.", self.instance_id, self.name, chosen_direction)
                     await self.move(chosen_direction, world)
                     # Return after attempting move prevents AGGRO check in same tick
                     return
+                log.debug("Mob %s: Post-MovementRoll Check. Not fighting. Aggressive: %s", self.name, is_aggressive)
 
         # --- Aggressive Check (if NOT fighting and didn't move) ---
         # Use elif to ensure this doesn't run if the mob just moved
-        elif self.has_flag("AGGRESSIVE") and not self.is_fighting:
+        if self.has_flag("AGGRESSIVE") and not self.is_fighting:
+            if not self.location: # Safety check
+                log.warning("Aggressive mob %s has no location!", self.name)
+                return
+            
+            current_char_set = self.location.characters
+            current_char_names = {c.name for c in current_char_set} # Get names for logging
+            current_chars_in_room = list(self.location.characters) # Get current characters
+            
+        
             potential_targets = [
                 char for char in self.location.characters if char.is_alive()
             ]

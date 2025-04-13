@@ -205,7 +205,6 @@ class Character:
         # Add basic derived name property
         self.name = f"{self.first_name} {self.last_name}"
         self.calculate_initial_derived_attributes()
-        log.debug("Character object initialized for %s (ID: %s)", self.name, self.dbid)
 
     def get_max_weight(self) -> int:
         """Calculates maximum carrying weight based on Might."""
@@ -444,8 +443,8 @@ class Character:
         self.essence = self.max_essence
 
 
-        log.debug("Character %s: Derived attributes calculated/updated: MaxHP=%d, MaxEssence=%d",
-                self.name, self.max_hp, self.max_essence)
+        # log.debug("Character %s: Derived attributes calculated/updated: MaxHP=%d, MaxEssence=%d",
+        #         self.name, self.max_hp, self.max_essence)
 
     def apply_level_up_gains(self) -> Tuple[int, int]:
         """
@@ -491,12 +490,12 @@ class Character:
 
     def get_total_av(self, world: 'World') -> int:
         """Calculates total armor value (AV) from worn equipment."""
-        log.debug("Calculating Total AV for %s", self.name) # Log entry
+        #log.debug("Calculating Total AV for %s", self.name) # Log entry
         total_av = 0
         if not self.equipment: # No equipment worn
             return 0
         
-        log.debug("Equipment contents: %s", self.equipment) # See what slots/IDs are equipped
+        #log.debug("Equipment contents: %s", self.equipment) # See what slots/IDs are equipped
         for slot, template_id in self.equipment.items():
             # skip non-armor/shield items if any happen to be equipped? Or assume only armor/shields provide AV
             template = world.get_item_template(template_id)
