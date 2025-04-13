@@ -19,7 +19,9 @@ class World:
     Holds the currently loaded game world data (areas, rooms)
     and potentially runtime state (active players, mobs) later.
     """
-    def __init__(self):
+    def __init__(self, db_conn: aiosqlite.Connection):
+        # --- Store db_conn ---
+        self.db_conn: aiosqlite.Connection = db_conn # <<< Store connection
         # Store raw area data for now, could be Area objects later
         self.areas: Dict[int, aiosqlite.Row] = {}
         self.rooms: Dict[int, Room] = {}
@@ -30,120 +32,123 @@ class World:
         # Add containers for active players/mobs later if needed
         log.info("World object initialized.")
 
-    async def build(self, db_conn: aiosqlite.Connection):
+    async def build(self): # <<< REMOVED db_conn parameter from signature
         """
-        Loads areas and rooms from the database and populates the world.
-
-        Args: 
-            db_conn: An active database connection.
+        Loads areas, rooms, races, classes, items, spawns mobs using self.db_conn.
+        Now uses the connection stored on the World instance.
 
         Returns:
             True if successful, False otherwise.
         """
         log.info("Building world state from database...")
+        # --- V V V Use self.db_conn internally V V V ---
+        db_conn = self.db_conn # Get the connection stored during __init__
+        if not db_conn: # Safety check
+            log.critical("World object has no valid db_conn to build from!")
+            return False
+        # --- ^ ^ ^ ---
+
         load_success = True
 
+        # --- Load Areas ---
         try:
-            item_rows = await database.load_all_item_templates(db_conn)
-            if item_rows is None:
-                log.error("Failed to load item templates from database.")
-                load_success = False
-            else:
-                self.item_templates = {row['id']: row for row in item_rows}
+            area_rows = await database.load_all_areas(db_conn) # Use local db_conn var
+            if area_rows is None: load_success = False; log.error("Failed to load areas.")
+            else: self.areas = {row['id']: row for row in area_rows}
+            log.info("Loaded %d areas.", len(self.areas))
+        except Exception as e: load_success = False; log.exception(...)
+
+        # --- Load Races ---
+        if load_success:
+            try:
+                race_rows = await database.load_all_races(db_conn) # Use local db_conn var
+                if race_rows is None: load_success = False; log.error("Failed to load races.")
+                else: self.races = {row['id']: row for row in race_rows}
+                log.info("Loaded %d races.", len(self.races))
+            except Exception as e: load_success = False; log.exception(...)
+
+        # --- Load Classes ---
+        if load_success:
+            try:
+                class_rows = await database.load_all_classes(db_conn) # Use local db_conn var
+                if class_rows is None: load_success = False; log.error("Failed to load classes.")
+                else: self.classes = {row['id']: row for row in class_rows}
+                log.info("Loaded %d classes.", len(self.classes))
+            except Exception as e: load_success = False; log.exception(...)
+
+        # --- Load Item Templates ---
+        if load_success:
+            try:
+                item_rows = await database.load_all_item_templates(db_conn) # Use local db_conn var
+                if item_rows is None: load_success = False; log.error("Failed to load items.")
+                else: self.item_templates = {row['id']: row for row in item_rows}
                 log.info("Loaded %d item templates.", len(self.item_templates))
-        except Exception as e:
-            log.exception("Exception loading item templates: %s", e, exc_info=True)
-            load_success = False
+            except Exception as e: load_success = False; log.exception(...)
 
-        # 1. Load Areas
-        try:
-            area_rows = await database.load_all_areas(db_conn)
-            if area_rows is None:
-                log.error("Failed to load areas from database.")
-                load_success = False
-            else:
-                self.areas = {row['id']: row for row in area_rows}
-                log.info("Loaded %d areas.", len(self.areas))
-        except Exception as e:
-            log.exception("Exception loading areas: %s", e, exc_info=True)
-            load_success = False
-
-        # 1 - A Load Races
+        # --- Load Rooms & Initial Items/Coins/Mobs ---
         if load_success:
             try:
-                race_rows = await database.load_all_races(db_conn)
-                if race_rows is None:
-                    log.error("Failed to load races from database.")
+                room_rows = await database.load_all_rooms(db_conn) # Use local db_conn var
+                if not room_rows:
+                    log.error("Failed to load rooms or no rooms found.")
                     load_success = False
                 else:
-                    self.races = {row['id']: row for row in race_rows}
-                    log.info("Loaded %d races.", len(self.races))
-            except Exception as e:
-                log.exception("Exception loading races: %s", e, exc_info=True)
-                load_success = False
+                    self.rooms = {}
+                    initial_mob_count = 0
+                    item_load_count = 0
+                    coin_load_count = 0
 
-        # 1 - B Load Classes
-        if load_success:
-            try:
-                class_rows = await database.load_all_classes(db_conn)
-                if class_rows is None:
-                    log.error("Failed to load classes from database.")
-                    load_success = False
-                else:
-                    self.classes = {row['id']: row for row in class_rows}
-                    log.info("Loaded %d classes.", len(self.classes))
-            except Exception as e:
-                log.exception("Exception loading classes: %s", e, exc_info=True)
-                load_success = False
-
-        # 2. Load Rooms (only proceed if areas loaded somewhat successfully)
-        if load_success:
-            try:
-                room_rows = await database.load_all_rooms(db_conn)
-                if room_rows is None:
-                    log.error("Failed to load rooms from database.")
-                    load_success = False
-                else:
-                    count = 0
-                    for row in room_rows:
+                    # First Pass: Create Room objects
+                    for row_data in room_rows:
+                        room_dict = dict(row_data)
                         try:
-                            # Check if the room's area exists
-                            if row['area_id'] not in self.areas:
-                                log.warning("Room %d references non-existent area %d. Skipping ", row['id'], row['area_id'])
-                                continue
-                            #Create room object
-                            room = Room(db_data=row)
+                            if room_dict['area_id'] not in self.areas: continue
+                            room = Room(db_data=room_dict)
                             self.rooms[room.dbid] = room
+                        except Exception as room_e:
+                            log.exception("Failed to instantiate Room object for dbid %d: %s", room_dict.get('id','?'), room_e)
+                            load_success = False
 
-                            if room.spawners:
-                                for template_id_str, spawn_info in room.spawners.items():
-                                    try:
-                                        template_id = int(template_id_str)
-                                        max_present = spawn_info.get("max_present", 1)
-                                        # initial_spawn = spawn_info.get("initial_spawn", max_present) #Optional
-                                        mob_template = await database.load_mob_template(db_conn, template_id)
-                                        if mob_template:
-                                            mob_template_dict = dict(mob_template)
-                                            # Spawn initial mobs up to max_present
-                                            initial_mob_count = 0
-                                            for _ in range(max_present):
-                                                mob_instance = Mob(mob_template_dict, room)
-                                                room.add_mob(mob_instance)
-                                                initial_mob_count += 1
-                                        else:
-                                            log.warning("Room %d spawner references non-existent mob template ID %d.", room.dbid, template_id)
-                                    except (ValueError, KeyError, TypeError) as spawn_e:
-                                        log.error("Room %d: Error processing spawner data '%s': %s", room.dbid, spawn_info, spawn_e)
-                            count += 1
-                        except Exception as e:
-                            log.exception("Failed to instantiate Room object for dbid %d: %s", row['id'], e, exc_info=True)
-                            load_success = False # Mark load as failed if any room fails.
-                    log.info("Loaded and instantiated %d rooms.", count)
+                    # Second Pass: Load initial items/coins into Room cache
+                    log.info("Loading initial items and coinage for %d rooms...", len(self.rooms))
+                    for room_id, room in self.rooms.items():
+                        try:
+                            item_ids = await database.load_items_for_room(db_conn, room_id) # Use local db_conn
+                            if item_ids is not None: room.items = item_ids; item_load_count += len(item_ids)
+                            else: load_success = False; log.error(...)
+
+                            coinage = await database.load_coinage_for_room(db_conn, room_id) # Use local db_conn
+                            if coinage is not None: room.coinage = coinage; coin_load_count += (1 if coinage > 0 else 0)
+                            else: load_success = False; log.error(...)
+                        except Exception as load_e: load_success = False; log.exception(...)
+                    log.info("Loaded initial state for %d rooms (%d items, %d coin piles > 0).", len(self.rooms), item_load_count, coin_load_count)
+
+                    # Third Pass: Spawn initial mobs
+                    log.info("Spawning initial mobs...")
+                    for room_id, room in self.rooms.items():
+                        if room.spawners:
+                            for template_id_str, spawn_info in room.spawners.items():
+                                try:
+                                    template_id = int(template_id_str)
+                                    max_present = spawn_info.get("max_present", 1)
+                                    # Load template using local db_conn
+                                    mob_template = await database.load_mob_template(db_conn, template_id)
+                                    if mob_template:
+                                        mob_template_dict = dict(mob_template)
+                                        for _ in range(max_present):
+                                            mob_instance = Mob(mob_template_dict, room)
+                                            room.add_mob(mob_instance)
+                                            initial_mob_count += 1
+                                    else: log.warning(...)
+                                except Exception as spawn_e: log.error(...)
+                    log.info("Spawned %d initial mobs.", initial_mob_count)
+                    log.info("Loaded and instantiated %d rooms.", len(self.rooms)) # Moved log here
+
             except Exception as e:
-                log.exception("Exception loading rooms: %s", e, exc_info=True)
+                log.exception("Exception loading rooms/mobs: %s", e)
                 load_success = False
-                
-        # Update final log message
+
+
         if load_success:
             log.info("World build complete. %d Areas, %d Races, %d Classes, %d Item Templates, %d Rooms loaded.",
                     len(self.areas), len(self.races), len(self.classes), len(self.item_templates), len(self.rooms))

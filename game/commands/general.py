@@ -20,62 +20,112 @@ log = logging.getLogger(__name__)
 # Note: These functions match the CommandHandlerFunc signature
 
 async def cmd_look(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
-    """Handles the 'look' command (looking at room or target character)."""
+    """Handles looking at room, characters, mobs, or items."""
 
     if not character.location:
         await character.send("You are floating in an endless void... somehow.")
-        log.warning("Character %s tried to look but has no location.", character.name)
-        return True # Keep connection active
-    
-    target_name = args_str.strip()
-
-    # --- Look at Room (No arguments) ---
-    if not target_name:
-        look_desc = character.location.get_look_string(character)
-        await character.send(look_desc)
         return True
-    
-    # --- Look at Target (Character) ---
-    target = character.location.get_character_by_name(target_name)
 
-    # Handle target not found
-    if target is None:
-        # TODO: Later, check for items/objects in the room here too
-        await character.send(f"You don't see anyone or anything named '{target_name}' here.")
+    target_name = args_str.strip().lower()
+
+    # --- Case 1: Look Room (no arguments) ---
+    if not target_name or target_name == "here":
+        room_desc = character.location.get_look_string(character, world) # Get base desc
+        await character.send(room_desc) # Send base desc
+
+        # Now add items and coinage on ground
+        ground_items_output = []
+        # Group items by template ID
+        item_counts = {}
+        for item_id in character.location.items:
+            item_counts[item_id] = item_counts.get(item_id, 0) + 1
+
+        for template_id, count in sorted(item_counts.items()):
+            template = world.get_item_template(template_id)
+            item_name = template['name'] if template else f"Item #{template_id}"
+            display_name = item_name
+            if count > 1: display_name += f" (x{count})"
+            ground_items_output.append(display_name)
+
+        coinage = character.location.coinage
+        if coinage > 0:
+            ground_items_output.append(utils.format_coinage(coinage)) # Add formatted coins
+
+        if ground_items_output:
+            await character.send("You also see here: " + ", ".join(ground_items_output) + ".")
+
         return True
-    
-    # Handle looking at self - show room description (standard MUD behavior)
-    if target == character:
-        look_desc = character.location.get_look_string(character)
-        await character.send(look_desc)
-        return True
-    
-    # --- Format Target Character's Description ---
-    try:
-        # Get Race/Class Names
-        target_race_name = world.get_race_name(target.race_id)
-        target_class_name = world.get_class_name(target.class_id)
 
-        # Get Pronouns
-        pronoun_subj, _, _, verb_is, _ = utils.get_pronouns(target.sex)
+    # --- Case 2: Look Target ---
+    target_found = False
+    output_buffer = [] # Build output lines
 
-        output = "\r\n"
-        # Display the generated description stored on the character
-        output += target.description # Assumes target.description is loaded from DB
-        output += "\r\n"
-        # Add basic info line
-        output += f"({target_race_name} {target_class_name}, Level {target.level})\r\n"
-        # Add equipment placeholder
-        output += f"{pronoun_subj} {verb_is} wearing:\r\n Nothing." # Placeholder
-        # TODO: Add wielded item placeholder later
+    # 1. Check Characters in room
+    target_char = character.location.get_character_by_name(target_name)
+    if target_char:
+        target_found = True
+        if target_char == character:
+            # Look self - show score? Or basic desc? Let's show basic desc like looking at others
+            output_buffer.append("\r\n" + character.description + "\r\n")
+            race_name = world.get_race_name(character.race_id)
+            class_name = world.get_class_name(character.class_id)
+            pronoun_subj, _, _, verb_is, _ = utils.get_pronouns(character.sex)
+            output_buffer.append(f"({race_name} {class_name}, Level {character.level})")
+            output_buffer.append(f"{pronoun_subj} {verb_is} wearing:\r\n Nothing.") # Placeholder
+        else:
+            # Look other character
+            try:
+                target_race_name = world.get_race_name(target_char.race_id)
+                target_class_name = world.get_class_name(target_char.class_id)
+                pronoun_subj, _, _, verb_is, _ = utils.get_pronouns(target_char.sex)
+                output_buffer.append("\r\n" + target_char.description + "\r\n")
+                output_buffer.append(f"({target_race_name} {target_class_name}, Level {target_char.level})")
+                output_buffer.append(f"{pronoun_subj} {verb_is} wearing:\r\n Nothing.") # Placeholder
+            except Exception:
+                log.exception("Error generating look description for target %s:", target_char.name, exc_info=True)
+                output_buffer.append("You look, but your vision blurs momentarily.")
 
-        await character.send(output)
-    
-    except Exception:
-        log.exception("Error generating look description for target %s:", target.name, exc_info=True)
-        await character.send("You look at them, but your vision blurs momentarily.")
+    # 2. Check Mobs in room (if no character found)
+    if not target_found:
+        target_mob = character.location.get_mob_by_name(target_name)
+        if target_mob:
+            target_found = True
+            output_buffer.append(f"\r\n{target_mob.description}\r\n")
+            # Maybe add brief HP status? ("looks healthy", "is wounded") - later polish
+            # output_buffer.append(f"{target_mob.name.capitalize()} looks healthy.")
 
-    return True # Keep connection active
+    # 3. Check Items on Ground (if no char/mob found)
+    if not target_found:
+        item_id_on_ground = None
+        items_on_ground = list(character.location.items)
+        for t_id in items_on_ground:
+            template = world.get_item_template(t_id)
+            if template and target_name in template['name'].lower():
+                item_id_on_ground = t_id
+                break
+        if item_id_on_ground:
+            target_found = True
+            item = character.get_item_instance(world, item_id_on_ground)
+            if item: output_buffer.append(f"\r\n{item.description}\r\n") # Just show desc for now
+            else: output_buffer.append("You see it, but cannot make out details.")
+
+    # 4. Check Items in Inventory (if not found elsewhere)
+    if not target_found:
+        # Pass world to finder
+        item_id_in_inv = character.find_item_in_inventory_by_name(world, target_name)
+        if item_id_in_inv:
+            target_found = True
+            item = character.get_item_instance(world, item_id_in_inv) # Pass world
+            if item: output_buffer.append(f"\r\n{item.description}\r\n") # Just show desc
+            else: output_buffer.append("You look at it, but cannot make out details.")
+
+    # 5. Send result or Not Found Message
+    if target_found:
+        await character.send("\r\n".join(output_buffer))
+    else:
+        await character.send(f"You don't see anything like '{target_name}' here.")
+
+    return True # Command processed
 
 async def cmd_say(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Handles the 'say' command."""

@@ -76,6 +76,7 @@ class Mob:
         self.description: str = template_data['description']
         self.level: int = template_data['level']
         self.location: 'Room' = current_room # Initial location
+        self.mob_type: Optional[str] = template_data.get('mob_type')
 
         # --- Load Variance Data ---
         variance_dict: Dict[str, int] = {}
@@ -121,9 +122,6 @@ class Mob:
                 log.debug("Mob template %d (%s): Assigning default 10 for missing stat '%s'",
                         self.template_id, self.name, core_stat)
 
-        log.debug("Applied Variance: HP %d -> %d, Stats %d%%. Final Stats: %s",
-                template_max_hp, self.max_hp, stats_var_pct, self.stats)
-
         # --- Load other template data (attacks, loot, flags, respawn) ---
         try:
             self.attacks: List[Dict[str, Any]] = json.loads(template_data.get('attacks', '[]') or '[]')
@@ -145,8 +143,8 @@ class Mob:
         self.roundtime: float = 0.0
         self.time_of_death: Optional[float] = None
 
-        log.debug("Mob instance created: %s (Instance: %d, Template: %d, HP: %d/%d) in Room %d",
-                self.name, self.instance_id, self.template_id, self.hp, self.max_hp, self.location.dbid)
+        # log.debug("Mob instance created: %s (Instance: %d, Template: %d, HP: %d/%d) in Room %d",
+        #         self.name, self.instance_id, self.template_id, self.hp, self.max_hp, self.location.dbid)
 
     def is_alive(self) -> bool:
         return self.hp > 0 and self.time_of_death is None
@@ -214,8 +212,6 @@ class Mob:
         target_area_id = target_room.area_id
 
         if current_area_id != target_area_id:
-            log.debug("Mob %d (%s) tried to move from Area %d to Area %d via '%s'. Preventing cross-area movement.",
-                    self.instance_id, self.name, current_area_id, target_area_id, direction)
             # Mob doesn't get feedback, just doesn't move.
             # We might apply roundtime here anyway to prevent getting stuck trying the same exit?
             self.roundtime = 1.0 # Apply small RT for failed area change attempt
@@ -243,9 +239,6 @@ class Mob:
 
         # 6. Apply roundtime for moving
         self.roundtime = 4.0 # Example fixed move roundtime for mobs
-
-        log.info("Mob %d (%s) moved from Room %d to Room %d via '%s'.",
-                self.instance_id, self.name, current_room.dbid, target_room.dbid, direction)
 
     def has_flag(self, flag_name: str) -> bool:
         """Check if the mob has a specific flag (case-insensitive)."""
@@ -298,7 +291,7 @@ class Mob:
                     await self.move(chosen_direction, world)
                     # Return after attempting move prevents AGGRO check in same tick
                     return
-                log.debug("Mob %s: Post-MovementRoll Check. Not fighting. Aggressive: %s", self.name, is_aggressive)
+
 
         # --- Aggressive Check (if NOT fighting and didn't move) ---
         # Use elif to ensure this doesn't run if the mob just moved

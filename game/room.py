@@ -7,12 +7,16 @@ import time
 import json
 import logging
 import asyncio
+import textwrap
 from typing import Set, Dict, Any, Optional, List, TYPE_CHECKING
+from . import database
 
 if TYPE_CHECKING:
     from .character import Character
     from .mob import Mob
+    from .world import World
     import aiosqlite
+    
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +36,8 @@ class Room:
         self.area_id: int = db_data['area_id']
         self.name: str = db_data['name']
         self.description: str = db_data['description']
+        self.items: List[int] = []
+        self.coinage: int = 0
 
         #Load exits (JSON string -> dict)
         try:
@@ -80,74 +86,82 @@ class Room:
         log.debug("ROOM %d STATE: Removed %s. Remaining characters: %s",
             self.dbid, character.name, {c.name for c in self.characters})
 
-    def get_look_string(self, looker_character: Any) -> str:
+    def get_look_string(self, looker_character: Any, world: 'World') -> str:
         """
-        Generates the formatted string describing the room, including sorted exits.
-        """
-        # --- Room Name ---
-        output = f"--- {self.name} --- [{self.dbid}]\n\r" # Using \n\r standard newline
+        Generates the formatted string describing the room essentials:
+        Name, Area, Description (wrapped), Exits, Characters, Mobs.
+        Item/Coin listing is handled by the look command itself.
 
-        # --- Description ---
-        # Consider wrapping long descriptions later
-        output += f"{self.description}\n\r"
+        Args:
+            looker_character: The character performing the look (to exclude from lists).
+            world: The World object needed to look up area names.
+
+        Returns:
+            Formatted string of the room's appearance.
+        """
+        # --- Room Name & Area Name ---
+        area_name = "Unknown Area"
+        area_data = world.get_area(self.area_id)
+        if area_data:
+            try: # Add try/except for safety in case 'name' column is missing
+                area_name = area_data['name'] # Use ['name'] instead of .get('name')
+            except KeyError:
+                log.warning("Area data for ID %s is missing 'name' key.", self.area_id)
+
+        # Use textwrap for description (width 79 for standard 80-col terminals)
+        wrapped_desc = textwrap.fill(self.description, width=79)
+
+        output_lines = [
+            f"[{self.name}, {area_name}] [{self.dbid}]", # Added Area Name
+            f"{wrapped_desc}", # Wrapped description
+        ]
 
         # --- Exits ---
-        # Define standard order
         std_directions = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest", "up", "down"]
         visible_std_exits = []
         visible_special_exits = []
 
         for exit_name in sorted(self.exits.keys()):
-            # TODO: Add check here later if exits can be hidden/secret
-            if exit_name in std_directions:
-                visible_std_exits.append(exit_name.capitalize()) # Capitalize for display
+            # TODO: Add hidden exit checks later
+            lc_exit = exit_name.lower()
+            if lc_exit in std_directions:
+                visible_std_exits.append(exit_name.capitalize())
             else:
-                visible_special_exits.append(exit_name.title()) # Capitalize words (e.g., "Hole", "Climb Up")
+                visible_special_exits.append(exit_name.title())
 
-        # Sort standard exits according to our defined order
         visible_std_exits.sort(key=lambda x: std_directions.index(x.lower()) if x.lower() in std_directions else 99)
+        exit_list = visible_std_exits + visible_special_exits
 
-        exit_list = visible_std_exits + visible_special_exits # Combine lists
-
-        if exit_list:
-            output += f"[Exits: {', '.join(exit_list)}]\n\r"
-        else:
-            output += "[Exits: none]\n\r"
+        output_lines.append(f"[Exits: {', '.join(exit_list) if exit_list else 'none'}]")
 
         # --- Characters ---
-        other_character_names = [
+        other_character_names = sorted([
             getattr(char, 'name', 'Someone')
             for char in self.characters
             if char != looker_character
-        ]
+        ])
         if other_character_names:
-            output += "Also here: " + ", ".join(sorted(other_character_names)) + ".\n\r" # Sort names
+            output_lines.append("Also Here: " + ", ".join(other_character_names) + ".")
 
-        living_mob_names = [
-            mob.name.capitalize() # Get capitalized name from Mob object
+        # --- Mobs ---
+        living_mob_names = sorted([
+            mob.name.capitalize() # Use display name
             for mob in self.mobs
-            if mob.is_alive() # Only show living mobs
-        ]
+            if mob.is_alive()
+        ])
         if living_mob_names:
-            # Add before or after players? After seems common.
-            # Could group identical mobs later (e.g., "Three giant rats")
-            output += "Visible creatures: " + ", ".join(sorted(living_mob_names)) + ".\n\r"
+            # Group identical mobs
+            mob_counts = {}
+            for name in living_mob_names:
+                mob_counts[name] = mob_counts.get(name, 0) + 1
+            formatted_mob_list = []
+            for name, count in mob_counts.items():
+                formatted_mob_list.append(f"{name}" + (f" (x{count})" if count > 1 else ""))
+            output_lines.append("Visible Creatures: " + ", ".join(formatted_mob_list) + ".")
 
-        # Add Items on Ground
-        if self.items:
-            # NEed world access to get names! Passworld to this method?
-            # For now, just show IDs as a placeholder. Will fix when integrating World.
-            # Alternative: The command calls this, then fetches names itself? Yes, better.
-            # Command 'look' will get this string, then separately get item names for IDs in room.items
-            output += "You also see:\n\r"
-            # Group identical items later? For now, just list IDs.
-            # We cannot get names here easily without passing 'world'.
-            # The 'look' command itself will handle displaying item names.
-            # output += ", ".join(f"Item#{item_id}" for item_id in self.items) + ".\n\r"
-            output += "Some items lie here.\n\r" # Placeholder text
-
-
-        return output.strip() # Remove any trailing newline before sending
+        # Join all parts with MUD newlines
+        return "\n\r".join(output_lines)
+    
     async def broadcast(self, message: str, exclude: Optional[Set[Any]] = None):
         """
         Sends a message to all characters in the room, optionally excluding some.
@@ -204,6 +218,15 @@ class Room:
         mob.location = self # Ensure mob knows its location
         log.debug("Mob %d (%s) added to Room %d", mob.instance_id, mob.name, self.dbid)
 
+    def get_mob_by_name(self, name_target: str) -> Optional['Mob']:
+        """Finds the first mob instance in the room matching name (case-insensitive, partial)."""
+        name_lower = name_target.lower()
+        for mob in self.mobs:
+            # Check if target name is in the mob's full name (e.g., "rat" in "a giant rat")
+            if mob.is_alive() and name_lower in mob.name.lower():
+                return mob
+        return None
+
     def remove_mob(self, mob: 'Mob'):
         """Removes a Mob instance from the room."""
         self.mobs.discard(mob)
@@ -253,3 +276,57 @@ class Room:
                 if isinstance(result, Exception):
                     mob_name = getattr(living_mobs[i], 'name', '?')
                     log.exception("Room %d: Exception in AI tick for mob '%s': %s", self.dbid, mob_name, result, exc_info=result)
+
+    async def add_item(self, item_template_id: int, world: 'World'):
+        """Adds item to room cache AND database."""
+        db_conn = world.db_conn
+        success_id = await database.add_item_to_room(db_conn, self.dbid, item_template_id)
+        if success_id:
+            self.items.append(item_template_id) # Update cache
+            log.debug("Added item template %d to room %d (DB id %s)", item_template_id, self.dbid, success_id)
+            return True
+        else:
+            log.error("Failed to add item template %d to room %d in DB.", item_template_id, self.dbid)
+            return False
+        
+    async def remove_item(self, item_template_id: int, world: 'World') -> bool:
+        """Removes ONE item instance from room cache AND database."""
+        if item_template_id not in self.items:
+            log.warning("Attempted to remove item template %d from room %d, but not found in cache.", item_template_id, self.dbid)
+            return False
+        db_conn = world.db_conn
+
+        rowcount = await database.remove_item_from_room(db_conn, self.dbid, item_template_id)
+        # --- V V V Modified Rowcount Check V V V ---
+        # Treat any positive rowcount as likely success due to observed anomaly
+        if rowcount is not None and rowcount > 0:
+            try:
+                self.items.remove(item_template_id) # Remove from cache
+                log.debug("Removed item template %d from room %d (DB rowcount: %s)",
+                        item_template_id, self.dbid, rowcount) # Log actual count
+                return True
+            except ValueError:
+                log.error("Item template %d existed in cache check but remove failed!", item_template_id)
+                return False # State mismatch
+        elif rowcount == 0:
+            log.error("Failed to remove item template %d from room %d in DB (not found). Cache mismatch?", item_template_id, self.dbid)
+            # Force remove from cache if DB says it's not there?
+            if item_template_id in self.items: self.items.remove(item_template_id)
+            return False
+        else: # None (DB error) or unexpected rowcount (like 0 or negative?)
+            log.error("Error removing item template %d from room %d in DB (DB function returned: %s).", item_template_id, self.dbid, rowcount)
+            return False
+        
+    async def add_coinage(self, amount: int, world: 'World') -> bool:
+        """Adds coinage to room cache AND database."""
+        print(f"!!! DEBUG ADD_COINAGE: Received world type: {type(world)}, world object: {repr(world)} !!!")
+        if amount <= 0: return False
+        db_conn = world.db_conn
+        rowcount = await database.update_room_coinage(db_conn, self.dbid, amount)
+        if rowcount == 1:
+            self.coinage += amount # Update cache
+            log.debug("Added %d coinage to room %d (New total: %d)", amount, self.dbid, self.coinage)
+            return True
+        else:
+            log.error("Failed to update coinage for room %d in DB (rowcount: %s).", self.dbid, rowcount)
+            return False

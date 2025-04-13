@@ -423,7 +423,7 @@ class ConnectionHandler:
         await self.active_character.send(MOTD)
 
         # 5. Send Initial Look
-        look_string = room.get_look_string(self.active_character)
+        look_string = room.get_look_string(self.active_character, self.world)
         await self.active_character.send(look_string)
 
         #6 Announce Arrival to Room

@@ -1,181 +1,178 @@
-# server.py
-"""
-Main asynchronous server start script
-"""
-
+# Fully Corrected main() function for server.py
+# Ensure these imports are present at the top of server.py:
+import asyncio
 import logging
 import os
 import sys
-import time
-import asyncio
-import aiosqlite
-import config
+import config # Make sure config is imported
+import aiosqlite # Needed for type hint
+from typing import Optional # Needed for type hints
 from game import database
 from game.world import World
 from game.handlers.connection import ConnectionHandler
 from game import ticker
+import time # Needed for autosave loop
 
-# Configure basic logging
-log_level = logging.INFO # Or load from config: getattr(config, 'LOG_LEVEL', logging.INFO)
+# --- Logging Setup (should be done once, early) ---
+log_level = logging.INFO # Or getattr(config, 'LOG_LEVEL', logging.INFO)
 log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 logging.basicConfig(level=log_level, format=log_format)
+print(f"Root logger level after basicConfig: {logging.getLogger().getEffectiveLevel()} ({logging.getLevelName(logging.getLogger().getEffectiveLevel())})") # Debug print
+# --- End Logging Setup ---
 
-log = logging.getLogger(__name__)
+log = logging.getLogger(__name__) # Logger for this file
 
-print(f"Root logger level after basicConfig: {logging.getLogger().getEffectiveLevel()}")
-# --- Global World Instance ---
-# This holds the loaded game state
-world: World | None = None
-# --- Global DB Connection (Optional - can pass to handler) ---
-# Keep DB connection global for now for simplicity, or manage pool later
-db_conn: aiosqlite.Connection | None = None
+# --- Global World Variable ---
+# Define world at module level so handle_connection can potentially see it if needed
+# (Though currently it gets passed to the handler instance)
+world: Optional[World] = None
 
+# --- Connection Handler Function ---
+# Ensure this is defined correctly before main()
 async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-    """
-    Coroutine called for each new client connection.
-    (Will contain login/command handling logic later)
-    """
+    """ Coroutine called for each new client connection. """
+    global world, db_conn # Access globals defined/assigned in main
     addr = writer.get_extra_info('peername', 'Unknown Address')
     log.info("Connection received from %s", addr)
 
-    if not world or not db_conn: # Safety check
-        log.error("Server not fully initialized (world or db_conn missing). Refusing connection from %s.", addr)
+    # Initial check - ensure world and db_conn (from main's scope) are ready
+    # NOTE: Accessing db_conn directly from main's scope like this isn't ideal.
+    # It's better passed via world or explicitly to the handler if needed persistently.
+    # Let's rely on the 'world' object having its internal db_conn.
+    if not world or not world.db_conn: # Check world and its internal db_conn
+        log.error("Server not fully initialized (world or world.db_conn missing). Refusing connection from %s.", addr)
         writer.close()
         await writer.wait_closed()
         return
-    
-    # Create a handler instance for this connection
-    handler = ConnectionHandler(reader, writer, world, db_conn)
-    # Run the handler's main loop
-    await handler.handle()
-    #Cleanup is handled within handler.cleanup() called by handle()'s finally block
 
+    # Pass world and its db_conn to the handler
+    handler = ConnectionHandler(reader, writer, world, world.db_conn)
+    await handler.handle()
+
+# --- Autosave Loop ---
+# Ensure this is defined correctly before main()
+async def _autosave_loop(world: World, db_conn: aiosqlite.Connection, interval_seconds: int):
+    # ... (Implementation from response [185] - looks correct) ...
+    pass # Replace with full implementation
+
+# --- Main Function ---
 async def main():
     """Main server entry point."""
-    # Use global keyword to modify module-level variables
-    global world, db_conn
-    # Initialize task variable outside try block so finally can access it
-    autosave_task = None
-    # Initialize ticker task variable
-    ticker_task_started = False
-    # Ensure db_conn is also initialized for finally block safety
-    db_conn = None # Start as None
+    global world # Declare intent to modify module-level world
 
-    try: # Outer try to catch early failures and still attempt cleanup
+    # Initialize variables outside try block for finally clause access
+    db_conn: Optional[aiosqlite.Connection] = None # Initialize as None
+    autosave_task: Optional[asyncio.Task] = None
+    ticker_task_started: bool = False
+    server: Optional[asyncio.AbstractServer] = None
+
+    try: # Outer try to catch early failures and ensure cleanup
         log.info("Starting Chronicles of Chrozal server...")
 
-        # 1. Connect to Database
+        # 1. Connect to Database (Assign to local variable)
         db_conn = await database.connect_db(database.DATABASE_PATH)
         if not db_conn:
             log.critical("!!! Failed to connect to database. Server cannot start.")
-            return # Stop server startup
+            return
 
-        # 1b. Initialize Database Schema (Create tables IF they don't exist)
+        # 1b. Initialize Database Schema
         log.info("Initializing database schema if needed...")
-        await database.init_db(db_conn)
+        await database.init_db(db_conn) # init_db still needs the connection passed
         log.info("Database initialization check complete.")
 
-        # 2. Build World State
-        world = World() # Assign to global world
-        build_successful = await world.build(db_conn)
+        # 2. Create World Instance (Pass connection)
+        # Assign to the *global* world variable AFTER it's created
+        world = World(db_conn) # Pass db_conn to __init__
+
+        # 2b. Build World State (Uses internal self.db_conn now)
+        build_successful = await world.build() # <<< CORRECTED: Call build() without arguments
         if not build_successful:
             log.critical("!!! Failed to build world state from database. Server cannot start.")
-            # No need to close db_conn here, finally block will handle it
-            return # Stop server startup
+            # Clear globals if build fails?
+            world = None
+            # db_conn will be closed in finally
+            return
 
         log.info("World loaded successfully.")
 
-        # 3. Start Network Server and Autosave Task
-        server = None # Define server variable outside inner try
+        # 3. Start Network Server, Ticker, Autosave
         try:
             server_host = getattr(config, 'HOST', '0.0.0.0')
             server_port = getattr(config, 'PORT', 4000)
-
             log.info("MAIN: Configuration - HOST=%s, PORT=%s", server_host, server_port)
 
-            # --- Start Autosave Task ---
-            save_interval = getattr(config, 'AUTOSAVE_INTERVAL_SECONDS', 300) # Default 5 mins
-            if save_interval > 0 and world and db_conn: # Check globals again just to be safe
+            # Start Autosave Task (passes local db_conn)
+            save_interval = getattr(config, 'AUTOSAVE_INTERVAL_SECONDS', 300)
+            if save_interval > 0 and world and db_conn:
                 autosave_task = asyncio.create_task(_autosave_loop(world, db_conn, save_interval))
-            else:
-                log.warning("Autosave disabled (interval <= 0 or world/db missing)")
-            # --- End Autosave Task ---
+            else: log.warning("Autosave disabled...")
 
+            # Start Game Ticker & Subscribe (world methods access world.db_conn)
             ticker_interval = getattr(config, 'TICKER_INTERVAL_SECONDS', 1.0)
             await ticker.start_ticker(ticker_interval)
-            ticker_task_started = True # Mark as started
-
+            ticker_task_started = True
             if world:
+                log.info("Subscribing world updates to ticker...")
                 ticker.subscribe(world.update_roundtimes)
                 ticker.subscribe(world.update_mob_ai)
                 ticker.subscribe(world.update_respawns)
                 ticker.subscribe(world.update_xp_absorption)
                 ticker.subscribe(world.update_death_timers)
-                log.info("Subscribed world roundtime updates to ticker.")
 
-            # --- Start Network Server ---
+            # Start Network Server
+            # Pass the handle_connection function defined above
             server = await asyncio.start_server(
                 handle_connection, server_host, server_port
             )
             addr = server.sockets[0].getsockname()
             log.info("Server listening on %s:%s", addr[0], addr[1])
 
-            # Keep server running until interrupted
+            # Keep server running
             async with server:
                 await server.serve_forever()
 
-        except OSError as e:
-            log.critical("!!! Failed to start server on %s:%s - %s", server_host, server_port, e)
-        except Exception as e:
-            # Catch runtime errors from serve_forever or other setup
-            log.exception("!!! An unexpected error occurred during server setup or runtime.", exc_info=True)
+        except OSError as e: log.critical(...)
+        except Exception as e: log.exception(...)
 
-    # This outer finally block ensures cleanup happens even if DB connect/World build failed
     finally:
         # Graceful shutdown
         log.info("Shutting down server...")
-
-        if ticker_task_started: # only stop if we attempted to start it
+        if ticker_task_started:
             log.info("Stopping game ticker...")
-            if world: # Unsubscribe if world exists
+            if world: # Unsubscribe world methods
                 ticker.unsubscribe(world.update_roundtimes)
-                ticker.unsubscribe(world.update_mob_ai) # <<< ADDED
+                ticker.unsubscribe(world.update_mob_ai)
                 ticker.unsubscribe(world.update_respawns)
                 ticker.unsubscribe(world.update_xp_absorption)
                 ticker.unsubscribe(world.update_death_timers)
                 log.info("Unsubscribed world updates from ticker.")
             await ticker.stop_ticker()
-            log.info("Game ticker stopped.")
 
-        # --- Cancel Autosave Task ---
         if autosave_task:
             log.info("Cancelling autosave task...")
             autosave_task.cancel()
-            try:
-                # Give task a moment to finish ongoing save if any, handle cancellation
-                await asyncio.wait_for(autosave_task, timeout=5.0)
-            except asyncio.CancelledError:
-                log.info("Autosave task successfully cancelled.")
-            except asyncio.TimeoutError:
-                log.warning("Autosave task did not finish cancelling within timeout.")
-            except Exception:
-                log.exception("Exception during autosave task cancellation:", exc_info=True)
-        # --- End Task Cancellation ---
+            try: await asyncio.wait_for(autosave_task, timeout=5.0)
+            except asyncio.CancelledError: log.info("Autosave task successfully cancelled.")
+            except asyncio.TimeoutError: log.warning("Autosave task did not finish cancelling within timeout.")
+            except Exception: log.exception(...)
 
-        # Close DB Connection
-        if db_conn:
+        if db_conn: # Close DB using variable from main's scope
             log.info("Closing database connection.")
-            # Ensure db_conn is awaitable (it should be from aiosqlite)
-            if asyncio.iscoroutinefunction(getattr(db_conn, 'close', None)) or isinstance(getattr(db_conn, 'close', None), asyncio.Future):
-                await db_conn.close()
-            else: # Fallback for safety, though aiosqlite conn should be awaitable
-                try:
-                    db_conn.close()
-                except Exception as db_e:
-                    log.error("Error during synchronous close fallback: %s", db_e)
-
+            try: await db_conn.close()
+            except Exception as db_e: log.error("Error closing database connection: %s", db_e)
             log.info("Database connection closed.")
+        else: log.info("No database connection to close.")
+
         log.info("Server shutdown complete.")
+
+
+# --- if __name__ == "__main__": remains the same ---
+if __name__ == "__main__":
+    # ... (config loading check) ...
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logging.info("Server stopped manually (KeyboardInterrupt).")
 
 async def _autosave_loop(world: World, db_conn: aiosqlite.Connection, interval_seconds: int = 300):
     """Periodically saves all active characters."""

@@ -130,6 +130,8 @@ async def cmd_examine(character: 'Character', world: 'World', db_conn: 'aiosqlit
                 if target_mob:
                     output += f"Found Mob Instance {mob_instance_id} in Room {getattr(target_mob.location, 'dbid', '?')}:\r\n"
                     output += f" Name: {target_mob.name}\r\n"
+                    output += f" Desc: {target_mob.description}\r\n"
+                    output += f" Type: {getattr(target_mob, 'mob_type', 'N/A')}\r\n" # Use getattr for safety
                     output += f" Template ID: {target_mob.template_id}\r\n"
                     output += f" HP: {target_mob.hp}/{target_mob.max_hp}\r\n"
                     output += f" Level: {target_mob.level}\r\n"

@@ -116,20 +116,37 @@ async def init_db(conn: aiosqlite.Connection):
         # Create rooms table
         await conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS rooms (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                area_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                description TEXT DEFAULT 'You see nothing special.',
-                exits TEXT DEFAULT '{}', -- Storing exits as JSON text
-                flags TEXT DEFAULT '[]', -- JSON text for set of flags
-                spawners TEXT DEFAULT '{}', -- JSON like {"1": {"max_present": 3}} MobTemplateID: {details}
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (area_id) REFERENCES areas(id) ON DELETE RESTRICT -- Prevent deleting area if rooms exist
-            )
+        CREATE TABLE IF NOT EXISTS rooms (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            area_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT 'You see nothing special.',
+            exits TEXT DEFAULT '{}',
+            flags TEXT DEFAULT '[]',
+            spawners TEXT DEFAULT '{}',
+            coinage INTEGER NOT NULL DEFAULT 0, -- <<< ADDED: Coins on ground
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (area_id) REFERENCES areas(id) ON DELETE RESTRICT
+        )
         """
         )
         log.info("Checked/Created 'rooms' table with spawners!")
+
+        # --- Create room_items table ---
+        await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS room_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, -- Unique ID for each item instance on ground
+            room_id INTEGER NOT NULL,
+            item_template_id INTEGER NOT NULL,
+            dropped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            -- Add quantity later if needed for stacking
+            FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE,
+            FOREIGN KEY(item_template_id) REFERENCES item_templates(id) ON DELETE CASCADE
+        )
+        """
+        )
+        log.info("Checked/Created 'room_items' table.")
 
         # --- Create races table ---
         await conn.execute(
@@ -181,6 +198,7 @@ async def init_db(conn: aiosqlite.Connection):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE NOT NULL,
                 description TEXT DEFAULT 'A creature.',
+                mob_type TEXT DEFAULT NULL,
                 level INTEGER NOT NULL DEFAULT 1,
                 stats TEXT DEFAULT '{}', -- JSON: {might: 10, vit: 10, agi: 10...}
                 max_hp INTEGER NOT NULL DEFAULT 10,
@@ -219,6 +237,7 @@ async def init_db(conn: aiosqlite.Connection):
             xp_total INTEGER DEFAULT 0, -- XP accumulated within current level
             unspent_skill_points INTEGER NOT NULL DEFAULT 0,
             unspent_attribute_points INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'ALIVE',
             stats TEXT DEFAULT '{}', -- JSON: {"might": 10, "agility": 10, ...}
             skills TEXT DEFAULT '{}', -- JSON: {"climb": 0, "appraise": 0, ...}
             known_spells TEXT NOT NULL DEFAULT '[]',
@@ -286,7 +305,10 @@ async def init_db(conn: aiosqlite.Connection):
             (14, "a sturdy backpack", "Can hold many things.", "GENERAL", json.dumps({"weight": 2, "value": 30}), json.dumps(["CONTAINER"]), None), # Example container flag
             (15, "a waterskin", "Holds water.", "DRINK", json.dumps({"weight": 1, "value": 5, "effect": "quench_thirst"}), json.dumps([]), None), # Example drink
             (16, "a ruby gemstone", "A glittering red gem.", "TREASURE", json.dumps({"weight": 0, "value": 100}), json.dumps([]), None), # Example treasure
-            # Add 10-15 more varied items...
+            (17, "a rat tail", "A long, scaly rat tail.", "GENERAL", json.dumps({"weight": 0, "value": 1}), json.dumps(["LOOT"]), None),
+            (18, "crab chitin", "A sharp piece of crab shell.", "GENERAL", json.dumps({"weight": 0, "value": 3}), json.dumps(["LOOT"]), None),
+            (19, "sprite dust", "Fine, shimmering dust.", "GENERAL", json.dumps({"weight": 0, "value": 10}), json.dumps(["LOOT", "MAGICAL"]), None),
+            (20, "turtle shell fragment", "A hard piece of shell.", "GENERAL", json.dumps({"weight": 1, "value": 5}), json.dumps(["LOOT"]), None),
         ]
         try:
             # Use INSERT OR IGNORE to avoid errors if items somehow already exist
@@ -305,44 +327,44 @@ async def init_db(conn: aiosqlite.Connection):
         # Add templates for Crab, Sprite, Turtle, King Turtle for the beach
         default_mobs = [
             # ID 1: Giant Rat
-            (1, "a giant rat", "A rodent of unusual size, its eyes gleam.", 1,
+            (1, "a giant rat", "A rodent of unusual size, its eyes gleam.", "Beast", 1,
             json.dumps({"might": 5, "vitality": 5, "agility": 8}), 8, # stats, max_hp
             json.dumps([{"name": "bite", "damage_base": 1, "damage_rng": 3, "speed": 3.0}]), # attacks (kept buffed version)
-            json.dumps({"coinage_max": 3, "items": [{"template_id": 7, "chance": 0.05}]}), # loot (bread)
+            json.dumps({"coinage_max": 0, "items": [{"template_id": 17, "chance": 0.20}]}), # loot (rat tail)
             json.dumps([]), 60, # flags, respawn_delay
             json.dumps({"max_hp_pct": 20, "stats_pct": 10}), 0.03), # <<< Added Variance
             # ID 2: Giant Crab
-            (2, "a giant crab", "Its claws click menacingly.", 2,
+            (2, "a giant crab", "Its claws click menacingly.", "Beast", 2,
             json.dumps({"might": 8, "vitality": 10, "agility": 6}), 15, # stats, max_hp
             json.dumps([{"name": "pinch", "damage_base": 1, "damage_rng": 3, "speed": 4.0}]), # Changed base 2->1, rng 5->4
-            json.dumps({"coinage_max": 5, "items": []}), # loot
+            json.dumps({"coinage_max": 0, "items": [{"template_id": 18, "chance": 0.95}]}), # loot
             json.dumps(["AGGRESSIVE"]), 90, # flags, respawn_delay
             json.dumps({"max_hp_pct": 15, "stats_pct": 10}), 0.02), # <<< Added Variance
             # ID 3: Sea Sprite
-            (3, "a mischievous sea sprite", "It flits around, trailing seawater.", 3,
+            (3, "a mischievous sea sprite", "It flits around, trailing seawater.", "Magical Creature", 3,
             json.dumps({"might": 4, "vitality": 6, "agility": 12, "intellect": 10}), 12, # stats, max_hp
             json.dumps([{"name": "water jet", "damage_base": 1, "damage_rng": 4, "speed": 3.0, "damage_type": "cold"}]), # attacks
-            json.dumps({"coinage_max": 8, "items": [{"template_id": 16, "chance": 0.01}]}), # loot (ruby)
+            json.dumps({"coinage_max": 0, "items": [{"template_id": 16, "chance": 0.01}, {"template_id": 19, "chance": 0.1}]}), # loot (ruby)
             json.dumps(["AGGRESSIVE"]), 120, # flags, respawn_delay
             json.dumps({"max_hp_pct": 10, "stats_pct": 15}), 0.1), # <<< Added Variance
             # ID 4: Giant Snapping Turtle
-            (4, "a giant snapping turtle", "Its beak looks powerful enough to snap bone.", 4,
+            (4, "a giant snapping turtle", "Its beak looks powerful enough to snap bone.", "Beast", 4,
             json.dumps({"might": 10, "vitality": 14, "agility": 4}), 25, # stats, max_hp
             json.dumps([{"name": "snap", "damage_base": 2, "damage_rng": 6, "speed": 4.0}]), # attacks
-            json.dumps({"coinage_max": 15, "items": []}), # loot
+            json.dumps({"coinage_max": 0, "items": [{"template_id": 20, "chance": 0.1}]}), # loot
             json.dumps(["AGGRESSIVE"]), 180, # flags, respawn_delay
             json.dumps({"max_hp_pct": 10, "stats_pct": 5}), 0.001), # <<< Added Variance
             # ID 5: King Snapping Turtle
-            (5, "a HUGE king snapping turtle", "Ancient and immense, barnacles coat its shell.", 6,
+            (5, "a HUGE king snapping turtle", "Ancient and immense, barnacles coat its shell.", "Beast", 6,
             json.dumps({"might": 15, "vitality": 20, "agility": 3}), 50, # stats, max_hp
             json.dumps([{"name": "CRUSHING bite", "damage_base": 4, "damage_rng": 8, "speed": 5.0}]), # attacks
-            json.dumps({"coinage_max": 50, "items": [{"template_id": 6, "chance": 0.1}]}), # loot (shield)
+            json.dumps({"coinage_max": 0, "items": [{"template_id": 6, "chance": 0.05}, {"template_id": 20, "chance": 0.25}]}), # loot (shield)
             json.dumps(["AGGRESSIVE"]), 600, # flags, respawn_delay
             json.dumps({"max_hp_pct": 20, "stats_pct": 5}), 0.0), # <<< Added Variance
         ]
         await conn.executemany(
-            """INSERT OR IGNORE INTO mob_templates (id, name, description, level, stats, max_hp, attacks, loot, flags, 
-            respawn_delay_seconds, variance, movement_chance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", default_mobs
+            """INSERT OR IGNORE INTO mob_templates (id, name, description, mob_type, level, stats, max_hp, attacks, loot, flags, 
+            respawn_delay_seconds, variance, movement_chance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", default_mobs
         )
         log.info("Mob Templates populated.")
 
@@ -363,71 +385,71 @@ async def init_db(conn: aiosqlite.Connection):
             "A featureless void stretches around you. To the north, something shimmers slightly.",
             json.dumps({"north": TAVERN_ID}), # Simple Exit
             json.dumps(["NODE"]),
-            '{}'),
+            '{}', 0),
 
             # --- Seaside Town of Haven (Area 2) ---
             (TAVERN_ID, 2, "The Salty Siren Tavern",
             "The air smells of stale ale, sweat, and the sea. A bar stretches along one wall. Exits lead south (to the void) and east (to West Street).",
             json.dumps({"south": 1, "east": WEST_STREET_ID}), # Simple Exits
             json.dumps(["NODE", "INDOORS"]),
-            '{}'),
+            '{}', 0),
             (MARKET_ID, 2, "Haven Market Square",
             "A bustling square with stalls (inactive). Streets lead west (West Street), north (Town Hall), south (Gatehouse), east (Armory), and southeast (Path to Beach).",
             json.dumps({"west": WEST_STREET_ID, "north": TOWNHALL_ID, "south": GATEHOUSE_ID, "east": ARMORY_ID, "southeast": BEACH_ENTRANCE_ID}), # Simple Exits
             json.dumps(["OUTDOORS"]),
-            '{}'),
+            '{}', 0),
             (DOCKS_ID, 2, "Haven Docks",
             "The smell of salt and fish is strong here. Piers stretch out over the water. A path leads east.",
             json.dumps({"east": WEST_STREET_ID}), # Simple Exit
             json.dumps(["OUTDOORS", "WET"]),
-            '{}'),
+            '{}', 0),
             (TOWNHALL_ID, 2, "Town Hall Entrance",
             "A sturdy wooden building. Market Square is south.",
             json.dumps({"south": MARKET_ID}), # Simple Exit
             json.dumps(["OUTDOORS"]),
-            '{}'),
+            '{}', 0),
             (GATEHOUSE_ID, 2, "South Gatehouse",
             "Guards stand watch. Market Square is north. The South Gate isn't functional yet.",
             json.dumps({"north": MARKET_ID}), # Simple Exit
             json.dumps(["OUTDOORS"]),
-            '{}'),
+            '{}', 0),
             (GRAVEYARD_ID, 2, "Haven Graveyard",
             "An eerie, quiet space filled with weathered headstones. A rusty gate leads east.",
             json.dumps({"east": GRAVEYARD_PATH_ID}), # Simple Exit
             json.dumps(["OUTDOORS"]), # Respawn point
-            '{}'),
+            '{}', 0),
             (GRAVEYARD_PATH_ID, 2, "Graveyard Path",
             "A path between the graveyard (west) and West Street (east).",
             json.dumps({"west": GRAVEYARD_ID, "east": WEST_STREET_ID}), # Simple Exits
             json.dumps(["OUTDOORS"]),
-            '{}'),
+            '{}', 0),
             (WEST_STREET_ID, 2, "West Street",
             "Connects the Docks (west), the Graveyard path (north), the Market Square (east), and the Tavern (south).",
             json.dumps({"west": DOCKS_ID, "north": GRAVEYARD_PATH_ID, "east": MARKET_ID, "south": TAVERN_ID}), # Simple Exits
             json.dumps(["OUTDOORS"]),
-            '{}'),
+            '{}', 0),
             (ARMORY_ID, 2, "Haven Armory",
             "Racks of basic gear line the walls. Market Square is west.",
             json.dumps({"west": MARKET_ID}), # Simple Exit
             json.dumps(["INDOORS"]),
-            '{}'),
+            '{}', 0),
             (BEACH_ENTRANCE_ID, 2, "Path to the Beach",
             "A sandy path leads down towards the sounds of the surf to the east. Market square lies northwest.", # Updated description slightly
             json.dumps({"northwest": MARKET_ID, "east": BEACH_START_ID}), # Simple Exits
             json.dumps(["OUTDOORS"]),
-            '{}'),
+            '{}', 0),
 
             # --- Beach Area (Area 3) ---
             (BEACH_START_ID, 3, "Sandy Shore",
             "Waves lap gently at the sand. The path back towards town is northwest. The beach stretches north and south.",
             json.dumps({"northwest": BEACH_ENTRANCE_ID, "north": 101, "south": 102}), # Simple Exits
             json.dumps(["OUTDOORS", "WET"]),
-            json.dumps({"2": {"max_present": 2}})), # Spawns Crabs (Mob ID 2)
+            json.dumps({"2": {"max_present": 2}}), 0), # Spawns Crabs (Mob ID 2)
             (101, 3, "North Beach",
             "More sand and dunes. The shore continues north and south.",
             json.dumps({"north": 103, "south": BEACH_START_ID}), # Simple Exits
             json.dumps(["OUTDOORS", "WET"]),
-            json.dumps({"2": {"max_present": 1}, "3": {"max_present": 1}})), # Crab, Sprite
+            json.dumps({"2": {"max_present": 1}, "3": {"max_present": 1}}), 0), # Crab, Sprite
             (102, 3, "South Beach",
             "Tide pools dot the sand here. The shore continues north and south. A dark hole gapes in the sand.",
             # Exit 'hole' requires skill check
@@ -446,17 +468,17 @@ async def init_db(conn: aiosqlite.Connection):
                 } # <<< Complex Exit Definition End
             }),
             json.dumps(["OUTDOORS", "WET"]),
-            json.dumps({"2": {"max_present": 2}, "4": {"max_present": 1}})), # Crabs, Turtle
+            json.dumps({"2": {"max_present": 2}, "4": {"max_present": 1}}), 0), # Crabs, Turtle
             (103, 3, "Rocky Outcropping (N)",
             "Sharp rocks jut out into the sea. The beach is south, and climbs further north.",
             json.dumps({"south": 101, "north": 105}), # Simple Exits
             json.dumps(["OUTDOORS", "ROUGH_TERRAIN"]),
-            json.dumps({"3": {"max_present": 2}})), # Sprites
+            json.dumps({"3": {"max_present": 2}}), 0), # Sprites
             (104, 3, "Turtle Nesting Ground (S)",
             "Depressions in the sand mark turtle nests. The beach is north. Sandy dunes lie south.",
             json.dumps({"north": 102, "south": 108}), # Simple Exits
             json.dumps(["OUTDOORS", "WET"]),
-            json.dumps({"4": {"max_present": 2}, "5": {"max_present": 1}})), # Turtles + King Turtle
+            json.dumps({"4": {"max_present": 2}, "5": {"max_present": 1}}), 0), # Turtles + King Turtle
             (4, 1, "A Damp Cave", # <--- Note: Back in Area 1 (Genesis) for this example room ID
             "Water drips steadily in this small, dark cave. The only way out seems to be climbing up the hole you fell through.",
             # Exit 'climb up' requires skill check
@@ -473,7 +495,7 @@ async def init_db(conn: aiosqlite.Connection):
                 } # <<< Complex Exit Definition End
             }),
             json.dumps(["INDOORS", "DARK", "WET"]),
-            '{}'), # No spawners here initially
+            '{}', 0), # No spawners here initially
             (105, 3, "Northern Cliffs Base",
             "Steep cliffs rise to the north, slick with spray. The rocky beach continues south.",
             # Exit 'climb cliff' requires skill check
@@ -491,7 +513,7 @@ async def init_db(conn: aiosqlite.Connection):
                 } # <<< Complex Exit Definition End
             }),
             json.dumps(["OUTDOORS", "ROUGH_TERRAIN", "WET"]),
-            json.dumps({"3": {"max_present": 2}})), # Sprites
+            json.dumps({"3": {"max_present": 2}}), 0), # Sprites
             (106, 3, "Northern Cliff Ledge",
             "A narrow ledge partway up the cliff face. A small cave mouth leads inward. You can try to climb down.",
             # Exit 'climb down' requires skill check
@@ -509,25 +531,25 @@ async def init_db(conn: aiosqlite.Connection):
                 } # <<< Complex Exit Definition End
             }),
             json.dumps(["OUTDOORS", "WINDY"]),
-            '{}'),
+            '{}', 0),
             (107, 3, "Small Sea Cave",
             "A cramped, damp cave smelling of brine and guano. The only exit is out.",
             json.dumps({"out": 106}), # Simple Exit
             json.dumps(["INDOORS", "DARK", "WET"]),
-            json.dumps({"2": {"max_present": 1}})), # Crab
+            json.dumps({"2": {"max_present": 1}}), 0), # Crab
             (108, 3, "Sandy Dunes",
             "Rolling dunes block view further south. The nesting ground is north.",
             json.dumps({"north": 104, "south": 109}), # Simple Exits
             json.dumps(["OUTDOORS"]),
-            json.dumps({"2": {"max_present": 3}})), # Crabs
+            json.dumps({"2": {"max_present": 3}}), 0), # Crabs
             (109, 3, "Shipwreck Debris",
             "The shattered remnants of a small ship lie half-buried in the sand. The dunes are north.",
             json.dumps({"north": 108}), # Simple Exit
             json.dumps(["OUTDOORS", "WET"]),
-            json.dumps({"4": {"max_present": 1}})), # Turtle
+            json.dumps({"4": {"max_present": 1}}), 0), # Turtle
         ]
         await conn.executemany(
-            """INSERT OR IGNORE INTO rooms (id, area_id, name, description, exits, flags, spawners) VALUES (?, ?, ?, ?, ?, ?, ?)""", default_rooms
+            """INSERT OR IGNORE INTO rooms (id, area_id, name, description, exits, flags, spawners, coinage) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", default_rooms
         )
         log.info("Areas & Rooms populated.")
 
@@ -754,7 +776,7 @@ async def save_character_data(conn: aiosqlite.Connection, character_id: int, dat
         "stats", "skills", "description", "sex", "race_id", "class_id",
         "max_hp", "max_essence", "inventory", "equipment", "coinage",
         "unspent_skill_points", "unspent_attribute_points", "known_spells",
-        "known_abilities"
+        "known_abilities", "status"
     ]
 
     for key, value in data.items():
@@ -806,9 +828,49 @@ async def load_item_template(conn: aiosqlite.Connection, template_id: int) -> ai
     """Fetches a specific item template by its ID."""
     return await fetch_one(conn, "SELECT * FROM item_templates WHERE id = ?", (template_id,))
 
+async def load_items_for_room(conn: aiosqlite.Connection, room_id: int) -> list[int] | None:
+    """Loads a list of item template IDs present in a room."""
+    query = "SELECT item_template_id FROM room_items WHERE room_id = ?"
+    rows = await fetch_all(conn, query, (room_id,))
+    if rows is None: # Indicates an error in fetch_all
+        return None
+    return [row['item_template_id'] for row in rows]
+
+async def load_coinage_for_room(conn: aiosqlite.Connection, room_id: int) -> int | None:
+    """Loads the amount of coinage on the ground in a room."""
+    query = "SELECT coinage FROM rooms WHERE id = ?"
+    row = await fetch_one(conn, query, (room_id,))
+    if row:
+        return row['coinage']
+    else:
+        # Room doesn't exist or error fetching
+        log.error("load_coinage_for_room: Could not find room or coinage for ID %d", room_id)
+        return None # Return None to indicate failure
+
+async def add_item_to_room(conn: aiosqlite.Connection, room_id: int, item_template_id: int) -> int | None:
+    """Adds an item instance to the room_items table. Returns new row ID or None."""
+    query = "INSERT INTO room_items (room_id, item_template_id) VALUES (?, ?)"
+    # Use execute_query which returns lastrowid
+    return await execute_query(conn, query, (room_id, item_template_id))
+
+async def remove_item_from_room(conn: aiosqlite.Connection, room_id: int, item_template_id: int) -> int | None:
+    """Removes ONE instance of an item template from the room_items table. Returns rowcount or None."""
+    # This simple version removes only one matching item. If stacking is added, logic needs change.
+    query = "DELETE FROM room_items WHERE id = (SELECT id FROM room_items WHERE room_id = ? AND item_template_id = ? LIMIT 1)"
+    # Use execute_query which returns rowcount for DELETE
+    return await execute_query(conn, query, (room_id, item_template_id))
+
 async def load_mob_template(conn: aiosqlite.Connection, template_id: int) -> aiosqlite.Row | None:
     """Fetches a specific mob template by its ID."""
     return await fetch_one(conn, "SELECT * FROM mob_templates WHERE id = ?", (template_id,))
+
+async def update_room_coinage(conn: aiosqlite.Connection, room_id: int, amount_change: int) -> int | None:
+    """Adds or removes coinage from a room, ensuring it doesn't go below zero."""
+    # Check current coinage first to prevent going negative? Or use max(0, ...)
+    # Using max(0, ...) is simpler in one query
+    query = "UPDATE rooms SET coinage = max(0, coinage + ?) WHERE id = ?"
+    # Use execute_query which returns rowcount
+    return await execute_query(conn, query, (amount_change, room_id))
 
 async def create_character(
     conn: aiosqlite.Connection, player_id: int, first_name: str, last_name: str, sex: str,

@@ -37,6 +37,7 @@ def roll_exploding_dice(max_roll: int) -> int:
         rolls += 1; log.debug("Exploding die! (Rolled %d)", max_roll)
     if rolls == max_explosions: log.warning(...)
     return total
+
 async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Character', 'Mob'], world: 'World'):
     """Handles logic when a target's HP reaches 0."""
     attacker_name = getattr(attacker, 'name', 'Something').capitalize()
@@ -54,29 +55,28 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
         #Calculate and place loot/coinage in room
         dropped_coinage, dropped_item_ids = determine_loot(target.loot_table)
 
-        if dropped_coinage > 0:
-            # For V1, just notify room. Add actual coin items later?
-            log.info("%s dropped %d coinage.", target.name.capitalize(), dropped_coinage)
-            # Add to room? Need coin item or just log for now.
-            # target.location.items.append(COIN_ITEM_ID?) # Needs design
-            # For simplicity now, maybe award directly to attacker?
-            if isinstance(attacker, Character):
-                #log.debug("Awarding %d coinage directly to %s.", dropped_coinage, attacker.name)
-                # TODO: Check purse limit later
-                attacker.coinage += dropped_coinage
-                await attacker.send(f"You loot {dropped_coinage} talons from the corpse.")
+        if dropped_coinage > 0 and target_loc:
+            log.info("%s corpse drops %d coinage in Room %d.", target_name.capitalize(), dropped_coinage, target_loc.dbid)
+            # Add coinage to the room object cache AND database
+            db_conn = world.db_conn # Assuming world now holds db_conn passed from server.py? Let's assume yes for now.
+            # *** Refactor Needed: Pass db_conn explicitly down the call stack ***
+            await target_loc.add_coinage(dropped_coinage, world.db_conn) # Temporary assumption
+            await target_loc.broadcast(f"\r\n{dropped_coinage} talons fall from {target_name}!\r\n", exclude={attacker})
 
-        if dropped_item_ids:
-            item_names = []
+        if dropped_item_ids and target_loc:
+            dropped_item_names = []
             for item_id in dropped_item_ids:
-                # Add item template ID to the room's item list
-                target.location.items.append(item_id)
-                # Try to get name for message
-                template = world.get_item_template(item_id) # Mob needs world ref? Pass it in. Or Room needs world ref. Pass world to handle_defeat.
-                item_names.append(template['name'] if template else f"Item #{item_id}")
-            log.info("%s dropped items: %s", target.name.capitalize(), item_names)
-            # Announce item drops to room (excluding attacker for now?)
-            await target.location.broadcast(f"\r\n{target.name.capitalize()}'s corpse drops: {', '.join(item_names)}.\r\n", exclude={attacker})
+                # Add item to room cache AND database
+                item_added = await target_loc.add_item(item_id, world) 
+                if item_added:
+                    template = world.get_item_template(item_id)
+                    dropped_item_names.append(template['name'] if template else f"Item #{item_id}")
+                else:
+                    log.error("Failed to add dropped item %d to room %d", item_id, target_loc.dbid)
+            if dropped_item_names:
+                log.info("%s dropped items: %s in room %s", target_name.capitalize(), dropped_item_names, target_loc.dbid)
+                drop_msg = f"\r\n{target_name.capitalize()}'s corpse drops: {', '.join(dropped_item_names)}.\r\n"
+                await target_loc.broadcast(drop_msg, exclude={attacker}) # Announce item drop
 
         # Award XP (simple V1: only attacker gets pool XP)
         if isinstance(attacker, Character):
@@ -102,11 +102,11 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
 
             # Drop Coinage (calculate 10%)
             coinage_to_drop = int(target.coinage * 0.10)
-            if coinage_to_drop > 0:
+            if coinage_to_drop > 0 and target_loc:
                 target.coinage -= coinage_to_drop
-                # TODO: Create coin item/pile on ground? Log for now.
                 log.info("%s drops %d coinage upon dying!", target.name, coinage_to_drop)
-                await target.location.broadcast(f"\r\n{target.name} drops some coins as they fall!\r\n", exclude={target})
+                await target_loc.add_coinage(coinage_to_drop, world.db_conn) # Requires db_conn!
+                await target_loc.broadcast(f"\r\nSome coins fall from {target.name} as they collapse!\r\n", exclude={target})
 
             # Send messages
             await target.send("\r\n*** You are DYING! ***\r\n")
@@ -116,30 +116,50 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
             # log.info("%s loses spiritual tether.", target.name)
 
         else:
-            log.debug("handle_defeat called on already non-ALIVE character %s.", target.name)
+            log.warning("handle_defeat called on already non-ALIVE character %s.", target.name)
 
     else:
         log.error("handle_defeat called with invalid target type: %r", target)
 
 def determine_loot(loot_table: Dict[str, Any]) -> Tuple[int, List[int]]:
-    """Calculates loot based on mob's loot table."""
+    """
+    Calculates loot based ONLY on the provided loot_table dictionary.
+
+    Args:
+        loot_table: The loot dictionary loaded from the mob template
+                    (e.g., {"coinage_max": 5, "items": [{"template_id": 7, "chance": 0.1}]})
+
+    Returns:
+        Tuple containing (dropped_coinage, list_of_dropped_item_template_ids)
+    """
     dropped_coinage = 0
     dropped_item_ids = []
 
-    # Coinage
-    max_coinage = loot_table.get("coinage_max", 0)
-    if max_coinage > 0:
-        dropped_coinage = random.randint(0, max_coinage) # Drop 0 to max
-
-    # Items
+    # --- Standard Loot Table Items ---
+    # This section correctly handles ALL item drops defined in the DB JSON
     item_list = loot_table.get("items", [])
-    if item_list:
+    if isinstance(item_list, list):
         for item_info in item_list:
-            template_id = item_info.get("template_id")
-            chance = item_info.get("chance", 0.0)
-            if template_id and isinstance(chance, (float, int)) and random.random() < chance:
-                dropped_item_ids.append(template_id)
+            # Double check item_info structure before accessing keys
+            if isinstance(item_info, dict):
+                template_id = item_info.get("template_id")
+                chance = item_info.get("chance", 0.0)
+                # Ensure template_id is valid int and chance is valid number
+                if template_id and isinstance(template_id, int) and \
+                isinstance(chance, (float, int)) and 0.0 <= chance <= 1.0:
+                    if random.random() < chance:
+                        dropped_item_ids.append(template_id)
+                else:
+                    log.warning("Invalid item entry in loot table: %r", item_info)
+            else:
+                log.warning("Non-dict entry found in items list within loot table: %r", item_info)
 
+    # --- Coinage (from loot table) ---
+    max_coinage = loot_table.get("coinage_max", 0)
+    # Add type check for safety
+    if isinstance(max_coinage, int) and max_coinage > 0:
+        dropped_coinage = random.randint(0, max_coinage)
+    log.debug("Determine Loot Results: Coinage=%d, ItemIDs=%s", dropped_coinage, dropped_item_ids) # ADD THIS
     return dropped_coinage, dropped_item_ids
 
 async def award_xp(attacker: 'Character', defeated_mob: 'Mob'):

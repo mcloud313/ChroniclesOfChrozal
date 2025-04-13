@@ -50,7 +50,7 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
     arrival_msg = f"\r\n{char_name} arrives.\r\n"
     await target_room.broadcast(arrival_msg, exclude={character})
     # 5. Send 'look' output of new room to the character
-    look_string = target_room.get_look_string(character)
+    look_string = target_room.get_look_string(character, world)
     await character.send(look_string)
 
     base_rt = 1.0 # Base movement roundtime

@@ -128,6 +128,7 @@ class Character:
         self.xp_total: int = db_data['xp_total'] # Current level progress
         self.unspent_skill_points: int = db_data['unspent_skill_points']
         self.unspent_attribute_points: int = db_data['unspent_attribute_points']
+        self.status: str = db_data['status'] if 'status' in db_data.keys() else 'ALIVE'
         self.spiritual_tether: int = db_data['spiritual_tether']
         self.status: str = "ALIVE" # Start alive when loaded/created
         self.death_timer_ends_at: Optional[float] = None # Timer not active initially
@@ -204,7 +205,11 @@ class Character:
 
         # Add basic derived name property
         self.name = f"{self.first_name} {self.last_name}"
-        self.calculate_initial_derived_attributes()
+        self.calculate_derived_max_attributes()
+
+        # If loaded in DYING/DEAD state, ensure HP is 0
+        if self.status in ["DYING", "DEAD"]:
+            self.hp = 0
 
     def get_max_weight(self) -> int:
         """Calculates maximum carrying weight based on Might."""
@@ -313,7 +318,7 @@ class Character:
             # Encode message to bytes (UTF-8 is standard)
             self.writer.write(message.encode('utf-8'))
             await self.writer.drain() # Wait until buffer has flushed
-            log.debug("Sent to %s: %r", self.name, message)
+            
         except (ConnectionResetError, BrokenPipeError) as e:
             log.warning("Network error sending to character %s: %s. Writer closed.", self.name, e)
             # Connection is likely dead, try to close gracefully
@@ -338,6 +343,7 @@ class Character:
             "unspent_skill_points": self.unspent_skill_points,
             "unspent_attribute_points": self.unspent_attribute_points,
             "spiritual_tether": self.spiritual_tether,
+            "status": self.status,
             "stats": json.dumps(self.stats), # Save current stats
             "skills": json.dumps(self.skills), # Save current skills
             "known_spells": json.dumps(self.known_spells),
@@ -345,8 +351,8 @@ class Character:
             "inventory": json.dumps(self.inventory), # Save list of template IDs
             "equipment": json.dumps(self.equipment), # Save dict of {slot: template_id}
             "coinage": self.coinage,
-            # Max HP/Essence are usually recalculated, not saved directly unless modified by effects
-            # Level, Description, Sex, Race, Class usually saved only when changed significantly
+            "max_hp": self.max_hp,
+            "max_essence": self.max_essence,
         }
 
         # Only proceed if there's actually data to save
@@ -408,7 +414,7 @@ class Character:
         log.debug("Character %s location updated from room %s to room %s",
                 self.name, old_loc_id, new_loc_id)
 
-    def calculate_initial_derived_attributes(self):
+    def calculate_derived_max_attributes(self):
         """
         Sets initial Max HP/Essence based on stats AND max possible class die roll.
         Called from __init__ and potentially other recalculations.
@@ -439,9 +445,6 @@ class Character:
         self.hp = min(self.hp, self.max_hp)
         self.essence = min(self.essence, self.max_essence)
         # Generally restore fully on level up / init
-        self.hp = self.max_hp
-        self.essence = self.max_essence
-
 
         # log.debug("Character %s: Derived attributes calculated/updated: MaxHP=%d, MaxEssence=%d",
         #         self.name, self.max_hp, self.max_essence)
@@ -495,7 +498,6 @@ class Character:
         if not self.equipment: # No equipment worn
             return 0
         
-        #log.debug("Equipment contents: %s", self.equipment) # See what slots/IDs are equipped
         for slot, template_id in self.equipment.items():
             # skip non-armor/shield items if any happen to be equipped? Or assume only armor/shields provide AV
             template = world.get_item_template(template_id)
@@ -503,7 +505,6 @@ class Character:
                 template_dict = dict(template) # Easier to work with dict
                 # Check if items type should contribute to AV (ARMOR or SHIELD typically)
                 item_type = template['type'].upper() # Get type from template row
-                log.debug("Checking slot [%s], item ID %d, type %s", slot, template_id, item_type)
                 if item_type in ["ARMOR", "SHIELD"]: # ONly count these types for now.
                     try:
                         stats_str = template_dict.get('stats', '{}')

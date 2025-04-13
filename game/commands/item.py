@@ -121,7 +121,7 @@ async def cmd_get(character: 'Character', world: 'World', db_conn: 'aiosqlite.Co
     
     for i, template_id in enumerate(items_on_ground):
         template = get_item_template_from_world(world, template_id)
-        if template and template['name'].lower() == target_name:
+        if template and target_name in template['name'].lower():
             item_template_id_to_get = template_id
             item_template_data = template
             item_index_in_room = i
@@ -146,18 +146,18 @@ async def cmd_get(character: 'Character', world: 'World', db_conn: 'aiosqlite.Co
         # Optional: Send different message if already encumbered vs would become encumbered
         return True
     
-    # Pick up item
-    character.location.items.pop(item_index_in_room) # Remove from room by index
-    character.inventory.append(item_template_id_to_get) # Add template ID to inventory
-
-    item_name = item_template_data['name']
-    await character.send(f"You get {item_name}.")
-    # Announce to room
-    await character.location.broadcast(f"\r\n{character.name} gets {item_name}.\r\n", exclude={character})
-
-    # Apply roundtime
-    character.roundtime = 2.0
-
+    removed_from_room = await character.location.remove_item(item_template_id_to_get, world)
+    if removed_from_room:
+        # Add template ID to character inventory (cache only, saved later)
+        character.inventory.append(item_template_id_to_get)
+        item_name = item_template_data['name']
+        await character.send(f"You get {item_name}.")
+        await character.location.broadcast(f"\r\n{character.name} gets {item_name}.\r\n", exclude={character})
+        character.roundtime = 3.0
+    else:
+        # Failed to remove from DB/cache, maybe someone else got it?
+        await character.send(f"You reach for the {item_template_data['name']}, but it's gone!")
+    # --- ^ ^ ^ ---
     return True
 
 async def cmd_drop(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
@@ -179,19 +179,18 @@ async def cmd_drop(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
         return True
     
     # Drop the item
-    character.inventory.remove(template_id_to_drop) # Remove first instance from inv
-    character.location.items.append(template_id_to_drop) # Add template ID to room items
-
-    template = get_item_template_from_world(world, template_id_to_drop)
-    item_name = template['name'] if template else f"Item #{template_id_to_drop}"
-
-    await character.send(f"You drop {item_name}.")
-    # Announce to room
-    await character.location.broadcast(f"\r\n{character.name} drops {item_name}.\r\n", exclude={character})
-
-    # Apply roundtime
-    character.roundtime = 1.0
-
+    item_added_to_room = await character.location.add_item(template_id_to_drop, world)
+    if item_added_to_room:
+        # Remove first instance from character inventory (cache only, saved later)
+        character.inventory.remove(template_id_to_drop)
+        template = get_item_template_from_world(world, template_id_to_drop)
+        item_name = template['name'] if template else f"Item #{template_id_to_drop}"
+        await character.send(f"You drop {item_name}.")
+        await character.location.broadcast(f"\r\n{character.name} drops {item_name}.\r\n", exclude={character})
+        character.roundtime = 1.0
+    else:
+        # Failed to add to room DB? Should be rare.
+        await character.send(f"You try to drop the {target_name}, but fumble!")
     return True
 
 async def cmd_wear(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
