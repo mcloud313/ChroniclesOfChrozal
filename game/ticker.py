@@ -82,6 +82,7 @@ async def _run_ticker():
 
     while True:
         try:
+            log.debug("Ticker: Sleeping for %.2f s...", _interval_seconds) # ADDED
             # Wait for the next tick interval
             await asyncio.sleep(_interval_seconds)
 

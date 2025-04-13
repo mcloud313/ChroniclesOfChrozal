@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 # Simple Message of the Day
 MOTD = """
-\r\n--- Welcome to Chronicles of Chrozal (Alpha 0.43) ---
+\r\n--- Welcome to Chronicles of Chrozal (Alpha 0.44) ---
 \r\n  
 \r\n  ___  _  _  ____   __   __ _  __  ___  __    ____  ____       
 \r\n / __)/ )( \(  _ \ /  \ (  ( \(  )/ __)(  )  (  __)/ ___)      
@@ -334,10 +334,17 @@ class ConnectionHandler:
         for i, char_row in enumerate(char_list_data):
             selection_num = i + 1
             char_map[selection_num] = char_row['id']
-            # TODO: Fetch Race/Class names later instead of showing IDs
-            output += (f" {selection_num}. {char_row['first_name']} {char_row['last_name']} "
-                    f"(Level {char_row['level']} R:{char_row['race_id']} C:{char_row['class_id']})\r\n") # Show IDs for now
-        output += "---------------------------\r\n"
+            
+            race_name = self.world.get_race_name(char_row['race_id'])
+            class_name = self.world.get_class_name(char_row['class_id'])
+            level = char_row['level']
+            first_name = char_row['first_name']
+            last_name = char_row['last_name']
+
+
+            output += f" {selection_num}. {first_name} {last_name} ({race_name} {class_name} {level})\r\n"
+        output += "----------------------------------\r\n"
+        # TODO: Add playtime display here later?
         output += "Enter the number of the character to play:"
 
         await self._send(output)
@@ -377,7 +384,7 @@ class ConnectionHandler:
             await self._send("Invalid input. Please enter a number.")
             # Stay in SELECTING_CHARACTER state
             return
-        except Exception as e:
+        except Exception:
             log.exception("Error during character selection/loading for %s:", self.addr, exc_info=True)
             await self._send("An internal error occurred. Disconnecting.")
             self.state = ConnectionState.DISCONNECTED

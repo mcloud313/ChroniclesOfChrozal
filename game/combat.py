@@ -39,10 +39,16 @@ def roll_exploding_dice(max_roll: int) -> int:
     return total
 async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Character', 'Mob'], world: 'World'):
     """Handles logic when a target's HP reaches 0."""
-    log.info("%s has defeated %s!", getattr(attacker,'name','Something'), getattr(target,'name','Something'))
+    attacker_name = getattr(attacker, 'name', 'Something').capitalize()
+    target_name = getattr(target, 'name', 'Something').capitalize() # Capitalize names for messages
+    target_loc = getattr(target, 'location', None)
+    log.info("%s has defeated %s!", attacker_name, target_name)
 
     # --- If Mob is defeated ---
     if isinstance(target, Mob):
+        slain_msg = f"\r\n{attacker_name} has slain {target_name}!\r\n"
+        if target_loc:
+            await target_loc.broadcast(slain_msg, exclude={attacker})
         target.die() # Set hp=0, time_of_death, clear target
 
         #Calculate and place loot/coinage in room

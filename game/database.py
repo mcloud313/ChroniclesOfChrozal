@@ -28,12 +28,6 @@ DATABASE_PATH = getattr(config, 'DB_NAME', 'data/default.db') # safer access
 # Configure logging for database operations
 log = logging.getLogger(__name__)
 # Set default logging level if not configured elsewhere
-if not log.handlers:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-
 # Define some constants for key room IDs for easier linking
 TAVERN_ID = 10
 MARKET_ID = 11

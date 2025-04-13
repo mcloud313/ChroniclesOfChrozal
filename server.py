@@ -16,11 +16,13 @@ from game.handlers.connection import ConnectionHandler
 from game import ticker
 
 # Configure basic logging
-log = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+log_level = logging.DEBUG # Or load from config: getattr(config, 'LOG_LEVEL', logging.INFO)
+log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+logging.basicConfig(level=log_level, format=log_format)
 
+log = logging.getLogger(__name__)
+
+print(f"Root logger level after basicConfig: {logging.getLogger().getEffectiveLevel()}")
 # --- Global World Instance ---
 # This holds the loaded game state
 world: World | None = None

@@ -222,6 +222,7 @@ class World:
 
     async def update_mob_ai(self, dt: float):
         """Ticks AI for all mobs in all loaded rooms."""
+        log.debug("World: Updating Mob AI...")
         # Use asyncio.gather for concurrency? Maybe not needed if AI is simple.
         # Let's iterate sequentially for simplicity/predictability first.
         # log.debug("World ticking mob AI...") # Can be very verbose
@@ -232,6 +233,7 @@ class World:
                 log.exception("Error ticking AI in Room %d", room.dbid, exc_info=True)
 
     async def update_respawns(self, dt: float):
+        log.debug("World: Checking Respawns...")
         """Checks for and processes mob respawns in all loaded rooms."""
         # log.debug("World checking mob respawns...") # Can be verbose
         current_time = time.monotonic()

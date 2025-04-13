@@ -247,54 +247,64 @@ class Mob:
         log.info("Mob %d (%s) moved from Room %d to Room %d via '%s'.",
                 self.instance_id, self.name, current_room.dbid, target_room.dbid, direction)
 
-    async def simple_ai_tick(self, dt: float, world: 'World'): # <<< Add world param
+    def has_flag(self, flag_name: str) -> bool:
+        """Check if the mob has a specific flag (case-insensitive)."""
+        # Assumes self.flags is a set of UPPERCASE strings loaded in __init__
+        return flag_name.upper() in self.flags
+
+    async def simple_ai_tick(self, dt: float, world: 'World'):
         """Basic AI logic called by the ticker via Room/World."""
-        from . import combat # Moved import to prevent circular error
+        # Import combat locally within the method to prevent cycles
+        from . import combat
+
         if not self.is_alive(): return
+        self.tick_roundtime(dt)
+        if self.roundtime > 0: return
 
-        self.tick_roundtime(dt) # Decay roundtime first
-        if self.roundtime > 0: return # Still busy
-
-        # --- Basic Retaliation / Action Logic ---
+        # --- Combat Logic (if fighting) ---
         if self.is_fighting and self.target:
-            # Check if target is still valid
-            if not self.target.is_alive() or self.target.location != self.location:
-                log.debug("%s's target %s is gone. Stopping combat.", self.name, getattr(self.target,'name','?'))
+            # Check if target is still valid first
+            target_is_valid = self.target.is_alive() and hasattr(self.target, 'location') and self.target.location == self.location
+            if not target_is_valid:
+                log.debug("%s's target %s is no longer valid (Dead or wrong location). Stopping combat.",
+                        self.name, getattr(self.target, 'name', '?'))
                 self.target = None
                 self.is_fighting = False
-                return # Stop acting this tick
-            
+                return # <<< ADDED/CONFIRMED return statement here
+            else:
+                # Target IS valid, proceed with attack attempt
+                attack_data = self.choose_attack()
+                if attack_data:
+                    attk_name = attack_data.get("name", "attack")
+                    # self.target is guaranteed to be non-None here
+                    log.debug("%s uses %s against %s!", self.name.capitalize(), attk_name, self.target.name)
+                    try:
+                        await combat.resolve_physical_attack(self, self.target, attack_data, world)
+                    except Exception as combat_e:
+                        log.exception("Error during mob %s resolving attack on %s: %s", self.name, self.target.name, combat_e)
+                        self.roundtime = 1.0 # Small cooldown after error
+                else:
+                    log.warning("%s is fighting %s but has no attacks defined!", self.name, self.target.name)
+                    self.roundtime = 2.0 # Default cooldown
+
         # --- Movement Logic (if NOT fighting and can move) ---
+        # Use elif to ensure mob doesn't try to move in the same tick it started fighting
         elif not self.is_fighting and self.movement_chance > 0 and not self.has_flag("STATIONARY"):
             if random.random() < self.movement_chance:
-                #Attempt to move
                 possible_exits = [
                     direction for direction, target in self.location.exits.items()
-                    if isinstance(target, int) #only chose simple integer exits
+                    if isinstance(target, int) # Only simple integer exits
                 ]
                 if possible_exits:
                     chosen_direction = random.choice(possible_exits)
                     log.debug("Mob %d (%s) decided to move %s.", self.instance_id, self.name, chosen_direction)
                     await self.move(chosen_direction, world)
-                    # Return after attempting move to prevent AGGRESSIVE check this tick
+                    # Return after attempting move prevents AGGRO check in same tick
                     return
 
-            # If ready, attempt an attack (basic version)
-            attack_data = self.choose_attack()
-            if attack_data:
-                attk_name = attack_data.get("name", "attack")
-                # Call the main combat resolution function
-                log.debug("%s uses %s against %s!", self.name.capitalize(), attk_name, self.target.name)
-                # We need the combat module imported here
-                # We pass the attack_data dict instead of a weapon Item
-                await combat.resolve_physical_attack(self, self.target, attack_data, world) # Pass world
-                # Roundtime applied inside resolve_physical_attack now
-            else:
-                log.warning("%s is fighting but has no attacks defined!", self.name)
-                self.roundtime = 2.0 # Default cooldown if no attacks
-
+        # --- Aggressive Check (if NOT fighting and didn't move) ---
+        # Use elif to ensure this doesn't run if the mob just moved
         elif self.has_flag("AGGRESSIVE") and not self.is_fighting:
-            # Find a player character in the room to attack
             potential_targets = [
                 char for char in self.location.characters if char.is_alive()
             ]
@@ -302,19 +312,15 @@ class Mob:
                 self.target = random.choice(potential_targets)
                 self.is_fighting = True
                 log.info("%s becomes aggressive towards %s!", self.name.capitalize(), self.target.name)
-                # Optionally announce aggression to room?
-                # await self.location.broadcast(f"\r\n{self.name.capitalize()} growls and turns towards {self.target.name}!\r\n")
-                # Try to attack immediately if possible
+                # Optional: Announce aggression?
+                # await self.location.broadcast(...)
+                # Try to attack immediately if roundtime allows
                 if self.roundtime == 0.0:
-                    await self.simple_ai_tick(0.0, world) # Re-call with world
+                    # We can safely call recursively here, as the next iteration
+                    # will enter the 'is_fighting' block and not this 'AGGRESSIVE' one.
+                    await self.simple_ai_tick(0.0, world)
 
-
-        # TODO: Add movement logic later if not STATIONARY
-        # TODO: Add other behaviors (healing, special abilities) later
-
-    def has_flag(self, flag_name: str) -> bool:
-        """Check if the mob has a specific flag (case-insensitive)."""
-        return flag_name.upper() in self.flags
+                    #TODO: Add other mob abilities, healing, area attacks, legendary actions
 
     def get_total_av(self, world: 'World') -> int:
         """Mobs don't wear armor in V1. Returns 0."""
