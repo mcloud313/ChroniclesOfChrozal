@@ -118,6 +118,7 @@ async def main():
                 ticker.subscribe(world.update_respawns)
                 ticker.subscribe(world.update_xp_absorption)
                 ticker.subscribe(world.update_death_timers)
+                ticker.subscribe(world.update_effects)
 
             # Start Network Server
             # Pass the handle_connection function defined above
@@ -145,6 +146,7 @@ async def main():
                 ticker.unsubscribe(world.update_respawns)
                 ticker.unsubscribe(world.update_xp_absorption)
                 ticker.unsubscribe(world.update_death_timers)
+                ticker.unsubscribe(world.update_effects)
                 log.info("Unsubscribed world updates from ticker.")
             await ticker.stop_ticker()
 

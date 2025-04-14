@@ -15,6 +15,7 @@ from . import database
 from . import utils
 from .item import Item
 from .definitions import skills as skill_defs
+from .definitions import abilities as ability_defs
 
 
 # Use TYPE_CHECKING block for Room to avoid circular import errors
@@ -97,6 +98,20 @@ class Character:
     def dv(self) -> int: # Dodge Value
         # Agility Modifier * 2
         return self.agi_mod * 2
+    
+    @property
+    def barrier_value(self) -> int:
+        """Calculates total Barrier Value (BV) from active effects."""
+        total_bv = 0
+        current_time = time.monotonic()
+        # Check effects that modify STAT_BARRIER_VALUE
+        for effect_name, effect_data in list(self.effects.items()): # Iterate copy
+            if effect_data.get("stat") == ability_defs.STAT_BARRIER_VALUE: # Use constant if defined
+                if effect_data.get("ends_at", 0) > current_time:
+                    total_bv += effect_data.get("amount", 0)
+                # Optionally remove expired effect here? Or rely on ticker update_effects
+        # log.debug("Character %s calculated Barrier Value: %d", self.name, total_bv) # Optional
+        return total_bv
 
     def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any], player_is_admin: bool = False):
         """
@@ -139,6 +154,7 @@ class Character:
         self.target: Optional[Union['Character', 'Mob']] = None # Who are we fighting? Needs Mob import below
         self.is_fighting: bool = False # Add fighting flag
         self.casting_info: Optional[Dict[str, Any]] = None
+        self.effects: Dict[str, Dict[str, Any]] = {}
 
         # Load stats (JSON string -> dict)
         try:

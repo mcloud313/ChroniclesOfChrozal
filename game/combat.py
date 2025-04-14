@@ -15,6 +15,7 @@ from .mob import Mob
 from .item import Item
 from .world import World
 from . import utils
+from .definitions import abilities as ability_defs
 
 
 log = logging.getLogger(__name__)
@@ -367,6 +368,31 @@ async def resolve_physical_attack(
     target.hp -= final_damage
     target.hp = max(0, target.hp)
 
+    if isinstance(target, Character) and final_damage > 0 and target.casting_info:
+        spell_key = target.casting_info.get("key")
+        spell_data = ability_defs.get_ability_data(spell_key)
+
+        #Important: only interrupt SPELLS not instant abilities
+        if spell_data and spell_data.get("type", "").upper() == "SPELL":
+            log.debug("Character %s was casting spell '%s' while taking %d damage. Checking concentration...",
+                    target.name, spell_key, final_damage)
+            
+            # Perform skill check. Difficulty modifier = damage taken.
+            # Higher damage makes concentration harder.
+            check_dc_modifier = final_damage
+            concentration_success = utils.skill_check(target, "concentration", difficulty_mod=check_dc_modifier)
+
+            if not concentration_success:
+                log.info("Character %s failed concentration check (Damage: %d), spell %s fizzles.",
+                        target.name, final_damage, spell_key)
+                target.casting_info = None
+                await target.send("{RYour concentration is broken by the blow! Your spell fizzles!{x") # color later
+                if target.location:
+                    await target.location.broadcast(f"\r\n{target.name.capitalize()}'s concentration wavers!\r\n", exclude={target})
+                else:
+                    log.debug("Character %s succeeded concentration check (Damage: %d).", target.name, final_damage)
+
+
     # 9. Send Messages (uses local vars: hit_desc, target_name, attk_name, final_damage, crit_indicator)
     hit_desc = "hit"; crit_indicator = ""
     if is_crit: hit_desc = "CRITICALLY HIT"; crit_indicator = " CRITICAL!"
@@ -397,3 +423,294 @@ async def resolve_physical_attack(
     # 11. Check Defeat (passes world correctly now)
     if target.hp <= 0:
         await handle_defeat(attacker, target, world)
+
+async def resolve_magical_attack(
+    caster: Character, # Assume caster is always Character for now
+    target: Union[Character, Mob],
+    spell_data: Dict[str, Any], # Data for the specific spell
+    world: World  
+):
+    """REsolves spell damage against a target."""
+    log.debug("Resolving magical attack: %s -> %s", caster.name, target.name)
+    effect_details = spell_data.get("effect_details", {})
+    caster_name = caster.name.capitalize()
+    target_name = target.name.capitalize()
+    target_loc = caster.location # Assume same location
+
+    # 1. Get Caster Power & Target Defense
+    caster_rating = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr # Use APR or DPR
+    target_dv = target.dv
+    target_sds = target.sds
+    target_bv = target.barrier_value # Use the property
+
+    # 2. Hit Check (Magic vs Dodge Value)
+    always_hits = effect_details.get("always_hits", False)
+    hit_roll = random.randint(1, 20)
+    attack_score = caster_rating + hit_roll
+    is_hit = False
+    is_crit = (hit_roll == 20)
+    is_fumble = (hit_roll == 1) # Magic can fumble? Yes.
+
+    if always_hits: is_hit = True; is_crit = False; is_fumble = False # Magic missile bypasses roll
+    elif is_fumble: is_hit = False
+    elif is_crit: is_hit = True
+    elif attack_score >= target_dv: is_hit = True
+    else: is_hit = False
+
+    # 3. Resolve Miss / Fumble
+    if not is_hit:
+        # Send messages (Use spell display name)
+        spell_display_name = spell_data.get("name", "spell")
+        miss_msg_caster = f"Your {spell_display_name} misses {target_name}."
+        miss_msg_target = f"{caster_name}'s {spell_display_name} misses you."
+        miss_msg_room = f"{caster_name}'s {spell_display_name} misses {target_name}."
+        if is_fumble: miss_msg_caster = f"You fumble casting {spell_display_name}!" # etc.
+
+        await caster.send(miss_msg_caster)
+        if isinstance(target, Character): await target.send(miss_msg_target)
+        if target_loc: await target_loc.broadcast(f"\r\n{miss_msg_room}\r\n", exclude={caster, target})
+        return # End resolution
+    
+    # 4. Calculate Damage
+    base_dmg = effect_details.get("damage_base", 0)
+    rng_dmg = effect_details.get("damage_rng", 0)
+    total_random_damage = 0
+    if rng_dmg > 0:
+        if is_crit and not always_hits: # No exploding dice on auto-hits maybe?
+            total_random_damage = roll_exploding_dice(rng_dmg)
+        else: total_random_damage = random.randint(1, rng_dmg)
+
+    # Add caster's power modifier? Use APR/DPR directly? Let's add mod for now.
+    stat_modifier = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr
+    pre_mitigation_damage = max(0, base_dmg + total_random_damage + stat_modifier)
+
+    # 5. Mitigation (SDS + BV)
+    # TODO: Check damage_type for resistances/vulnerabilities later
+    mitigated_damage1 = max(0, pre_mitigation_damage - target_sds) # Reduce by SDS
+    final_damage = max(0, mitigated_damage1 - target_bv) # Reduce by Barrier Value
+
+    # 6. Apply Damage
+    target.hp -= final_damage
+    target.hp = max(0, target.hp)
+
+    # 7. Send Messages
+    hit_desc = "hits"
+    crit_indicator = ""
+    if is_crit: hit_desc = "CRITICALLY HITS"; crit_indicator = " CRITICAL!"
+    spell_display_name = spell_data.get("name", "spell")
+
+    dmg_msg_caster = f"Your {spell_display_name} {hit_desc} {target_name} for {final_damage} damage!{crit_indicator}"
+    dmg_msg_target = f"{caster_name}'s {spell_display_name} {hit_desc.upper()}S you for {final_damage} damage!{crit_indicator}"
+    dmg_msg_target += f" ({target.hp}/{target.max_hp} HP)"
+    dmg_msg_room = f"{caster_name}'s {spell_display_name} {hit_desc.upper()}S {target_name} for {final_damage} damage!"
+
+    await caster.send(dmg_msg_caster)
+    if isinstance(target, Character): await target.send(dmg_msg_target)
+    if target_loc: await target_loc.broadcast(f"\r\n{dmg_msg_room}\r\n", exclude={caster, target})
+
+    # 8. Check Defeat
+    if target.hp <= 0:
+        await handle_defeat(caster, target, world)
+
+async def resolve_ability_effect(
+    caster: Character, # Caster is always a character for now
+    target_ref: Optional[Union[int, str]], # Stored ID (int for mob/char) or "self"
+    target_type_str: Optional[str], # Stored type "MOB", "CHAR", "SELF", "NONE"
+    ability_data: Dict[str, Any], # Data for the spell/ability used
+    world: World 
+):
+    """Finds the target and calls the specific effect resolution function."""
+
+    effect_type = ability_data.get("effect_type")
+    effect_details = ability_data.get("effect_details", {})
+    ability_key = ability_data.get("name", "?").lower() # Use internal key if name missing
+
+    # 1. Find Target Object based on saved reference
+    target: Optional[Union[Character, Mob]] = None
+    if target_type_str == "SELF":
+        target = caster
+    elif target_type_str == "NONE":
+        target = None # no target needed
+    elif target_type_str == "CHAR" and isinstance(target_ref, int):
+        target = world.get_active_character(target_ref) # Find character by DB ID
+    elif target_type_str == "MOB" and isinstance(target_ref, int): 
+        # Find mob by instance ID - need to search rooms? Or store location?
+        # Search caster's current room for simplicity
+        if caster.location:
+            for mob in caster.location.mobs:
+                if mob.instance_id == target_ref:
+                    target = mob; break
+    elif target_type_str == "CHAR_OR_MOB" and isinstance(target_ref, int):
+        # Try finding character first, then mob
+        target = world.get_active_character(target_ref)
+        if not target and caster.location:
+            for mob in caster.location.mobs:
+                if mob.instance_id == target_ref: target = mob; break
+    
+    # Check if required target exists and is still valid (alive, same room for non-self)
+    target_type = ability_data.get("target_type") # Get Required type again
+    is_valid_target = False
+    if target_type == ability_defs.TARGET_SELF:
+        is_valid_target = caster.is_alive() # Can buff/heal self even if dying? Maybe not. Check ALIVE.
+    elif target_type == ability_defs.TARGET_NONE:
+        is_valid_target = True # No target needed
+    elif target is not None and target.is_alive() and target.location == caster.location:
+        # Check type match if needed (e.g., spell specifies MOB only)
+        if target_type == ability_defs.TARGET_CHAR and isinstance(target, Character): is_valid_target = True
+        elif target_type == ability_defs.TARGET_MOB and isinstance(target, Mob): is_valid_target = True
+        elif target_type == ability_defs.TARGET_CHAR_OR_MOB: is_valid_target = True
+    
+    if not is_valid_target and target_type not in [ability_defs.TARGET_NONE, ability_defs.TARGET_AREA]:
+        log.debug("Target %s (%s) no longer valid for %s effect.", target_ref, target_type_str, ability_key)
+        await caster.send("Your target is no longer valid.")
+        return # Spell fizzles, no post cast RT applied by resolver
+    
+    # 2. Switch based on Effect Type
+    log.debug("Resolving effect '%s' for %s. Caster: %s, Target: %s",
+            effect_type, ability_key, caster.name, getattr(target, 'name', 'None'))
+    
+    if effect_type == ability_defs.EFFECT_DAMAGE:
+        school = effect_details.get("school", "Physical").upper()
+        if school in ["ARCANE", "DIVINE", "FIRE", "COLD", "LIGHTNING", "POISON", "EARTH"]: # Magical Schools
+            await resolve_magical_attack(caster, target, ability_data, world)
+        else: # Assume physical damage ability
+            #call phyiscal attack but pass ability details, no weapon
+            await resolve_physical_attack(caster, target, effect_details, world)
+
+    elif effect_type == ability_defs.EFFECT_HEAL:
+        await apply_heal(caster, target, effect_details, world)
+
+    elif effect_type == ability_defs.EFFECT_BUFF or effect_type == ability_defs.EFFECT_DEBUFF:
+        await apply_effect(caster, target, effect_details, world)
+
+    elif effect_type == ability_defs.EFFECT_MODIFIED_ATTACK:
+        # Get weapon, pass mods to physical attack
+        weapon = None
+        wield_slot = ability_defs.get_slot_for_attack(effect_details) # Need helper based on ability? Assume main hand.
+        weapon_template_id = caster.equipment.get("WIELD_MAIN")
+        if weapon_template_id: weapon = caster.get_item_instance(world, weapon_template_id)
+        if weapon and weapon.item_type != "WEAPON": weapon = None
+        await resolve_physical_attack(caster, target, weapon, world, ability_mods=effect_details)
+
+    elif effect_type == ability_defs.EFFECT_STUN_ATTEMPT:
+        # Requires shield check? Do check here or in command? Check here.
+        if effect_details.get("requires_shield", False):
+            shield_id = caster.equipment.get("WIELD_OFF")
+            if not shield_id: await caster.send("You need a shield equipped!"); return # Fizzle
+            shield_item = caster.get_item_instance(world, shield_id)
+            if not shield_item or shield_item.item_type.upper() != "SHIELD":
+                await caster.send("You need a shield equipped!"); return
+            
+        # Resolve as physical attack with mods, check stun inside maybe?
+        # Or resolve hit here, then roll stun? Let's resolve hit here.
+        hit_check_success = perform_hit_check(caster, target, ability_data.get("effect_details", {}).get("mar_modifier_mult", 1.0))
+        if hit_check_success:
+            stun_chance = effect_details.get("stun_chance", 0.0)
+            if random.random() < stun_chance:
+                # Apply stun effect
+                stun_effect = {
+                    "name": effect_details.get("name", "Stunned"),
+                    "stat_affected": ability_defs.STAT_ROUNDTIME,
+                    "amount": effect_details.get("stun_duration", 3.0),
+                    "duration": effect_details.get("stun_duration", 3.0) + 0.1 # Duration slightly longer than RT added
+                }
+                await apply_effect(caster, target, stun_effect, world) # Apply the stun effect
+                await target.send("{RYou are stunned!{x") # Notify target
+                await caster.location.broadcast(f"\r\n{target.name} is stunned by {caster.name}'s bash!\r\n", exclude={caster, target})
+            else:
+                await caster.send(f"Your shield bash glances off {target.name}.")
+                await target.send(f"{caster.name} tries to bash you, but you avoid the worst of it.")
+        else: # Missed the bash attempt
+            await caster.send(f"You try to bash {target.name}, but miss.")
+            await target.send(f"{caster.name} tries to bash you, but misses.")
+
+    else:
+        log.warning("Unhandled effect type '%s' in resolve_ability_effect for %s", effect_type, ability_key)
+        await caster.send("Your action seems to have no effect.")
+
+# --- Placeholder Helper for Hit Check ---
+def perform_hit_check(attacker: Union[Character, Mob], target: Union[Character, Mob], mar_mult: float = 1.0) -> bool:
+    """ Basic hit check logic (d20 + MAR*mult vs DV). """
+    # TODO: Refactor hit logic out of resolve_physical_attack into here?
+    base_mar = attacker.mar
+    mod_mar = math.floor(base_mar * mar_mult)
+    target_dv = target.dv # TODO: Add dodge/parry skill bonuses here too eventually
+    hit_roll = random.randint(1, 20)
+    if hit_roll == 1: return False # Fumble
+    if hit_roll == 20: return True # Crit
+    return (mod_mar + hit_roll) >= target_dv
+
+async def apply_heal(
+    caster: Character,
+    target: Union[Character, Mob], # Can mobs be healed? Yes.
+    effect_details: Dict[str, Any],
+    world: World
+):
+    """Applies healing to a target."""
+    if not target.is_alive(): # Can't heal the dead (for now)
+        if caster == target: await caster.send("You cannot heal yourself in your current state.")
+        else: await caster.send(f"{target.name.capitalize()} cannot be healed now.")
+        return
+
+    base_heal = effect_details.get("heal_base", 0)
+    rng_heal = effect_details.get("heal_rng", 0)
+    random_heal = random.randint(1, rng_heal) if rng_heal > 0 else 0
+    heal_amount = base_heal + random_heal
+
+    if heal_amount <= 0: return # No actual healing
+
+    actual_healed = min(heal_amount, target.max_hp - target.hp) # Can't heal above max HP
+    target.hp += actual_healed
+
+    # Send messages
+    heal_msg_caster = f"You heal {target.name} for {actual_healed} hit points."
+    heal_msg_target = f"{caster.name.capitalize()} heals you for {actual_healed} hit points."
+    heal_msg_room = f"{caster.name.capitalize()} heals {target.name}."
+
+    if caster == target: heal_msg_caster = f"You heal yourself for {actual_healed} hit points."
+
+    await caster.send(heal_msg_caster)
+    if target != caster and isinstance(target, Character): await target.send(heal_msg_target)
+    if target.location: await target.location.broadcast(f"\r\n{heal_msg_room}\r\n", exclude={caster, target})
+
+async def apply_effect(
+    caster: Character, # Or Mob later?
+    target: Union[Character, Mob],
+    effect_details: Dict[str, Any],
+    world: World
+):
+    """Applies a temporary BUFF or DEBUFF effect to the target."""
+    effect_name = effect_details.get("name", "UnknownEffect")
+    duration = effect_details.get("duration", 0.0)
+    stat = effect_details.get("stat_affected")
+    amount = effect_details.get("amount")
+
+    if not duration > 0 or not stat or amount is None:
+        log.error("Invalid effect data for '%s': %s", effect_name, effect_details)
+        await caster.send("The effect seems to dissipate harmlessly.")
+        return
+
+    # Store effect on target (overwrites existing effect with same name)
+    # Ensure target has 'effects' attribute
+    if not hasattr(target, 'effects'):
+        log.error("Target %s has no 'effects' attribute to apply %s", target.name, effect_name)
+        return
+
+    target.effects[effect_name] = {
+        "ends_at": time.monotonic() + duration,
+        "amount": amount,
+        "stat": stat,
+        "caster_id": caster.dbid if isinstance(caster, Character) else None # Track caster if needed
+    }
+    log.info("Applied effect '%s' to %s for %.1f seconds.", effect_name, target.name, duration)
+
+    # Send feedback message (customize based on buff/debuff later)
+    # TODO: More descriptive messages based on effect name/stat
+    buff_msg_caster = f"You apply {effect_name} to {target.name}."
+    buff_msg_target = f"You feel the effect of {effect_name}."
+    buff_msg_room = f"{caster.name.capitalize()} applies an effect to {target.name}."
+    if caster == target: buff_msg_caster = f"You apply {effect_name} to yourself."; buff_msg_room=f"{caster.name.capitalize()} applies an effect to themself."
+
+    await caster.send(buff_msg_caster)
+    if target != caster and isinstance(target, Character): await target.send(buff_msg_target)
+    if target.location: await target.location.broadcast(f"\r\n{buff_msg_room}\r\n", exclude={caster, target})

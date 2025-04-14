@@ -59,6 +59,13 @@ class Mob:
     @property
     def dv(self) -> int: return self.agi_mod * 2
 
+    @property
+    def barrier_value(self) -> int:
+        """Mobs don't benefit from magical barriers in V1."""
+        #TODO: ALLOW FOR MOBS TO BENEFIT FROM MAGICAL BARRIERS
+        # Could check self.effects later if mobs can get buffs/barriers
+        return 0
+
     def __init__(self, template_data: Dict[str, Any], current_room: 'Room'):
         """
         Initializes a Mob instance from template data, applying variance.
@@ -77,6 +84,7 @@ class Mob:
         self.level: int = template_data['level']
         self.location: 'Room' = current_room # Initial location
         self.mob_type: Optional[str] = template_data.get('mob_type')
+        self.effects: Dict[str, Dict[str, Any]] = {}
 
         # --- Load Variance Data ---
         variance_dict: Dict[str, int] = {}

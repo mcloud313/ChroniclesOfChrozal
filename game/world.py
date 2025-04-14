@@ -2,6 +2,7 @@
 Manages the game world's loaded state, including rooms and areas.
 """
 import time
+import math
 import logging
 import aiosqlite
 import config
@@ -11,6 +12,8 @@ from .room import Room
 from .character import Character # Assuming character class is defined
 from .mob import Mob
 from . import utils
+from .definitions import abilities as ability_defs
+from . import combat
 
 log = logging.getLogger(__name__)
 
@@ -208,12 +211,10 @@ class World:
         # Return a copy of the values (the character objects)
         return list(self.active_characters.values())
     
+    
     async def update_roundtimes(self, dt: float):
         """
         Called by the game ticker to decrease active roundtime for characters
-
-        ARGS:
-            dt: Delta time (seconds) since the last tick
         """
         # Use a list copy in case characters disconnect during iteration
         active_chars = self.get_active_characters_list()
@@ -224,6 +225,55 @@ class World:
             if char.roundtime > 0:
                 new_roundtime = char.roundtime - dt
                 char.roundtime = max(0.0, new_roundtime) # Decrease, clamp at 0
+
+                if char.roundtime == 0.0 and char.casting_info:
+                    # Store info and clear state immediately to prevent re-entry
+                    info = char.casting_info
+                    char.casting_info = None
+                    ability_key = info.get("key")
+                    log.debug("Character %s finished casting/using '%s'. Resolving effect.",
+                            char.name, ability_key)
+                    
+                    ability_data = ability_defs.get_ability_data(ability_key)
+                    if not ability_data:
+                        log.error("Finished casting unknown ability key '%s' for %s.", ability_key, char.name)
+                        continue
+
+                    # Check and Deduct Cost
+                    cost = ability_data.get("cost", 0)
+                    if char.essence >= cost:
+                        if cost > 0: char.essence -= cost # Deduce cost now
+
+                        # Resolve the actual effect
+                        try:
+                            # Pass relevant info to central resolver
+                            await combat.resolve_ability_effect(
+                                char, info.get("target_id"), info.get("target_type"),
+                                ability_data, self
+                            )
+                        except Exception as e:
+                            log.exception("Error resolving ability effect '%s' for %s: %s",
+                                        ability_key, char.name, e)
+                            await char.send("Something went wrong as your action finished.")
+                            # Don't apply post-cast RT on error? Or apply small one? Apply small one.
+                            char.roundtime = 0.5
+                            continue # Skip normal post-cast RT
+                        # Apply post-cast roundtime (recover) + armor penalty
+                        base_rt = ability_data.get("roundtime", 1.0)
+                        total_av = char.get_total_av(self) # Pass world
+                        rt_penalty = math.floor(total_av / 20) * 1.0
+                        final_rt = base_rt + rt_penalty
+                        char.roundtime = final_rt
+                        log.debug("Applied %.1fs post-cast RT to %s for %s (Base: %.1f, AV Pen: %.1f)",
+                                final_rt, char.name, ability_key, base_rt, rt_penalty)
+                        if rt_penalty > 0:
+                            await char.send(f"Recovering from your action takes longer in armor (+{rt_penalty:.1f}s).")
+
+                    else: # Not enough essence
+                        log.info("Character %s fizzled '%s' due to insufficient essence.", char.name, ability_key)
+                        await char.send(f"You lose focus ({ability_data['name']}) - not enough essence!")
+                        char.roundtime = 0.5 # Small fizzle roundtime
+
 
     async def update_mob_ai(self, dt: float):
         """Ticks AI for all mobs in all loaded rooms."""
@@ -329,6 +379,36 @@ class World:
         look_string = respawn_room.get_look_string(character)
         await character.send(look_string)
         # Optionally broadcast arrival in respawn room? Might be spammy.
+
+    async def update_effects(self, dt: float):
+        """
+        Called by the game ticker to check for and remove expired effects
+        on active characters and mobs.
+        """
+        current_time = time.monotonic()
+        participants = list(self.active_characters.values())
+        for room in self.rooms.values():
+            participants.extend(list(room.mobs)) # Include mobs from all rooms
+
+        if not participants: return
+
+        for participant in participants:
+            if hasattr(participant, 'effects') and participant.effects:
+                #Iterate over a copy of keys as we might modify the dict
+                expired_effects = []
+                for effect_key, effect_data in list(participant.effects.items()):
+                    if effect_data.get("ends_at", 0) <= current_time:
+                        expired_effects.append(effect_key)
+
+                if expired_effects:
+                    log.debug("Removing expired effects %s from %s", expired_effects, participant.name)
+                    for key in expired_effects:
+                        # TODO: Announce effect ending? e.g. "Your mage Armor fades."
+                        # Send message before removing the effect data if needed
+                        # effect_name = participant.effects[key].get("name", key) # Get display name maybe
+                        # if isinstance(participant, Character):
+                        #await participant.send(f"Your {effect_name} effect wears off.")
+                        del participant.effects[key] # Remove expired effect
 
     async def update_xp_absorption(self, dt: float):
         """
