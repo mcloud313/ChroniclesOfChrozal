@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 # Simple Message of the Day
 MOTD = """
-\r\n--- Welcome to Chronicles of Chrozal (Alpha 0.44) ---
+\r\n--- Welcome to Chronicles of Chrozal (Alpha 0.45) ---
 \r\n  
 \r\n  ___  _  _  ____   __   __ _  __  ___  __    ____  ____       
 \r\n / __)/ )( \(  _ \ /  \ (  ( \(  )/ __)(  )  (  __)/ ___)      

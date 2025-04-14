@@ -49,39 +49,18 @@ CLASS_STARTING_SKILL_BONUSES: Dict[str, Dict[str, int]] = {
 
 }
 
-CLASS_STARTING_ABILITIES: Dict[str, Dict[str, List[str]]] = {
-    # Using separate lists for 'spells' vs 'abilities'
-    "warrior": {
-        "spells": [],
-        "abilities": ["power strike", "shield bash", "toughness"] # Example placeholder names
-    },
-    "mage": {
-        "spells": ["magic missile", "lesser shield", "ice bolt", "flame bolt"], # Example placeholder names
-        "abilities": []
-    },
-    "cleric": {
-        "spells": ["minor heal", "smite", "bless"], # Example placeholder names
-        "abilities": ["turn undead"] # Example placeholder names
-    },
-    "rogue": {
-        "spells": [],
-        "abilities": ["sneak attack", "evasion", "feint"] # Example placeholder names
-    },
-}
-
-
 # --- Helper Functions ---
 def get_starting_skill_bonuses(class_name: Optional[str]) -> Dict[str, int]:
     """Gets starting skill bonuses for a class."""
     if not class_name: return {}
     return CLASS_STARTING_SKILL_BONUSES.get(class_name.lower(), {})
 
-def get_starting_spells(class_name: Optional[str]) -> List[str]:
-    """Gets the list of starting spell names for a class."""
-    if not class_name: return []
-    return CLASS_STARTING_ABILITIES.get(class_name.lower(), {}).get("spells", [])
+# def get_starting_spells(class_name: Optional[str]) -> List[str]:
+#     """Gets the list of starting spell names for a class."""
+#     if not class_name: return []
+#     return CLASS_STARTING_ABILITIES.get(class_name.lower(), {}).get("spells", [])
 
-def get_starting_abilities(class_name: Optional[str]) -> List[str]:
-    """Gets the list of starting ability names for a class."""
-    if not class_name: return []
-    return CLASS_STARTING_ABILITIES.get(class_name.lower(), {}).get("abilities", [])
+# def get_starting_abilities(class_name: Optional[str]) -> List[str]:
+#     """Gets the list of starting ability names for a class."""
+#     if not class_name: return []
+#     return CLASS_STARTING_ABILITIES.get(class_name.lower(), {}).get("abilities", [])

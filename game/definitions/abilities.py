@@ -21,6 +21,8 @@ EFFECT_DAMAGE = "DAMAGE"
 EFFECT_HEAL = "HEAL"
 EFFECT_BUFF = "BUFF" #Positive temporary effect
 EFFECT_DEBUFF = "DEBUFF" #Negative temporary effect
+EFFECT_MODIFIED_ATTACK = "MODIFIED_ATTACK" # For abilities like power strike
+EFFECT_STUN_ATTEMPT = "STUN_ATTEMPT"
 # Add more later: SUMMON, TELEPORT, UTILITY etc.
 
 #--- Constants for damage types
@@ -33,9 +35,23 @@ DAMAGE_COLD = "cold"
 DAMAGE_LIGHTNING = "lightning"
 DAMAGE_EARTH = "earth"
 DAMAGE_ARCANE = "arcane"
-DAMAGE_DIVINE "divine"
+DAMAGE_DIVINE = "divine"
 DAMAGE_POISON = "poison"
 DAMAGE_SONIC = "sonic"
+
+# --- Constants for Stats Affected by Buff/Debuff ---
+STAT_ARMOR_VALUE = "armor_value"
+STAT_BARRIER_VALUE = "barrier_value" # NEW: For Mage Armor / Magic defense
+STAT_DODGE_VALUE = "dodge_value"
+STAT_ROUNDTIME = "roundtime" # For stun/slow effects
+STAT_MIGHT = "might"
+STAT_VITALITY = "vitality"
+STAT_AGILITY = "agility"
+STAT_INTELLECT = "intellect"
+STAT_AURA = "aura"
+STAT_PERSONA = "persona"
+
+ # etc. for base stats
 
 # --- Ability/Spell Data Dictionary ---
 # Structure:
@@ -57,60 +73,103 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
     # == WARRIOR ==
     "power strike": {
         "name": "Power Strike", "type": "ABILITY", "class_req": ["warrior"], "level_req": 1,
-        "cost": 0, "target_type": TARGET_CHAR_OR_MOB, "effect_type": EFFECT_DAMAGE,
-        "effect_details": {"damage_base": 4, "damage_rng": 4, "damage_type": DAMAGE_PHYSICAL, "school": "Physicla"},
-        "roundtime": 2.5, "description": "A mighty blow sacrificing speed for power. Requires a melee weapon." 
+        "cost": 0, "target_type": TARGET_CHAR_OR_MOB, # Target for the attack
+        "cast_time": 0.0, # Instant activation
+        "effect_type": EFFECT_MODIFIED_ATTACK, # Special type for combat system
+        "effect_details": {
+            "mar_modifier_mult": 0.75, # 75% of normal MAR (25% penalty)
+            "rng_damage_mult": 2.0, # Double the weapon's random damage component
+            "bonus_rt": 0.5, # Add 0.5s to the weapon's speed for final roundtime
+            "school": "Physical"
+        },
+        "roundtime": 0.0, # Base RT applied is weapon speed + bonus_rt
+        "description": "A mighty blow sacrificing accuracy for power. Uses your wielded weapon."
     },
     "shield bash": {
-        "name": "Shield Bash", "type": "ABILITY", "class_req": ["warrior", "cleric"], "level_req": 3, # Level 3 example
-        "cost": 0, "target_type": TARGET_CHAR_OR_MOB, "effect_type": EFFECT_DEBUFF,
-        "effect_details": {"name": "BashStun", "stat_affected": "roundtime", "amount": 1.5, "duration": 1.6},
-        "roundtime": 3.0, "description": "Attempt to briefly daze an opponent with your shield (Requires Shield equipped)."
+        "name": "Shield Bash", "type": "ABILITY", "class_req": ["warrior", "cleric"], "level_req": 3,
+        "cost": 0, "target_type": TARGET_CHAR_OR_MOB,
+        "cast_time": 0.0, # Instant activation
+        "effect_type": EFFECT_STUN_ATTEMPT, # Special type for combat system
+        "effect_details": {
+            "mar_modifier_mult": 0.5, # 50% MAR penalty to hit with the bash
+            "stun_chance": 0.20, # 20% chance to stun if the bash hits
+            "stun_duration": 5.0, # Adds 5s roundtime to target if stun succeeds
+            "requires_shield": True, # Logic check needed in cmd/resolution
+            "school": "Physical"
+        },
+        "roundtime": 2.5, # RT applied to user after attempting bash
+        "description": "Attempt to daze an opponent with your shield, potentially stunning them. Less accurate than a normal attack. (Requires Shield equipped)."
     },
 
     # == MAGE ==
     "magic missile": {
         "name": "Magic Missile", "type": "SPELL", "class_req": ["mage"], "level_req": 1,
-        "cost": 3, "target_type": TARGET_CHAR_OR_MOB, "effect_type": EFFECT_DAMAGE,
-        "effect_details": {"damage_base": 2, "damage_rng": 4, "damage_type": DAMAGE_ARCANE, "school": "Arcane", "always_hits": True}, # Added always hits flag
-        "roundtime": 2.0, "description": "A missile of pure arcane energy unerringly strikes your target."
+        "cost": 1, "target_type": TARGET_CHAR_OR_MOB,
+        "cast_time": 1.5, # Example: Takes 1.5s to cast before firing
+        "effect_type": EFFECT_DAMAGE,
+        "effect_details": {"damage_base": 2, "damage_rng": 4, "damage_type": DAMAGE_ARCANE, "school": "Arcane", "always_hits": True},
+        "roundtime": 1.0, # RT applied AFTER spell fires
+        "description": "A missile of pure arcane energy unerringly strikes your target."
     },
-    "mage armor": { # Renamed from lesser shield
+    "mage armor": {
         "name": "Mage Armor", "type": "SPELL", "class_req": ["mage"], "level_req": 1,
-        "cost": 5, "target_type": TARGET_SELF, "effect_type": EFFECT_BUFF,
-        "effect_details": {"name": "MageArmorBuff", "stat_affected": "armor_value", "amount": 3, "duration": 180.0}, # +3 AV, 3 minutes
-        "roundtime": 1.5, "description": "Surrounds you with a shimmering field of force that deflects blows."
+        "cost": 5, "target_type": TARGET_SELF,
+        "cast_time": 2.0, # Takes time to invoke
+        "effect_type": EFFECT_BUFF,
+        "effect_details": {
+            "name": "MageArmorBuff", # Identifier for the effect
+            "stat_affected": STAT_BARRIER_VALUE, # <<< Changed from armor_value
+            "amount": 5, # Example +5 Barrier Value
+            "duration": 180.0 # 3 minutes
+        },
+        "roundtime": 1.0, # RT applied AFTER spell fires
+        "description": "Surrounds you with a shimmering field of force that hinders incoming magic and offers minor physical protection."
     },
-
     # == CLERIC ==
     "minor heal": {
         "name": "Minor Heal", "type": "SPELL", "class_req": ["cleric"], "level_req": 1,
-        "cost": 4, "target_type": TARGET_CHAR_OR_MOB, "effect_type": EFFECT_HEAL,
-        "effect_details": {"heal_base": 5, "heal_rng": 6}, # 5 + d6 HP
-        "roundtime": 2.0, "description": "A simple divine plea to mend minor wounds."
+        "cost": 4, "target_type": TARGET_CHAR_OR_MOB,
+        "cast_time": 2.0, # Takes time to invoke
+        "effect_type": EFFECT_HEAL,
+        "effect_details": {"heal_base": 5, "heal_rng": 6},
+        "roundtime": 1.5, # RT applied AFTER spell fires
+        "description": "A simple divine plea to mend minor wounds."
     },
     "smite": {
         "name": "Smite", "type": "SPELL", "class_req": ["cleric"], "level_req": 1,
-        "cost": 2, "target_type": TARGET_MOB, # Typically specific types, but MOB for V1
+        "cost": 2, "target_type": TARGET_CHAR_OR_MOB, # Changed to allow vs players too
+        "cast_time": 1.5, # Takes time to invoke
         "effect_type": EFFECT_DAMAGE,
         "effect_details": {"damage_base": 2, "damage_rng": 6, "damage_type": DAMAGE_DIVINE, "school": "Divine"},
-        "roundtime": 2.5, "description": "Calls down divine energy to strike your foe."
+        "roundtime": 2.0, # RT applied AFTER spell fires
+        "description": "Calls down divine energy to strike your foe."
     },
-
-        # == ROGUE ==
+    # == ROGUE ==
     "backstab attempt": {
         "name": "Backstab Attempt", "type": "ABILITY", "class_req": ["rogue"], "level_req": 1,
-        "cost": 0, "target_type": TARGET_MOB,
-        "effect_type": EFFECT_DAMAGE,
-        "effect_details": {"damage_base": 4, "damage_rng": 8, "damage_type": DAMAGE_PIERCE, "school": "Physical", "requires_behind": True}, # High damage, requires position
-        "roundtime": 3.5, "description": "Attempt a devastating attack from behind an opponent (Requires Piercing Weapon)."
+        "cost": 0, "target_type": TARGET_CHAR_OR_MOB, # Allow vs players if flanking possible?
+        "cast_time": 0.0, # Instant activation
+        "effect_type": EFFECT_MODIFIED_ATTACK, # Use modified attack
+        "effect_details": {
+            "damage_base": 4, # Base damage ADDED if successful? Or multiplier? Let's do bonus base.
+            "damage_rng": 8,
+            "damage_type": DAMAGE_PIERCE,
+            "school": "Physical",
+            "requires_behind": True, # Combat logic needs to check position
+            "requires_stealth": False # Maybe not require stealth for V1?
+        },
+        "roundtime": 3.0, # Slightly higher RT
+        "description": "Attempt a devastating attack from behind an opponent (Requires Piercing Weapon?)."
     },
     "quick reflexes": {
         "name": "Quick Reflexes", "type": "ABILITY", "class_req": ["rogue"], "level_req": 1,
-        "cost": 3, # Give it a small cost
-        "target_type": TARGET_SELF, "effect_type": EFFECT_BUFF,
-        "effect_details": {"name": "QuickReflexBuff", "stat_affected": "dodge_value", "amount": 5, "duration": 15.0}, # +5 DV, 15 seconds
-        "roundtime": 1.0, "description": "Heightens your awareness, allowing you to dodge attacks more easily for a short time."
+        "cost": 3, # Example essence/stamina cost
+        "target_type": TARGET_SELF,
+        "cast_time": 0.0, # Instant activation
+        "effect_type": EFFECT_BUFF,
+        "effect_details": {"name": "QuickReflexBuff", "stat_affected": STAT_DODGE_VALUE, "amount": 5, "duration": 15.0},
+        "roundtime": 1.0, # RT applied AFTER activation
+        "description": "Heightens your awareness, allowing you to dodge attacks more easily for a short time."
     },
 }
 

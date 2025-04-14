@@ -21,6 +21,7 @@ try:
     from ..definitions import traits as trait_defs
     from ..definitions import races as race_defs
     from ..definitions import classes as class_defs
+    from ..definitions import abilities as ability_defs
 except ImportError:
     log.error("Could not import trait definitions! Creation menus will fail.")
     trait_defs = None
@@ -561,6 +562,7 @@ class CreationHandler:
         """Calculates derived stats, builds description, gets starting skills/abilities, creates DB entry."""
         log.info("Finalizing character creation for player %s", self.player.dbid)
         class_name = self.creation_data.get('class_name') # Needed for lookup
+        class_name_lower = class_name.lower() if class_name else ""
 
         # 1. Build Description String
         self.creation_data["description"] = self._build_description_string()
@@ -594,10 +596,23 @@ class CreationHandler:
 
         log.debug("Calculated initial stats: MaxHP=%d, MaxEssence=%d", max_hp, max_essence)
 
-        starting_spells = class_defs.get_starting_spells(class_name)
-        starting_abilities = class_defs.get_starting_abilities(class_name)
-        known_spells_json = json.dumps(starting_spells)
-        known_abilities_json = json.dumps(starting_abilities)
+        starting_spells = []
+        starting_abilities = []
+
+        for ability_key, data in ability_defs.ABILITIES_DATA.items():
+            # Check level requirement is 1
+            if data.get("level_req", 999) == 1:
+                allowed_classes = data.get("class_req", [])
+                # Check if class matches or if skill is for all classes
+                if not allowed_classes or class_name_lower in allowed_classes:
+                    ability_type = data.get("type", "ABILITY").upper()
+                    if ability_type == "SPELL":
+                        starting_spells.append(ability_key) # Store internal key name
+                    else: # Assume ability
+                        starting_abilities.append(ability_key)
+
+        known_spells_json = json.dumps(sorted(starting_spells))
+        known_abilities_json = json.dumps(sorted(starting_abilities))
         log.debug("Assigning starting spells: %s, abilities: %s", starting_spells, starting_abilities)
 
 
@@ -628,6 +643,8 @@ class CreationHandler:
             max_hp=max_hp,
             essence=essence,
             max_essence=max_essence,
+            known_spells_json=known_abilities_json,
+            known_abilities_json=known_abilities_json,
             location_id=1 # Start in default room
         )
 
@@ -635,6 +652,16 @@ class CreationHandler:
             log.info("Character ID %d created successfully in DB.", new_char_id)
             self.creation_data["new_char_id"] = new_char_id # Store ID to return
             self.state = CreationState.COMPLETE
+            learned_output = []
+            if starting_spells:
+                # Get display names using helper function
+                spell_names = [ability_defs.get_ability_data(s).get("name", s) for s in starting_spells]
+                learned_output.append("spells: " + ", ".join(spell_names))
+            if starting_abilities:
+                ability_names = [ability_defs.get_ability_data(a).get("name", a) for a in starting_abilities]
+                learned_output.append("abilities: " + ", ".join(ability_names))
+            if learned_output:
+                await self._send(f"\r\nAs a {class_name.title()}, you begin knowing the following " + " and ".join(learned_output) + ".")
         else:
             log.error("Database failed to create character for player %s.", self.player.dbid)
             await self._send("A database error occurred during character finalization. Please contact an admin.")
