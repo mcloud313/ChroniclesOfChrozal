@@ -126,6 +126,8 @@ class Character:
         self.max_essence: int = db_data['max_essence']
         self.xp_pool: int = db_data['xp_pool'] # Unabsorbed XP
         self.xp_total: int = db_data['xp_total'] # Current level progress
+        self.known_spells: List[str] = json.loads(...)
+        self.known_abilities: List[str] = json.loads(...)
         self.unspent_skill_points: int = db_data['unspent_skill_points']
         self.unspent_attribute_points: int = db_data['unspent_attribute_points']
         self.status: str = db_data['status'] if 'status' in db_data.keys() else 'ALIVE'
@@ -136,6 +138,7 @@ class Character:
         self.status: str = 'ALIVE' # Possible values: ALIVE, DYING, DEAD
         self.target: Optional[Union['Character', 'Mob']] = None # Who are we fighting? Needs Mob import below
         self.is_fighting: bool = False # Add fighting flag
+        self.casting_info: Optional[Dict[str, Any]] = None
 
         # Load stats (JSON string -> dict)
         try:
@@ -545,9 +548,17 @@ class Character:
 
         return rank + attr_mod
 
+    def knows_spell(self, spell_key: str) -> bool:
+        """Checks if the character knows a specific spell by its internal key."""
+        return spell_key.lower() in self.known_spells
+
+    def knows_ability(self, ability_key: str) -> bool:
+        """Checks if the character knows a specific ability by its internal key."""
+        return ability_key.lower() in self.known_abilities
+
     def __repr__(self) -> str:
-            return f"<Character {self.dbid}: '{self.first_name} {self.last_name}'>"
+        return f"<Character {self.dbid}: '{self.first_name} {self.last_name}'>"
 
     def __str__(self) -> str:
-            loc_id = getattr(self.location, 'dbid', self.location_id) # Show current or last known dbid
-            return f"Character(id={self.dbid}, name='{self.first_name} {self.last_name}', loc={loc_id})"
+        loc_id = getattr(self.location, 'dbid', self.location_id) # Show current or last known dbid
+        return f"Character(id={self.dbid}, name='{self.first_name} {self.last_name}', loc={loc_id})"
