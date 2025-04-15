@@ -31,6 +31,10 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
     current_room = character.location
     char_name = character.name # Get name before potential broadcast issues
 
+    if character.status == "MEDITATING":
+        character.status = "ALIVE"
+        await character.send("You stop meditating as you move.")
+
     # 1. Announce departure to old room (if character was in a room)
     if current_room:
         departure_msg = f"\r\n{char_name} leaves {exit_name}.\r\n"

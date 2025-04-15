@@ -240,9 +240,9 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     output += f" Race : {race_name:<28} Class: {class_name}\r\n"
     output += f" Level: {level:<31}\r\n"
     output += "=" * 50 + "\r\n"
-    output += f" HP   : {hp:>4}/{max_hp:<28} Carry: {curr_w:>2}/{max_carry_weight:<3} stones\r\n"
+    output += f" HP   : {int(hp):>4}/{max_hp:<28} Carry: {curr_w:>2}/{max_carry_weight:<3} stones\r\n"
     output += f" Armor: {effective_av:>4}/{total_av:<28} (Effective/Total)\r\n"
-    output += f" Essn : {essence:>4}/{max_essence:<31}\r\n"
+    output += f" Essn : {int(essence):>4}/{max_essence:<31}\r\n"
     output += f" XP   : {int(xp_total):>4}/{xp_needed:<28} Pool: {int(xp_pool)}\r\n"
     output += f" Tether: {tether:<30}\r\n" # Adjust padding if needed
     output += " --- Attributes ---                 \r\n" # Adjusted spacing
@@ -353,4 +353,28 @@ async def cmd_skills(character: 'Character', world: 'World', db_conn: 'aiosqlite
     await character.send(output)
     return True
 
-            
+async def cmd_meditate(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Begins meditiation to restore essence faster."""
+
+    if character.status != "ALIVE":
+        await character.send("You cannot meditate right now.")
+        return True
+    if character.is_fighting:
+        await character.send("You cannot meditate while fighting!")
+        return True
+    if character.roundtime > 0:
+        await character.send("You must be stll to meditate.")
+        return True
+    if character.casting_info:
+        await character.send("You cannot meditate while preparing another action.")
+        return True
+    character.status = "MEDITATING"
+    # apply a short roundtime for starting meditation
+    character.roundtime = 10.0
+    await character.send("You sit down and begin to meditate, focusing your inner energy.")
+    # optionally broadcast? "X sits down and begins meditating"
+    # if character.location: await character.location.broadcast
+    # TODO: Broadcast meditation
+    # TODO: Change character stance to sitting.
+    return True
+

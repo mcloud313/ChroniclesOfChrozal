@@ -46,6 +46,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "kill": combat_cmds.cmd_attack, # Alias
     "advance": general_cmds.cmd_advance, # <<< ADD THIS
     "level": general_cmds.cmd_advance,   # <<< Optional alias
+    "meditate": general_cmds.cmd_meditate, # Begins meditation
 
     # Movement Commands (Pass direction directly to the handler)
     "north": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "north"),
@@ -146,6 +147,12 @@ async def process_command(character: Character, world: World, db_conn: aiosqlite
         if command_verb not in ["quit"]:
             await character.send("You are dead and cannot do that.")
             return True
+        
+    MEDITATION_ALLOWED_CMDS = {"look", "l", "score", "stats", "skills", "quit", "help"}
+    if character.status == "MEDITATING" and command_verb not in MEDITATION_ALLOWED_CMDS:
+        log.debug("Character %s stopped meditating due to command: %s", character.name, command_verb)
+        character.status = "ALIVE"
+        await character.send("You stop meditating as you act.")
 
     if character.roundtime > 0:
         # Provide feedback with remaining time, formatted to one decimal place

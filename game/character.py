@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import aiosqlite
+import config
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple, Union
 from . import database
 from . import utils
@@ -135,12 +136,12 @@ class Character:
         self.race_id: Optional[int] = db_data['race_id'] # Store ID
         self.class_id: Optional[int] = db_data['class_id'] # Store ID
         self.level: int = db_data['level']
-        self.hp: int = db_data['hp']
-        self.max_hp: int = db_data['max_hp']
-        self.essence: int = db_data['essence']
-        self.max_essence: int = db_data['max_essence']
-        self.xp_pool: int = db_data['xp_pool'] # Unabsorbed XP
-        self.xp_total: int = db_data['xp_total'] # Current level progress
+        self.hp: float = db_data['hp']
+        self.max_hp: float = db_data['max_hp']
+        self.essence: float = db_data['essence']
+        self.max_essence: float = db_data['max_essence']
+        self.xp_pool: float = db_data['xp_pool'] # Unabsorbed XP
+        self.xp_total: float = db_data['xp_total'] # Current level progress
         self.unspent_skill_points: int = db_data['unspent_skill_points']
         self.unspent_attribute_points: int = db_data['unspent_attribute_points']
         self.status: str = db_data['status'] if 'status' in db_data.keys() else 'ALIVE'
@@ -412,6 +413,44 @@ class Character:
         self.death_timer_ends_at = None
         self.roundtime = 0.0
         # Optionally add a short respawn sickness roundtime?
+
+    def update_regen(self, dt: float, is_in_node: bool):
+        """Applies HP and essence regeneration based on stats, status, and location."""
+        # No regeneration if not in a normal 'living' or 'meditating' state
+        if self.status not in ["ALIVE", "MEDITATING"]:
+            return
+
+        # --- HP Regeneration ---
+        if self.hp < self.max_hp:
+            base_hp_regen_sec = getattr(config, 'HP_REGEN_BASE_PER_SEC', 0.1)
+            vit_bonus_sec = self.vit_mod * getattr(config, 'HP_REGEN_VIT_MULTIPLIER', 0.05)
+            hp_regen_rate = base_hp_regen_sec + vit_bonus_sec
+
+            if is_in_node:
+                hp_regen_rate *= getattr(config, 'NODE_REGEN_MULTIPLIER', 2.0)
+
+            hp_to_regen = hp_regen_rate * dt
+            old_hp = self.hp
+            self.hp = min(self.max_hp, self.hp + hp_to_regen)
+            # if int(old_hp) < int(self.hp): log.debug(...) # Optional: log hp regen amount
+
+        # --- Essence Regeneration ---
+        if self.essence < self.max_essence:
+            base_ess_regen_sec = getattr(config, 'ESSENCE_REGEN_BASE_PER_SEC', 0.08)
+            aura_bonus_sec = self.aura_mod * getattr(config, 'ESSENCE_REGEN_AURA_MULTIPLIER', 0.04)
+            # Add PersMod bonus? Maybe not for base regen.
+            ess_regen_rate = base_ess_regen_sec + aura_bonus_sec
+
+            # Apply multipliers
+            if self.status == "MEDITATING":
+                ess_regen_rate *= getattr(config, 'MEDITATE_REGEN_MULTIPLIER', 3.0)
+            if is_in_node:
+                ess_regen_rate *= getattr(config, 'NODE_REGEN_MULTIPLIER', 2.0) # Stack with meditate? Yes.
+
+            ess_to_regen = ess_regen_rate * dt
+            old_ess = self.essence
+            self.essence = min(self.max_essence, self.essence + ess_to_regen)
+            # if int(old_ess) < int(self.essence): log.debug(...) # Optional: log ess regen amount
 
     def update_location(self, new_location: Optional['Room']):
         """

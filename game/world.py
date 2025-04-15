@@ -457,3 +457,14 @@ class World:
                     # Let's defer the actual prompt/check to the ADVANCE command (Task 2)
                     # or maybe the score command can show "(Ready to Advance!)"
                     pass
+
+    async def update_regen(self, dt: float):
+        """ Calls update_regen for all active characters. """
+        # log.debug("World: Updating Character Regen...") # Can be verbose
+        for char in self.get_active_characters_list():
+            try:
+                # Check if character is in a node room
+                is_in_node = char.location and "NODE" in char.location.flags
+                char.update_regen(dt, is_in_node) # Call Character's method
+            except Exception:
+                log.exception("Error updating regen for %s", char.name)

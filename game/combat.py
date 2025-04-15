@@ -384,6 +384,11 @@ async def resolve_physical_attack(
     target.hp -= final_damage
     target.hp = max(0, target.hp)
 
+    if isinstance(target, Character) and target.status == "MEDITATING":
+        log.info("Character %s meditation broken by damage.", target.name)
+        target.status = "ALIVE"
+        await target.send("{RThe blow shatters your concentration! You stop meditating.{x")
+
     if isinstance(target, Character) and final_damage > 0 and target.casting_info:
         spell_key = target.casting_info.get("key")
         spell_data = ability_defs.get_ability_data(spell_key)
@@ -417,7 +422,7 @@ async def resolve_physical_attack(
     dmg_msg_attacker = f"You {hit_desc} {target_name} with your {attk_name} for {final_damage} damage!{crit_indicator}"
     attacker_possessive = attacker_pronoun_poss
     dmg_msg_target = f"{attacker_name} {hit_desc.upper()}S you with {attacker_possessive} {attk_name} for {final_damage} damage!{crit_indicator}"
-    dmg_msg_target += f" ({target.hp}/{target.max_hp} HP)"
+    dmg_msg_target += f" ({int(target.hp)}/{target.max_hp} HP)"
     dmg_msg_room = f"{attacker_name} {hit_desc.upper()}S {target_name} with {attacker_pronoun_poss} {attk_name} for {final_damage} damage!"
     # Send messages
     if isinstance(attacker, Character): await attacker.send(dmg_msg_attacker)
@@ -508,6 +513,11 @@ async def resolve_magical_attack(
     # 6. Apply Damage
     target.hp -= final_damage
     target.hp = max(0, target.hp)
+
+    if isinstance(target, Character) and target.status == "MEDITATING":
+        log.info("Character %s meditation broken by damage.", target.name)
+        target.status = "ALIVE"
+        await target.send("{RThe blow shatters your concentration! You stop meditating.{x")
 
     # If character is currently casting see if they lose their spell due to magical damage.
     if isinstance(target, Character) and final_damage > 0 and target.casting_info:

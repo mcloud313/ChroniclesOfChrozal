@@ -228,13 +228,13 @@ async def init_db(conn: aiosqlite.Connection):
             class_id INTEGER,
             level INTEGER DEFAULT 1,
             description TEXT DEFAULT '',
-            hp INTEGER DEFAULT 50,
-            max_hp INTEGER DEFAULT 50,
-            essence INTEGER DEFAULT 20,
-            max_essence INTEGER DEFAULT 20,
+            hp REAL DEFAULT 50,
+            max_hp REAL DEFAULT 50,
+            essence REAL DEFAULT 20,
+            max_essence REAL DEFAULT 20,
             spiritual_tether INTEGER,
-            xp_pool INTEGER DEFAULT 0, -- Unabsorbed XP
-            xp_total INTEGER DEFAULT 0, -- XP accumulated within current level
+            xp_pool REAL DEFAULT 0, -- Unabsorbed XP
+            xp_total REAL DEFAULT 0, -- XP accumulated within current level
             unspent_skill_points INTEGER NOT NULL DEFAULT 0,
             unspent_attribute_points INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL DEFAULT 'ALIVE',
