@@ -364,6 +364,11 @@ async def resolve_physical_attack(
 
         final_damage = max(0, mitigated_damage1 - effective_av) # Subtract Effective AV
 
+    bv_mitigation = math.floor(target.barrier_value / 2)
+    if bv_mitigation > 0:
+        log.debug("Applying BV (Physical): Damage %d reduced by BV %d (Half Effect)", final_damage, bv_mitigation)
+        final_damage = max(0, final_damage - bv_mitigation)
+
     # 8. Apply Damage (uses final_damage)
     target.hp -= final_damage
     target.hp = max(0, target.hp)
