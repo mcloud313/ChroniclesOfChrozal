@@ -17,6 +17,8 @@ from . import admin as admin_cmds
 from . import item as item_cmds
 from . import combat as combat_cmds
 from . import skill as skill_cmds
+from . import magic as magic_cmds
+from . import abilities as ability_cmds
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +49,9 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "advance": general_cmds.cmd_advance, # <<< ADD THIS
     "level": general_cmds.cmd_advance,   # <<< Optional alias
     "meditate": general_cmds.cmd_meditate, # Begins meditation
+    "cast": magic_cmds.cmd_cast, # <<< ENSURE THIS LINE EXISTS
+    "use": ability_cmds.cmd_use, # <<< ENSURE THIS LINE EXISTS
+
 
     # Movement Commands (Pass direction directly to the handler)
     "north": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "north"),
