@@ -7,7 +7,22 @@ from typing import Dict, List, Set, Optional
 
 log = logging.getLogger(__name__) # Assuming logging is configured.
 
-# --- Initial SKill Bonuses ---
+    # Define Hit Dice size per class ID {class_id: die_size}
+CLASS_HP_DIE = {
+    1: 10,  # Warrior: d10
+    2: 4,   # Mage: d4
+    3: 8,   # Cleric: d8
+    4: 6,   # Rogue: d6
+}
+DEFAULT_HP_DIE = 6 # Default if class not found
+
+CLASS_ESSENCE_DIE = {
+    1: 4,   # Warrior: d4
+    2: 10,  # Mage: d10
+    3: 8,   # Cleric: d8 (Assuming standard progression)
+    4: 6,   # Rogue: d6 (Assuming standard progression)
+}
+DEFAULT_ESSENCE_DIE = 4 # Default if class not found
 
 # --- Initial Skill Bonuses ---
 # Maps lowercase class name to {lowercase skill_name: bonus_rank}

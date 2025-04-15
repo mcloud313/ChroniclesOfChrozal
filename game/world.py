@@ -339,7 +339,7 @@ class World:
                     if char.spiritual_tether <= 0:
                         log.critical("!!! PERMANENT DEATH: Character %s (%s, ID: %s) has reached 0 spiritual tether!",
                                     char.name, getattr(char.player, 'username', '?'), char.dbid)
-                        # TODO: Implement actual permadeath later (delete char? special state?)
+                        # TODO: Implement actual permadeath later special status can't select character to play
                         await char.send("{R*** Your soul feels irrevocably severed! ***{x") # Color later
                 except Exception:
                     log.exception("Error decrementing spiritual tether for %s:", char.name, exc_info=True)

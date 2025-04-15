@@ -58,7 +58,6 @@ async def cmd_use(character: Character, world: 'World', db_conn: aiosqlite.Conne
         await character.send("You are already preparing another action!")
         return True
     
-    # TODO: ADd specific checks later (e.g., Shield bash requires shield)
 
     # 3. Validate Target (Similar logic to cmd_cast)
     target_type = ability_data.get("target_type", ability_defs.TARGET_NONE)

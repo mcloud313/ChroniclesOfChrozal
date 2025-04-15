@@ -17,6 +17,7 @@ from . import utils
 from .item import Item
 from .definitions import skills as skill_defs
 from .definitions import abilities as ability_defs
+from .definitions import classes as class_defs
 
 
 # Use TYPE_CHECKING block for Room to avoid circular import errors
@@ -26,25 +27,6 @@ if TYPE_CHECKING:
     from .world import World
 
 log = logging.getLogger(__name__)
-
-    # Define Hit Dice size per class ID {class_id: die_size}
-CLASS_HP_DIE = {
-    1: 10,  # Warrior: d10
-    2: 4,   # Mage: d4
-    3: 8,   # Cleric: d8
-    4: 6,   # Rogue: d6
-}
-DEFAULT_HP_DIE = 6 # Default if class not found
-
-CLASS_ESSENCE_DIE = {
-    1: 4,   # Warrior: d4
-    2: 10,  # Mage: d10
-    3: 8,   # Cleric: d8 (Assuming standard progression)
-    4: 6,   # Rogue: d6 (Assuming standard progression)
-}
-DEFAULT_ESSENCE_DIE = 4 # Default if class not found
-
-
 class Character:
     """
     Represents an individual character within the game world.
@@ -459,7 +441,6 @@ class Character:
         Args:
             new_location: The room object the character is now in, or None.
         """
-        # TODO: Maybe trigger saving old room state / loading new? For now just update ref.
         old_loc_id = getattr(self.location, 'dbid', None)
         new_loc_id = getattr(new_location, 'dbid', None)
         self.location = new_location
@@ -483,8 +464,8 @@ class Character:
         pers_mod = utils.calculate_modifier(persona)
 
         # Get MAX die roll values for initial calculation
-        initial_hp_base = CLASS_HP_DIE.get(self.class_id, DEFAULT_HP_DIE) # Use max die value as base
-        initial_essence_base = CLASS_ESSENCE_DIE.get(self.class_id, DEFAULT_ESSENCE_DIE) # Use max die value as base
+        initial_hp_base = class_defs.CLASS_HP_DIE.get(self.class_id, class_defs.DEFAULT_HP_DIE)
+        initial_essence_base = class_defs.CLASS_ESSENCE_DIE.get(self.class_id, class_defs.DEFAULT_ESSENCE_DIE)
 
         # SET Max HP/Essence (Base is max die roll + modifier)
         self.max_hp = initial_hp_base + vit_mod
@@ -517,8 +498,8 @@ class Character:
         current_pers_mod = self.pers_mod
 
         # Get die sizes for the character's class
-        hp_die_size = CLASS_HP_DIE.get(self.class_id, DEFAULT_HP_DIE)
-        essence_die_size = CLASS_ESSENCE_DIE.get(self.class_id, DEFAULT_ESSENCE_DIE)
+        hp_die_size = class_defs.CLASS_HP_DIE.get(self.class_id, class_defs.DEFAULT_HP_DIE)
+        essence_die_size = class_defs.CLASS_ESSENCE_DIE.get(self.class_id, class_defs.DEFAULT_ESSENCE_DIE)
 
         # Roll the dice
         hp_roll = random.randint(1, hp_die_size)
