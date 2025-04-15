@@ -141,8 +141,6 @@ class Character:
         self.max_essence: int = db_data['max_essence']
         self.xp_pool: int = db_data['xp_pool'] # Unabsorbed XP
         self.xp_total: int = db_data['xp_total'] # Current level progress
-        self.known_spells: List[str] = json.loads(...)
-        self.known_abilities: List[str] = json.loads(...)
         self.unspent_skill_points: int = db_data['unspent_skill_points']
         self.unspent_attribute_points: int = db_data['unspent_attribute_points']
         self.status: str = db_data['status'] if 'status' in db_data.keys() else 'ALIVE'
@@ -166,23 +164,21 @@ class Character:
 
         # Load spells/abilities
         try:
-            # Check if key exists before accessing, provide default '[]' if not
             spells_str = db_data['known_spells'] if 'known_spells' in db_data.keys() else '[]'
-            self.known_spells: List[str] = json.loads(spells_str or '[]')
+            self.known_spells: List[str] = json.loads(spells_str or '[]') # Pass the string variable
             if not isinstance(self.known_spells, list): self.known_spells = []
-        except (json.JSONDecodeError, TypeError, KeyError): # Added KeyError just in case keys() check fails somehow
-            log.warning("Character %s: Could not decode/load known_spells JSON: %r", self.dbid, db_data.get('known_spells','[]')) # Use .get() safely in log msg
-            self.known_spells: List[str] = []
+        except (json.JSONDecodeError, TypeError, KeyError):
+            log.warning("Character %s: Could not decode/load known_spells JSON.", self.dbid)
+            self.known_spells = []
 
         # Load known_abilities (list of ability names/IDs)
         try:
-            # Check if key exists before accessing, provide default '[]' if not
             abilities_str = db_data['known_abilities'] if 'known_abilities' in db_data.keys() else '[]'
-            self.known_abilities: List[str] = json.loads(abilities_str or '[]')
+            self.known_abilities: List[str] = json.loads(abilities_str or '[]') # Pass the string variable
             if not isinstance(self.known_abilities, list): self.known_abilities = []
         except (json.JSONDecodeError, TypeError, KeyError):
-            log.warning("Character %s: Could not decode/load known_abilities JSON: %r", self.dbid, db_data.get('known_abilities','[]'))
-            self.known_abilities: List[str] = []
+            log.warning("Character %s: Could not decode/load known_abilities JSON.", self.dbid)
+            self.known_abilities = []
 
         # Load skills (JSON string -> dict)
         try:

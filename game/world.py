@@ -12,8 +12,8 @@ from .room import Room
 from .character import Character # Assuming character class is defined
 from .mob import Mob
 from . import utils
-from .definitions import abilities as ability_defs
-from . import combat
+#from .definitions import abilities as ability_defs
+#from . import combat
 
 log = logging.getLogger(__name__)
 
@@ -216,6 +216,8 @@ class World:
         """
         Called by the game ticker to decrease active roundtime for characters
         """
+        from . import combat
+        from .definitions import abilities as ability_defs # Also needed here
         # Use a list copy in case characters disconnect during iteration
         active_chars = self.get_active_characters_list()
         if not active_chars:

@@ -191,7 +191,8 @@ async def resolve_physical_attack(
     attacker: Union[Character, Mob],
     target: Union[Character, Mob],
     attack_source: Optional[Union[Item, Dict[str, Any]]],
-    world: World
+    world: World,
+    ability_mods: Optional[Dict[str, Any]] = None
 ):
     """Resolves a single physical attack round."""
 
@@ -216,6 +217,16 @@ async def resolve_physical_attack(
     wpn_rng_dmg: int = 0
     dmg_type: str = "physical"
     stat_modifier: int = attacker.might_mod # Default modifier
+
+    bonus_rt_from_abilit = 0.0
+    if ability_mods:
+        log.debug("Applying ability modifiers: %s", ability_mods)
+        mar_mult = ability_mods.get('mar_modifier_mult', 1.0)
+        base_attacker_rating = math.floor(base_attacker_rating * mar_mult)
+        rng_mult = ability_mods.get('rng_damage_mult', 1.0)
+        wpn_rng_dmg = math.floor(wpn_rng_dmg * rng_mult)
+        wpn_base_dmg += ability_mods.get('bonus_damage', 0)
+        bonus_rt_from_ability = ability_mods.get('bonus_rt', 0.0)
 
     # Determine specifics based on attacker type and attack_source
     if isinstance(attacker, Mob):
@@ -498,6 +509,31 @@ async def resolve_magical_attack(
     target.hp -= final_damage
     target.hp = max(0, target.hp)
 
+    # If character is currently casting see if they lose their spell due to magical damage.
+    if isinstance(target, Character) and final_damage > 0 and target.casting_info:
+        spell_key = target.casting_info.get("key")
+        spell_data = ability_defs.get_ability_data(spell_key)
+
+        #Important: only interrupt SPELLS not instant abilities
+        if spell_data and spell_data.get("type", "").upper() == "SPELL":
+            log.debug("Character %s was casting spell '%s' while taking %d damage. Checking concentration...",
+                    target.name, spell_key, final_damage)
+            
+            # Perform skill check. Difficulty modifier = damage taken.
+            # Higher damage makes concentration harder.
+            check_dc_modifier = final_damage
+            concentration_success = utils.skill_check(target, "concentration", difficulty_mod=check_dc_modifier)
+
+            if not concentration_success:
+                log.info("Character %s failed concentration check (Damage: %d), spell %s fizzles.",
+                        target.name, final_damage, spell_key)
+                target.casting_info = None
+                await target.send("{RYour concentration is broken by the blow! Your spell fizzles!{x") # color later
+                if target.location:
+                    await target.location.broadcast(f"\r\n{target.name.capitalize()}'s concentration wavers!\r\n", exclude={target})
+                else:
+                    log.debug("Character %s succeeded concentration check (Damage: %d).", target.name, final_damage)
+
     # 7. Send Messages
     hit_desc = "hits"
     crit_indicator = ""
@@ -591,47 +627,48 @@ async def resolve_ability_effect(
     elif effect_type == ability_defs.EFFECT_MODIFIED_ATTACK:
         # Get weapon, pass mods to physical attack
         weapon = None
-        wield_slot = ability_defs.get_slot_for_attack(effect_details) # Need helper based on ability? Assume main hand.
-        weapon_template_id = caster.equipment.get("WIELD_MAIN")
-        if weapon_template_id: weapon = caster.get_item_instance(world, weapon_template_id)
-        if weapon and weapon.item_type != "WEAPON": weapon = None
+        if isinstance(caster, Character): # Only characters use abilities needing weapons for now
+            weapon_template_id = caster.equipment.get("WIELD_MAIN")
+            if weapon_template_id: weapon = caster.get_item_instance(world, weapon_template_id)
+            if weapon and weapon.item_type != "WEAPON": weapon = None
         await resolve_physical_attack(caster, target, weapon, world, ability_mods=effect_details)
 
     elif effect_type == ability_defs.EFFECT_STUN_ATTEMPT:
-        # Requires shield check? Do check here or in command? Check here.
-        if effect_details.get("requires_shield", False):
+        # Shield Bash example
+        if effect_details.get("requires_shield", False) and isinstance(caster, Character):
             shield_id = caster.equipment.get("WIELD_OFF")
-            if not shield_id: await caster.send("You need a shield equipped!"); return # Fizzle
+            if not shield_id: await caster.send("You need a shield equipped!"); return
             shield_item = caster.get_item_instance(world, shield_id)
             if not shield_item or shield_item.item_type.upper() != "SHIELD":
                 await caster.send("You need a shield equipped!"); return
-            
-        # Resolve as physical attack with mods, check stun inside maybe?
-        # Or resolve hit here, then roll stun? Let's resolve hit here.
-        hit_check_success = perform_hit_check(caster, target, ability_data.get("effect_details", {}).get("mar_modifier_mult", 1.0))
+
+        # Perform modified attack roll to see if bash connects
+        hit_check_success = perform_hit_check(caster, target, effect_details.get("mar_modifier_mult", 1.0))
+
         if hit_check_success:
+            await caster.send(f"You bash {target.name}!") # Hit message
+            await target.send(f"{caster.name.capitalize()} bashes you!") # Hit message target
+            await caster.location.broadcast(f"\r\n{caster.name.capitalize()} bashes {target.name}!\r\n", exclude={caster, target})
+
+            # Roll for stun chance
             stun_chance = effect_details.get("stun_chance", 0.0)
             if random.random() < stun_chance:
-                # Apply stun effect
-                stun_effect = {
+                # Apply stun effect (which adds roundtime)
+                stun_effect_details = {
                     "name": effect_details.get("name", "Stunned"),
                     "stat_affected": ability_defs.STAT_ROUNDTIME,
-                    "amount": effect_details.get("stun_duration", 3.0),
-                    "duration": effect_details.get("stun_duration", 3.0) + 0.1 # Duration slightly longer than RT added
+                    "amount": effect_details.get("stun_duration", 3.0), # Amount is RT to add
+                    "duration"
+                    : effect_details.get("stun_duration", 3.0) + 0.1 # Duration slightly longer
                 }
-                await apply_effect(caster, target, stun_effect, world) # Apply the stun effect
-                await target.send("{RYou are stunned!{x") # Notify target
-                await caster.location.broadcast(f"\r\n{target.name} is stunned by {caster.name}'s bash!\r\n", exclude={caster, target})
-            else:
-                await caster.send(f"Your shield bash glances off {target.name}.")
-                await target.send(f"{caster.name} tries to bash you, but you avoid the worst of it.")
+                await apply_effect(caster, target, stun_effect_details, world)
+                if isinstance(target, Character): await target.send("{RYou are stunned!{x")
+                await caster.location.broadcast(f"\r\n{target.name} is stunned by the bash!\r\n", exclude={caster, target})
+            # Else: Hit but didn't stun
         else: # Missed the bash attempt
             await caster.send(f"You try to bash {target.name}, but miss.")
-            await target.send(f"{caster.name} tries to bash you, but misses.")
-
-    else:
-        log.warning("Unhandled effect type '%s' in resolve_ability_effect for %s", effect_type, ability_key)
-        await caster.send("Your action seems to have no effect.")
+            if isinstance(target, Character): await target.send(f"{caster.name.capitalize()} tries to bash you, but misses.")
+            await caster.location.broadcast(f"\r\n{caster.name.capitalize()} misses a bash on {target.name}!\r\n", exclude={caster, target})
 
 # --- Placeholder Helper for Hit Check ---
 def perform_hit_check(attacker: Union[Character, Mob], target: Union[Character, Mob], mar_mult: float = 1.0) -> bool:
