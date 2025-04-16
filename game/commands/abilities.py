@@ -25,19 +25,39 @@ async def cmd_use(character: Character, world: 'World', db_conn: aiosqlite.Conne
         await character.send("Use which ability?")
         return True
     
-    parts = args_str.split(" ", 1)
-    ability_key_input = parts[0].lower()
-    target_name_input = parts[1].strip() if len(parts) > 1 else None
+    normalized_input = args_str.strip().lower()
+    found_key: Optional[str] = None
+    target_name_input: Optional[str] = None
 
-    # 1. Find ability data
-    ability_data = ability_defs.get_ability_data(ability_key_input)
+    longest_match_len = 0
+    for ability_key in ability_defs.ABILITIES_DATA.keys():
+        # Only consider abilities for the 'use' command
+        if ability_defs.ABILITIES_DATA[ability_key].get("type", "").upper() != "ABILITY":
+            continue
 
-    if not ability_data or ability_data.get("type", "SPELL").upper() != "ABILITY":
-        await character.send(f"You don't know any ability called '{ability_key_input}'.")
-        return True
-    
-    ability_key = ability_key_input
+        if normalized_input == ability_key:
+            if len(ability_key) > longest_match_len:
+                found_key = ability_key; longest_match_len = len(ability_key); target_name_input = None
+        elif normalized_input.startswith(ability_key + " "):
+            if len(ability_key) > longest_match_len:
+                found_key = ability_key; longest_match_len = len(ability_key)
+                target_name_input = args_str.strip()[len(ability_key):].strip()
+
+    if not found_key:
+        first_word = normalized_input.split(" ", 1)[0]
+        if ability_defs.get_ability_data(first_word) and ability_defs.ABILITIES_DATA[first_word].get("type", "").upper() == "ABILITY":
+            found_key = first_word
+            target_name_input = args_str.strip()[len(first_word):].strip() if " " in args_str else None
+        else:
+            await character.send(f"Unrecognized ability. Did you mean one you know?")
+            return True
+        
+    ability_key = found_key
+    ability_data = ability_defs.get_ability_data(ability_key)
     display_name = ability_data.get("name", ability_key)
+    log.debug("Parsed use command: Ability='%s', Target Input='%s'", ability_key, target_name_input)
+
+
 
     # 2. Check Requirements
     if not character.knows_ability(ability_key):
@@ -60,33 +80,61 @@ async def cmd_use(character: Character, world: 'World', db_conn: aiosqlite.Conne
     
 
     # 3. Validate Target (Similar logic to cmd_cast)
-    target_type = ability_data.get("target_type", ability_defs.TARGET_NONE)
+    target_type = ability_data.get("target_type", ability_defs.TARGET_NONE) # Use ability_data or spell_data
     target_obj: Optional[Union[Character, Mob]] = None
     target_id = None
     target_obj_type_str = None
+    found_target = False # Flag to track if we successfully found a valid target
 
-    if target_type == ability_defs.TARGET_SELF: target_obj = character; target_id = "self"; target_obj_type_str = "SELF"
-    elif target_type == ability_defs.TARGET_NONE: target_obj = None; target_id = None; target_obj_type_str = "NONE"
-    else: # Requires target name
+    if target_type == ability_defs.TARGET_SELF:
+        target_obj = character
+        target_id = "self"
+        target_obj_type_str = "SELF"
+        found_target = True # Self is always valid if caster alive (checked by handler)
+    elif target_type == ability_defs.TARGET_NONE:
+        target_obj = None
+        target_id = None
+        target_obj_type_str = "NONE"
+        found_target = True # No target needed is valid
+    else: # Requires a target name in the room
         if not target_name_input:
-            await character.send(f"Who or what do you want to use {display_name} on?")
+            await character.send(f"Who or what do you want to {display_name} on?") # Use ability_key_input or spell_key_input
             return True
         target_name_lower = target_name_input.lower()
-        found_target = None
+
+        temp_target = None # Use temporary variable
+        # Check Characters first if applicable
         if target_type in [ability_defs.TARGET_CHAR, ability_defs.TARGET_CHAR_OR_MOB]:
             target_char = character.location.get_character_by_name(target_name_lower)
-            if target_char.is_alive(): found_target = target_char; target_obj_type_str = "CHAR"
-            else: await character.send(f"{target_char.name} is already defeated."); return True
-        if not found_target and target_type in [ability_defs.TARGET_MOB, ability_defs.TARGET_CHAR_OR_MOB]:
+            # Allow targeting self only if explicitly TARGET_SELF (handled above)
+            if target_char and target_char != character:
+                if target_char.is_alive():
+                    temp_target = target_char
+                    target_obj_type_str = "CHAR"
+                else:
+                    await character.send(f"{target_char.name} is already defeated.")
+                    return True # Stop if target found but dead
+
+        # Check Mobs if no character found OR if type allows Mob
+        if not temp_target and target_type in [ability_defs.TARGET_MOB, ability_defs.TARGET_CHAR_OR_MOB]:
             target_mob = character.location.get_mob_by_name(target_name_lower)
             if target_mob:
-                if target_mob.is_alive(): found_target = target_mob; target_obj_type_str = "MOB"
-                else: await character.send(f"{target_mob.name} is already defeated."); return True
-        if not found_target: 
-            await character.sned(f"You don't see '{target_name_input}' here to target.")
+                if target_mob.is_alive():
+                    temp_target = target_mob
+                    target_obj_type_str = "MOB"
+                else:
+                    await character.send(f"{target_mob.name.capitalize()} is already defeated.")
+                    return True # Stop if target found but dead
+
+        # Now check if we found a valid target overall
+        if temp_target:
+            target_obj = temp_target
+            target_id = target_obj.dbid if isinstance(target_obj, Character) else target_obj.instance_id
+            found_target = True
+        else:
+            # --- V V V Corrected "Not Found" Message and TYPO V V V ---
+            await character.send(f"You don't see '{target_name_input}' here to target.") # Corrected sned -> send
             return True
-        target_obj = found_target
-        target_id = target_obj.dbid if isinstance(target_obj, Character) else target_obj.instance_id
 
     # 4. Instant Ability Execution
     cast_time = ability_data.get("cast_time", 0.0)
