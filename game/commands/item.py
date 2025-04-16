@@ -6,12 +6,13 @@ import math
 import logging
 from typing import TYPE_CHECKING, Optional, Dict
 import json # Needed for parsing item stats
+import aiosqlite
 from .. import combat as combat_logic
 
 if TYPE_CHECKING:
     from ..character import Character
     from ..world import World
-    import aiosqlite
+    
 
 # Import specific things needed
 from ..item import Item

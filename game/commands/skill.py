@@ -26,13 +26,20 @@ async def cmd_spend(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     parts = args_str.split()
     skill_name_target = parts[0].lower()
     amount_to_spend = 1
+    
     if len(parts) > 1:
-        if parts[1].isdigit():
+        try:
             amount_to_spend = int(parts[1])
-        else:
-            # Allow multi-word skill names if first part didn't match fully
-            skill_name_target = args_str.lower() # Use full args as skill name
-            amount_to_spend = 1 # Reset amount
+            if amount_to_spend <= 0:
+                await character.send("You must spend a positive number of points.")
+                return True
+        except ValueError:
+            # Couldn't convert part[1] to int, maybe multi-word skill?
+            skill_name_target = args_str.lower() # Assume full args is skill name
+            amount_to_spend = 1 # Reset amount to default
+        except IndexError:
+            # Should not happen if len(parts) > 1, but safety
+            amount_to_spend = 1
 
     if amount_to_spend <= 0:
         await character.send("You must spend at least 1 point.")

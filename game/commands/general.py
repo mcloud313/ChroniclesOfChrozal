@@ -142,13 +142,18 @@ async def cmd_say(character: 'Character', world: 'World', db_conn: 'aiosqlite.Co
         await character.send("Say what?")
         return True
     
+    message = args_str.strip()
+    if len(message) > config.MAX_INPUT_LENGTH:
+        await character.send(f"That message is too long (max {config.MAX_INPUT_LENGTH} characters).")
+        return True
+    
     if not character.location:
         log.warning("Character %s tried to say but has no location.", character.name)
         await character.send("You try to speak, but no sound comes out.")
         return True
     
-    speaker_msg = f"You say: \"{args_str}\""
-    broadcast_msg = f"{character.first_name} says: \"{args_str}\""
+    speaker_msg = f"You say: \"{message}\""
+    broadcast_msg = f"{character.first_name} says: \"{message}\""
     # Send message to self
     await character.send(speaker_msg) # Already adds \r\n in send()
 
@@ -164,20 +169,33 @@ async def cmd_quit(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
     return False
 
 async def cmd_who(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
-    """Handles the 'who' command"""
+    """Handles the 'who' command, listing online characters."""
+    # TODO: Add characters that are offline that have logged in the last 30 days
     active_chars = world.get_active_characters_list()
     if not active_chars:
         await character.send("You appear to be all alone in the world...")
         return True
     
-    output = "\r\n--- Currently Online ---\r\n"
-    # TODO: Add Title/Class/Race info later
-    for char in sorted(active_chars, key=lambda c: c.name):
-        # Simple name list for now
-        output += f"{char.name}\r\n"
-    output += "--------------------------\r\n"
-    output += f"Total players: {len(active_chars)}\r\n"
+    output = "\r\n{{C--- Players Online ({count}) ---{{x\r\n".format(count=len(active_chars))
+    # Sort by level? Or name? Let's sort by name for now.
+    active_chars.sort(key=lambda char: char.name)
 
+    who_lines = []
+    for char in active_chars:
+        try:
+            # Fetch race and class names using the World helpers
+            race_name = world.get_race_name(char.race_id) or "Unknown Race"
+            class_name = world.get_class_name(char.class_id) or "Unknown Class"
+            # TODO: Add Title lookup later based on status, level, achievements etc.
+            title = "" # Placeholder for title
+            # Format: [Lvl] Name Surname Title (Race Class)
+            who_lines.append(f"[{char.level: >2}] {char.name:<25} {title:<15} ({race_name} {class_name})")
+        except Exception:
+            log.exception("Error formatting who entry for char %s", getattr(char, 'dbid', '?'))
+            who_lines.append(f"[??] {getattr(char, 'name', 'Someone')} (Error loading info)")
+
+    output += "\r\n".join(who_lines)
+    output += "\r\n{{C----------------------------{{x\r\n" # Corrected Footer
     await character.send(output)
     return True
 
@@ -398,6 +416,10 @@ async def cmd_emote(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     # Potentially sanitize args_str later to prevent exploits
     action_text = args_str.strip()
 
+    if len(action_text) > config.MAX_INPUT_LENGTH:
+        await character.send(f"That emote is too long (max {config.MAX_INPUT_LENGTH} characters).")
+        return True
+
     # Message to self (includes "You emote:")
     self_msg = f"You emote: {character.name} {action_text}"
     #Message to others
@@ -419,6 +441,10 @@ async def cmd_tell(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
         target_name, message = args_str.split(" ", 1)
     except ValueError:
         await character.send("Tell whom what?")
+        return True
+    
+    if len(message) > config.MAX_INPUT_LENGTH:
+        await character.send(f"That tell message is too long (max {config.MAX_INPUT_LENGTH} characters).")
         return True
     
     target_name = target_name.strip().lower()
