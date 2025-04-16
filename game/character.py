@@ -118,10 +118,10 @@ class Character:
         self.race_id: Optional[int] = db_data['race_id'] # Store ID
         self.class_id: Optional[int] = db_data['class_id'] # Store ID
         self.level: int = db_data['level']
-        self.hp: float = db_data['hp']
-        self.max_hp: float = db_data['max_hp']
-        self.essence: float = db_data['essence']
-        self.max_essence: float = db_data['max_essence']
+        self.hp: float = float(db_data['hp'])
+        self.max_hp: float = float(db_data['max_hp'])
+        self.essence: float = float(db_data['essence'])
+        self.max_essence: float = float(db_data['max_essence'])
         self.xp_pool: float = db_data['xp_pool'] # Unabsorbed XP
         self.xp_total: float = db_data['xp_total'] # Current level progress
         self.unspent_skill_points: int = db_data['unspent_skill_points']
@@ -203,11 +203,21 @@ class Character:
 
         # Add basic derived name property
         self.name = f"{self.first_name} {self.last_name}"
-        self.calculate_derived_max_attributes()
+        # self.calculate_derived_max_attributes()
 
-        # If loaded in DYING/DEAD state, ensure HP is 0
+        # --- Clamp loaded HP/Essence and handle loaded DYING/DEAD status ---
+        self.hp = min(self.hp, self.max_hp) # Ensure current isn't > max
+        self.essence = min(self.essence, self.max_essence)
         if self.status in ["DYING", "DEAD"]:
-            self.hp = 0
+            self.hp = 0.0 # Ensure HP is 0 if loaded in these states
+            # If loaded DEAD, should probably trigger respawn immediately?
+            # Or let ticker handle DYING timer / DEAD state respawn trigger? Let ticker handle.
+        elif self.status != "ALIVE":
+            log.warning("Character %s loaded with unexpected status '%s'. Resetting to ALIVE.", self.name, self.status)
+            self.status = "ALIVE" # Fallback for safety
+
+        log.debug("Character object initialized for %s (ID: %s, Status: %s, HP: %.1f/%.1f)",
+                self.name, self.dbid, self.status, self.hp, self.max_hp)
 
     def get_max_weight(self) -> int:
         """Calculates maximum carrying weight based on Might."""
@@ -475,12 +485,6 @@ class Character:
         self.max_hp = max(1, self.max_hp)
         self.max_essence = max(0, self.max_essence) # Essence can be 0
 
-        # Restore current HP/Essence to Max (could be initial or after stat change/level)
-        # Ensure current HP/Essence doesn't exceed new max if stats decreased somehow
-        self.hp = min(self.hp, self.max_hp)
-        self.essence = min(self.essence, self.max_essence)
-        # Generally restore fully on level up / init
-
         # log.debug("Character %s: Derived attributes calculated/updated: MaxHP=%d, MaxEssence=%d",
         #         self.name, self.max_hp, self.max_essence)
 
@@ -506,8 +510,9 @@ class Character:
         essence_roll = random.randint(1, essence_die_size)
 
         # Calculate increase (ensure minimums)
-        hp_increase = max(1, hp_roll + current_vit_mod)
-        essence_increase = max(0, essence_roll + current_aura_mod)
+        hp_increase = float(max(1, hp_roll + current_vit_mod))
+        essence_increase = float(max(0, essence_roll + current_aura_mod + current_pers_mod))
+        # --- ^ ^ ^ ---
 
         # Apply increase to max values
         self.max_hp += hp_increase

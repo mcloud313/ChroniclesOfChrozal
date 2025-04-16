@@ -113,17 +113,17 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
     },
     "mage armor": {
         "name": "Mage Armor", "type": "SPELL", "class_req": ["mage"], "level_req": 1,
-        "cost": 5, "target_type": TARGET_SELF,
-        "cast_time": 2.0, # Takes time to invoke
+        "cost": 5, "target_type": TARGET_SELF, "cast_time": 2.0,
         "effect_type": EFFECT_BUFF,
-        "effect_details": {
-            "name": "MageArmorBuff", # Identifier for the effect
-            "stat_affected": STAT_BARRIER_VALUE, # <<< Changed from armor_value
-            "amount": 5, # Example +5 Barrier Value
-            "duration": 180.0 # 3 minutes
-        },
-        "roundtime": 1.0, # RT applied AFTER spell fires
-        "description": "Surrounds you with a shimmering field of force that hinders incoming magic and offers minor physical protection."
+        "effect_details": {"name": "MageArmorBuff", "stat_affected": STAT_BARRIER_VALUE, "amount": 15, "duration": 180.0}, # Buffed amount
+        "roundtime": 1.0,
+        "description": "Surrounds you with a shimmering field...",
+        "apply_msg_self": "{{WAn shimmering barrier surrounds you!{{x", # {W -> {{W, {x -> {{x
+        "apply_msg_target": None,
+        "apply_msg_room": "{{W{caster_name} is suddenly surrounded by a shimmering barrier.{{x", 
+        "expire_msg_self": "{{WThe shimmering barrier around you dissipates.{{x",
+        "expire_msg_room": "{{WThe shimmering barrier surrounding {target_name} dissipates.{{x", 
+        # --- ^ ^ ^ ---
     },
     # == CLERIC ==
     "minor heal": {
@@ -163,13 +163,16 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
     },
     "quick reflexes": {
         "name": "Quick Reflexes", "type": "ABILITY", "class_req": ["rogue"], "level_req": 1,
-        "cost": 3, # Example essence/stamina cost
-        "target_type": TARGET_SELF,
-        "cast_time": 0.0, # Instant activation
+        "cost": 3, "target_type": TARGET_SELF, "cast_time": 0.0,
         "effect_type": EFFECT_BUFF,
         "effect_details": {"name": "QuickReflexBuff", "stat_affected": STAT_DODGE_VALUE, "amount": 5, "duration": 15.0},
-        "roundtime": 1.0, # RT applied AFTER activation
-        "description": "Heightens your awareness, allowing you to dodge attacks more easily for a short time."
+        "roundtime": 1.0,
+        "description": "Heightens your awareness...",
+        "apply_msg_self": "{{GYou feel your reflexes quicken!{{x",
+        "apply_msg_target": None,
+        "apply_msg_room": "{{G{caster_name} seems to move with sudden alertness.{{x",
+        "expire_msg_self": "{{GYour heightened reflexes return to normal.{{x",
+        "expire_msg_room": "{{G{target_name} seems less twitchy.{{x",
     },
 }
 

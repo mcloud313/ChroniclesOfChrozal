@@ -58,11 +58,11 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
 
         if dropped_coinage > 0 and target_loc:
             log.info("%s corpse drops %d coinage in Room %d.", target_name.capitalize(), dropped_coinage, target_loc.dbid)
-            # Add coinage to the room object cache AND database
-            db_conn = world.db_conn # Assuming world now holds db_conn passed from server.py? Let's assume yes for now.
-            # *** Refactor Needed: Pass db_conn explicitly down the call stack ***
-            await target_loc.add_coinage(dropped_coinage, world.db_conn) # Temporary assumption
-            await target_loc.broadcast(f"\r\n{dropped_coinage} talons fall from {target_name}!\r\n", exclude={attacker})
+            # --- V V V Pass world object V V V ---
+            coinage_added = await target_loc.add_coinage(dropped_coinage, world)
+            # --- ^ ^ ^ ---
+            if coinage_added: await target_loc.broadcast(...) # Announce only if added successfully
+            else: log.error("Failed to add dropped coinage %d to room %d", dropped_coinage, target_loc.dbid)
 
         if dropped_item_ids and target_loc:
             dropped_item_names = []
@@ -106,7 +106,7 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
             if coinage_to_drop > 0 and target_loc:
                 target.coinage -= coinage_to_drop
                 log.info("%s drops %d coinage upon dying!", target.name, coinage_to_drop)
-                await target_loc.add_coinage(coinage_to_drop, world.db_conn) # Requires db_conn!
+                await target_loc.add_coinage(coinage_to_drop, world) # Requires db_conn!
                 await target_loc.broadcast(f"\r\nSome coins fall from {target.name} as they collapse!\r\n", exclude={target})
 
             # Send messages
@@ -632,7 +632,7 @@ async def resolve_ability_effect(
         await apply_heal(caster, target, effect_details, world)
 
     elif effect_type == ability_defs.EFFECT_BUFF or effect_type == ability_defs.EFFECT_DEBUFF:
-        await apply_effect(caster, target, effect_details, world)
+        await apply_effect(caster, target, effect_details, ability_data, world)
 
     elif effect_type == ability_defs.EFFECT_MODIFIED_ATTACK:
         # Get weapon, pass mods to physical attack
@@ -671,7 +671,7 @@ async def resolve_ability_effect(
                     "duration"
                     : effect_details.get("stun_duration", 3.0) + 0.1 # Duration slightly longer
                 }
-                await apply_effect(caster, target, stun_effect_details, world)
+                await apply_effect(caster, target, stun_effect_details, ability_data, world)
                 if isinstance(target, Character): await target.send("{RYou are stunned!{x")
                 await caster.location.broadcast(f"\r\n{target.name} is stunned by the bash!\r\n", exclude={caster, target})
             # Else: Hit but didn't stun
@@ -729,6 +729,7 @@ async def apply_effect(
     caster: Character, # Or Mob later?
     target: Union[Character, Mob],
     effect_details: Dict[str, Any],
+    ability_data: Dict[str, Any],
     world: World
 ):
     """Applies a temporary BUFF or DEBUFF effect to the target."""
@@ -747,6 +748,41 @@ async def apply_effect(
     if not hasattr(target, 'effects'):
         log.error("Target %s has no 'effects' attribute to apply %s", target.name, effect_name)
         return
+    
+    caster_name_cap = caster.name.capitalize()
+    target_name_cap = target.name.capitalize()
+
+    # Get Message tempplates, provide defaults
+    msg_self = ability_data.get('apply_msg_self', "You feel an effect.")
+    msg_target = ability_data.get('apply_msg_target', f"{caster_name_cap} applies an effect to you.")
+    msg_room = ability_data.get('apply_msg_room', f"{caster_name_cap} applies an effect to {target_name_cap}.")
+
+    #Format messages with actual names
+    try:
+        msg_self = msg_self.format(caster_name=caster_name_cap, target_name=target_name_cap) if msg_self else None
+        msg_target = msg_target.format(caster_name=caster_name_cap, target_name=target_name_cap) if msg_target else None
+        msg_room = msg_room.format(caster_name=caster_name_cap, target_name=target_name_cap) if msg_room else None
+    except KeyError as e:
+        log.warning("apply_effect: Formatting error in message for '%s': Missing key %s", ability_data.get("name", "?"), e)
+        # Fallback to generic message if formatting fails
+        msg_self = msg_target = msg_room = None
+
+    # Send the message conditionally
+    if msg_self and target == caster:
+        await caster.send(msg_self)
+    elif msg_target and target != caster and isinstance(target, Character):
+        await target.send(msg_target)
+        # Send different message to caster if they targeted someone else?
+        caster_target_msg = ability_data.get('apply_msg_caster_other', f"You apply {effect_name} to {target_name_cap}.")
+        try:
+            caster_target_msg = caster_target_msg.format(caster_name=caster_name_cap, target_name=target_name_cap)
+            await caster.send(caster_target_msg)
+        except KeyError as e:
+            log.warning("apply_effect: Formatting error in caster_other message for '%s': Missing key %s", ability_data.get("name", "?"), e)
+
+    if msg_room and target.location:
+        await target.location.broadcast(f"\r\n{msg_room}\r\n", exclude={caster, target}) # Exclude caster and target still makes sense
+
 
     target.effects[effect_name] = {
         "ends_at": time.monotonic() + duration,
@@ -755,9 +791,6 @@ async def apply_effect(
         "caster_id": caster.dbid if isinstance(caster, Character) else None # Track caster if needed
     }
     log.info("Applied effect '%s' to %s for %.1f seconds.", effect_name, target.name, duration)
-
-    # Send feedback message (customize based on buff/debuff later)
-    # TODO: More descriptive messages based on effect name/stat
     buff_msg_caster = f"You apply {effect_name} to {target.name}."
     buff_msg_target = f"You feel the effect of {effect_name}."
     buff_msg_room = f"{caster.name.capitalize()} applies an effect to {target.name}."

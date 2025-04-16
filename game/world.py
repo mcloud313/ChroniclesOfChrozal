@@ -387,6 +387,7 @@ class World:
         Called by the game ticker to check for and remove expired effects
         on active characters and mobs.
         """
+        from .definitions import abilities as ability_defs
         current_time = time.monotonic()
         participants = list(self.active_characters.values())
         for room in self.rooms.values():
@@ -405,12 +406,28 @@ class World:
                 if expired_effects:
                     log.debug("Removing expired effects %s from %s", expired_effects, participant.name)
                     for key in expired_effects:
-                        # TODO: Announce effect ending? e.g. "Your mage Armor fades."
-                        # Send message before removing the effect data if needed
-                        # effect_name = participant.effects[key].get("name", key) # Get display name maybe
-                        # if isinstance(participant, Character):
-                        #await participant.send(f"Your {effect_name} effect wears off.")
+                        effect_data_removed = participant.effects.get(key)
                         del participant.effects[key] # Remove expired effect
+
+                        ability_data = ability_defs.get_ability_data(key)
+                        if ability_data:
+                            target_name = participant.name.capitalize()
+                            msg_self = ability_data.get('expire_msg_self')
+                            msg_room = ability_data.get('expire_msg_room')
+
+                            if msg_self and isinstance(participant, Character):
+                                try:
+                                    await participant.send(msg_self.format(target_name=target_name))
+                                except KeyError as e: log.warning(...)
+
+                            # Format and send room message
+                            if msg_room and hasattr(participant, 'location') and participant.location:
+                                try:
+                                    await participant.location.broadcast(
+                                        f"\r\n{msg_room.format(target_name=target_name)}\r\n",
+                                        exclude={participant} # Exclude the person whose effect wore off
+                                    )
+                                except KeyError as e: log.warning(...)
 
     async def update_xp_absorption(self, dt: float):
         """
@@ -446,6 +463,7 @@ class World:
                 # Simple message when pool becomes empty
                 if char.xp_pool <= 0:
                     char.xp_pool = 0 #Ensures it doesn't go negative
+                    log.info("Character %s XP Pool empty. Sending absorption complete message.", char.name)
                     try:
                         await char.send("You feel you have asborbed all you can for now.")
                     except Exception: pass

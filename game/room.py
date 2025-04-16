@@ -319,14 +319,31 @@ class Room:
         
     async def add_coinage(self, amount: int, world: 'World') -> bool:
         """Adds coinage to room cache AND database."""
-        print(f"!!! DEBUG ADD_COINAGE: Received world type: {type(world)}, world object: {repr(world)} !!!")
+        # Debug print added previously - keep or remove as needed
+        # print(f"!!! DEBUG ADD_COINAGE: Received world type: {type(world)}, world object: {repr(world)} !!!")
         if amount <= 0: return False
-        db_conn = world.db_conn
-        rowcount = await database.update_room_coinage(db_conn, self.dbid, amount)
-        if rowcount == 1:
-            self.coinage += amount # Update cache
-            log.debug("Added %d coinage to room %d (New total: %d)", amount, self.dbid, self.coinage)
-            return True
-        else:
-            log.error("Failed to update coinage for room %d in DB (rowcount: %s).", self.dbid, rowcount)
+        try:
+            db_conn = world.db_conn
+            rowcount = await database.update_room_coinage(db_conn, self.dbid, amount)
+
+            # --- V V V Modified Rowcount Check V V V ---
+            # Treat any positive rowcount as likely success due to anomaly
+            if rowcount is not None and rowcount > 0:
+                self.coinage += amount # Update cache
+                log.debug("Added %d coinage to room %d (New total: %d, DB Rowcount: %s)",
+                        amount, self.dbid, self.coinage, rowcount) # Log actual count
+                return True
+            elif rowcount == 0:
+                log.error("Failed to update coinage for room %d in DB (rowcount 0 - room not found?).", self.dbid)
+                return False
+            else: # None (DB error) or unexpected negative?
+                log.error("Error updating coinage for room %d in DB (DB function returned: %s).", self.dbid, rowcount)
+                return False
+            # --- ^ ^ ^ End Modified Check ^ ^ ^ ---
+
+        except AttributeError as e:
+            log.error("!!! ADD_COINAGE: Failed to get world.db_conn. 'world' parameter was type %s. Error: %s", type(world), e)
+            return False
+        except Exception as e:
+            log.exception("Unexpected error in add_coinage for room %d: %s", self.dbid, e)
             return False

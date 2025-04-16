@@ -229,6 +229,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
 
     # --- Calculate Armor Values ---
     total_av = character.get_total_av(world)
+    barrier_val = character.barrier_value # Use the property
     armor_training_rank = character.get_skill_rank("armor training")
     av_multiplier = min(1.0, 0.20 + (armor_training_rank * 0.01))
     effective_av = math.floor(total_av * av_multiplier)
@@ -240,9 +241,10 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     output += f" Race : {race_name:<28} Class: {class_name}\r\n"
     output += f" Level: {level:<31}\r\n"
     output += "=" * 50 + "\r\n"
-    output += f" HP   : {int(hp):>4}/{max_hp:<28} Carry: {curr_w:>2}/{max_carry_weight:<3} stones\r\n"
+    output += f" HP   : {int(hp):>4}/{int(max_hp):<28} Carry: {curr_w:>2}/{max_carry_weight:<3} stones\r\n"
     output += f" Armor: {effective_av:>4}/{total_av:<28} (Effective/Total)\r\n"
-    output += f" Essn : {int(essence):>4}/{max_essence:<31}\r\n"
+    output += f" Barrier: {barrier_val:<28} \r\n" # Display Barrier Value
+    output += f" Essn : {int(essence):>4}/{int(max_essence):<31}\r\n"
     output += f" XP   : {int(xp_total):>4}/{xp_needed:<28} Pool: {int(xp_pool)}\r\n"
     output += f" Tether: {tether:<30}\r\n" # Adjust padding if needed
     output += " --- Attributes ---                 \r\n" # Adjusted spacing
@@ -310,8 +312,8 @@ async def cmd_advance(character: 'Character', world: 'World', db_conn:'aiosqlite
                  "=" * 30]
 
     # Use hp_gain and essence_gain directly from the method call results
-    if hp_gain > 0: level_msg.append(f"Maximum HP increased by {hp_gain} (Now: {character.max_hp}).")
-    if essence_gain > 0: level_msg.append(f"Maximum Essence increased by {essence_gain} (Now: {character.max_essence}).")
+    if hp_gain > 0: level_msg.append(f"Maximum HP increased by {int(hp_gain)} (Now: {int(character.max_hp)}).")
+    if essence_gain > 0: level_msg.append(f"Maximum Essence increased by {int(essence_gain)} (Now: {int(character.max_essence)}).")
     if sp_gain > 0: level_msg.append(f"You gain {sp_gain} skill points (Total unspent: {character.unspent_skill_points}).")
     if ap_gain > 0: level_msg.append(f"You gain {ap_gain} attribute point (Total unspent: {character.unspent_attribute_points}).")
     level_msg.append("Use 'TRAIN <skill>' to spend skill points.")

@@ -281,9 +281,9 @@ async def init_db(conn: aiosqlite.Connection):
             json.dumps(["AGGRESSIVE"]), 90, json.dumps({"max_hp_pct": 15, "stats_pct": 10}), 0.02), # flags, respawn, variance, move%
             (3, "a mischievous sea sprite", "A tiny, humanoid figure wreathed in sea spray and flickering blue light. It darts through the air with playful malice.", "Magical", 3,
             json.dumps({"might": 4, "vitality": 6, "agility": 12, "intellect": 10}), 12, # stats, max_hp
-            json.dumps([{"name": "water jet", "damage_base": 1, "damage_rng": 4, "speed": 2.0, "damage_type": "cold"}]), # attacks
+            json.dumps([{"name": "water jet", "damage_base": 1, "damage_rng": 4, "speed": 3.0, "damage_type": "cold"}]), # attacks
             json.dumps({"coinage_max": 8, "items": [{"template_id": 16, "chance": 0.01}, {"template_id": 19, "chance": 0.1}]}), # loot (ruby, dust)
-            json.dumps(["AGGRESSIVE"]), 120, json.dumps({"max_hp_pct": 10, "stats_pct": 15}), 0.05), # flags, respawn, variance, move%
+            json.dumps(["AGGRESSIVE"]), 120, json.dumps({"max_hp_pct": 10, "stats_pct": 15}), 0.03), # flags, respawn, variance, move%
             (4, "a giant snapping turtle", "A large turtle with a thick, algae-covered shell and a powerful beak capable of delivering a nasty bite.", "Beast", 4,
             json.dumps({"might": 10, "vitality": 14, "agility": 4}), 25, # stats, max_hp
             json.dumps([{"name": "snap", "damage_base": 3, "damage_rng": 5, "speed": 4.0}]), # attacks
@@ -413,7 +413,7 @@ async def init_db(conn: aiosqlite.Connection):
             "Waves lap gently at the sand under a wide sky...", # Keep desc short
             json.dumps({"northwest": BEACH_ENTRANCE_ID, "north": 101, "south": 102}), json.dumps(["OUTDOORS", "WET"]), json.dumps({"2": {"max_present": 1}}), 0), # Crab
             (101, 3, "North Beach", "The beach curves gently northwards...",
-            json.dumps({"north": 103, "south": BEACH_START_ID}), json.dumps(["OUTDOORS", "WET"]), json.dumps({"2": {"max_present": 1}, "3": {"max_present": 1}}), 0), # Crab, Sprite
+            json.dumps({"north": 103, "south": BEACH_START_ID}), json.dumps(["OUTDOORS", "WET"]), json.dumps({"2": {"max_present": 1}}), 0), # Crab, Sprite
             (102, 3, "South Beach", "Numerous tide pools dot the wet sand...",
             json.dumps({
             "north": BEACH_START_ID, "south": 104,
