@@ -51,6 +51,9 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "meditate": general_cmds.cmd_meditate, # Begins meditation
     "cast": magic_cmds.cmd_cast, # <<< ENSURE THIS LINE EXISTS
     "use": ability_cmds.cmd_use, # <<< ENSURE THIS LINE EXISTS
+    "emote": general_cmds.cmd_emote,
+    ":": general_cmds.cmd_emote, # Common alias
+    "tell": general_cmds.cmd_tell,
 
 
     # Movement Commands (Pass direction directly to the handler)
@@ -90,6 +93,8 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "drop": item_cmds.cmd_drop,
     "examine": item_cmds.cmd_examine,
     "exa": item_cmds.cmd_examine, # Alias
+    "drink": item_cmds.cmd_drink,
+    "eat": item_cmds.cmd_eat,
     # --- ^ ^ ^ ---
 
     # --- V V V Add Skill Spending Command V V V ---

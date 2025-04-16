@@ -6,6 +6,7 @@ import random
 import logging
 import math
 import time
+import json
 from typing import TYPE_CHECKING, Optional, Union, Dict, Any, Tuple, List # Added Union
 
 # --- Runtime Imports ---
@@ -799,3 +800,61 @@ async def apply_effect(
     await caster.send(buff_msg_caster)
     if target != caster and isinstance(target, Character): await target.send(buff_msg_target)
     if target.location: await target.location.broadcast(f"\r\n{buff_msg_room}\r\n", exclude={caster, target})
+
+async def resolve_consumable_effect(
+        character: Character,
+        item_template: Dict[str, Any],
+        world: World
+) -> bool:
+    """Applies the effect of a consumable item (FOOD/DRINK)"""
+    try:
+        stats = json.loads(item_template.get('stats', '{}') or '{}')
+    except (json.JSONDecodeError, TypeError):
+        stats = {}
+
+    effect_name = stats.get("effect")
+    amount = stats.get("amount") # Amount might be int or float depending on effect
+    item_display_name = item_template.get('name', 'the item')
+
+    log.debug("Resolving consumable effect: Char=%s, Item=%s, Effect=%s, Amount=%s",
+            character.name, item_display_name, effect_name, amount)
+
+    if not effect_name:
+        await character.send(f"The {item_display_name} doesn't seem to do anything.")
+        return False # No effect defined, but item still consumed if caller removes it
+
+    # Handle effects
+    if effect_name == "heal_hp":
+        if amount is None or not isinstance(amount, (int, float)):
+            log.error("Invalid amount for heal_hp effect on item %d", item_template.get('id','?'))
+            await character.send("The effect seems faulty.")
+            return False
+        heal_amount = float(amount)
+        if character.hp >= character.max_hp:
+            await character.send("You are already at full health.")
+            return False # Don't consume if already full? Or allow? Let's not consume.
+        actual_healed = min(heal_amount, character.max_hp - character.hp)
+        character.hp += actual_healed
+        await character.send(f"You consume {item_display_name}, healing {int(actual_healed)} hit points.")
+        # TODO: Broadcast "X drinks a potion" / "X eats some bread"?
+        return True
+    elif effect_name == "heal_essence":
+        if amount is None or not isinstance(amount, (int, float)): # ... (validation) ...
+            return False
+        heal_amount = float(amount)
+        if character.essence >= character.max_essence: # ... (check if full) ...
+            return False
+        actual_healed = min(heal_amount, character.max_essence - character.essence)
+        character.essence += actual_healed
+        await character.send(f"You consume {item_display_name}, restoring {int(actual_healed)} essence.")
+        return True
+    elif effect_name == "quench_thirst":
+        # TODO: Implement thirst mechanic later
+        await character.send(f"You drink from {item_display_name}. It is refreshing.")
+        return True
+    # Add elif for other effects (buffs, cures, etc.)
+
+    else:
+        log.warning("Unhandled consumable effect '%s' for item %d", effect_name, item_template.get('id','?'))
+        await character.send(f"You consume {item_display_name}, but nothing seems to happen.")
+        return False # Unknown effect, but maybe still consume? Let's say no for now.

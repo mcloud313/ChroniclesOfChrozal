@@ -389,3 +389,70 @@ async def cmd_meditate(character: 'Character', world: 'World', db_conn: 'aiosqli
     # TODO: Change character stance to sitting.
     return True
 
+async def cmd_emote(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Performs an action visible to the room"""
+    if not args_str:
+        await character.send("Emote what?")
+        return True
+    
+    # Potentially sanitize args_str later to prevent exploits
+    action_text = args_str.strip()
+
+    # Message to self (includes "You emote:")
+    self_msg = f"You emote: {character.name} {action_text}"
+    #Message to others
+    room_msg = f"\r\n{character.name} {action_text}\r\n"
+
+    await character.send(self_msg)
+    if character.location:
+        await character.location.broadcast(room_msg, exclude={character})
+    # Emotes usually don't take roundtime
+    return True
+
+async def cmd_tell(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Sends a private message to another player online."""
+    if not args_str or ' ' not in args_str:
+        await character.send("Tell whom what?")
+        return True
+    
+    try:
+        target_name, message = args_str.split(" ", 1)
+    except ValueError:
+        await character.send("Tell whom what?")
+        return True
+    
+    target_name = target_name.strip().lower()
+    message = message.strip()
+
+    if not message:
+        await character.send("What do you want to tell them?")
+        return True
+    
+    if target_name == character.first_name.lower(): # Prevent telling self
+        await character.send("You mutter softly to yourself.")
+        return True
+    
+    target_char: Optional[Character] = None
+    for char in world.get_active_characters_list():
+        # Match first name case-insensitevly for now
+        if char.first_name.lower() == target_name:
+            target_char = char
+            break
+    
+    if not target_char:
+        await character.send(f"'{target_name.capitalize()}' doesn't appear to be online.")
+        return True
+    
+    # Send messages add color codes later)
+    target_msg = f"\r\n[[{character.name} tells you]: {message}]"
+    self_msg = f"\r\n[[You tell {target_char.name}]: {message}]"
+
+    try:
+        await target_char.send(target_msg)
+        await character.send(self_msg)
+    except Exception as e:
+        log.error("Error sending tell from %s to %s: %s", character.name, target_char.name, e)
+        await character.send("Your message could not be delivered.")
+
+    # Tells usually don't take roundtime
+    return True

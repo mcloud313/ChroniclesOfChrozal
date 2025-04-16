@@ -6,6 +6,7 @@ import math
 import logging
 from typing import TYPE_CHECKING, Optional, Dict
 import json # Needed for parsing item stats
+from .. import combat as combat_logic
 
 if TYPE_CHECKING:
     from ..character import Character
@@ -392,3 +393,67 @@ async def cmd_examine(character: 'Character', world: 'World', db_conn: 'aiosqlit
 
     await character.send(output.strip())
     return True
+
+async def cmd_drink(character: 'Character', world: 'World', db_conn: aiosqlite.Connection, args_str: str) -> bool:
+    """Drinks a consumable item from inventory"""
+    if not args_str:
+        await character.send("Drink what?")
+        return True
+    
+    target_name = args_str.strip().lower()
+    template_id = character.find_item_in_inventory_by_name(world, target_name)
+    if template_id is None:
+        await character.send("You aren't carrying that.")
+        return True
+    
+    template = get_item_template_from_world(world, template_id)
+    if not template or template.get('type') != "DRINK":
+        await character.send("You can't drink that.")
+        return True
+    
+    # Attempt to consume the item and apply effect
+    # Passing template data directly might be simpler than instantiating
+    success = await combat_logic.resolve_consumable_effect(character, template, world)
+
+    if success:
+        # Consume the item (remove from inventory - handle charges later)
+        try: 
+            character.inventory.remove(template_id)
+            # TODO: Handle items with charges - decrement instead of remove
+        except ValueError:
+            log.error("Failed to remove consumed item %d from %s inventory (already gone?)", template_id, character.name)
+
+        character.roundtime = 3.0 # roundtime for drinking
+        # Else: resolve_consumable_effect already sent failure message
+
+    return True
+
+async def cmd_eat(character: 'Character', world: 'World', db_conn: aiosqlite.Connection, args_str: str) -> bool:
+    """Eats a consumable item from inventory."""
+    if not args_str:
+        await character.send("Eat what?")
+        return True
+
+    target_name = args_str.strip().lower()
+    template_id = character.find_item_in_inventory_by_name(world, target_name)
+    if template_id is None:
+        await character.send("You aren't carrying that.")
+        return True
+
+    template = get_item_template_from_world(world, template_id)
+    if not template or template.get('type') != "FOOD":
+        await character.send("You can't eat that.")
+        return True
+
+    success = await combat_logic.resolve_consumable_effect(character, template, world)
+
+    if success:
+        try:
+            character.inventory.remove(template_id)
+            # TODO: Handle charges/portions
+        except ValueError:
+            log.error("Failed to remove consumed item %d from %s inventory (already gone?)", template_id, character.name)
+
+        character.roundtime = 2.0 # Roundtime for eating
+    return True
+
