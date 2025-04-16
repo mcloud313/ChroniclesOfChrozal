@@ -148,7 +148,8 @@ async def init_db(conn: aiosqlite.Connection):
             description TEXT DEFAULT 'It looks unremarkable.',
             keywords TEXT NOT NULL DEFAULT '[]', -- JSON list of lowercase keywords for targeting
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE
+            FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE,
+            UNIQUE (room_id, name)
         )
         """)
         log.info("Checked/Created 'room_objects' table.")

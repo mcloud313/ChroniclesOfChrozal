@@ -353,17 +353,25 @@ class Room:
             log.exception("Unexpected error in add_coinage for room %d: %s", self.dbid, e)
             return False
 
-    def get_object_by_keyworld(self, keyword: str) -> Optional[Dict[str, Any]]:
+    def get_object_by_keyword(self, keyword: str) -> Optional[Dict[str, Any]]:
         """Finds the first object in the room matching a keyword."""
         keyword_lower = keyword.lower()
+        log.debug("Room %d: Searching objects for keyword '%s'", self.dbid, keyword_lower) # Add log
         for obj_data in self.objects:
-            # Ensure keywords are loaded as a list (handle potential errors)
+            obj_name = obj_data.get("name", "Unknown Object") # For logging
             keywords = obj_data.get("keywords", [])
-            if isinstance(keywords, str): # IF loaded as a string, parse JSON
+            # Ensure keywords is a list
+            if isinstance(keywords, str):
                 try: keywords = json.loads(keywords)
                 except json.JSONDecodeError: keywords = []
-            if not isinstance(keywords, list): keywords = [] # Fallback
+            if not isinstance(keywords, list): keywords = []
+
+            # --- V V V Add Detailed Log V V V ---
+            log.debug(" -> Checking object '%s' with keywords: %s", obj_name, keywords)
+            # --- ^ ^ ^ ---
 
             if keyword_lower in keywords:
+                log.debug(" --> Match found!") # Add log
                 return obj_data
+        log.debug(" -> No object matched keyword '%s'", keyword_lower) # Add log
         return None

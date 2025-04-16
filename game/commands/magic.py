@@ -99,6 +99,17 @@ async def cmd_cast(character: Character, world: 'World', db_conn: aiosqlite.Conn
         target_id = None
         target_obj_type_str = "NONE"
         found_target = True # No target needed is valid
+    elif not target_name_input: 
+        effect_type = spell_data.get("effect_type")
+        can_target_self = target_type in [ability_defs.TARGET_CHAR, ability_defs.TARGET_CHAR_OR_MOB]
+        is_beneficial = effect_type in [ability_defs.EFFECT_HEAL, ability_defs.EFFECT_BUFF]
+
+        if can_target_self and is_beneficial:
+            target_obj = character
+            target_id = "self"
+            target_obj_type_str = "SELF"
+            found_target = True
+            log.debug("No target specified for beneficial spell %s, defaulting to self.", spell_key)
     else: # Requires a target name in the room
         if not target_name_input:
             await character.send(f"Who or what do you want to {display_name} on?") # Use ability_key_input or spell_key_input
