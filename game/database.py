@@ -138,6 +138,20 @@ async def init_db(conn: aiosqlite.Connection):
                 FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE,
                 FOREIGN KEY(item_template_id) REFERENCES item_templates(id) ON DELETE CASCADE )
         """)
+        # --- V V V NEW: Create room_objects table V V V ---
+        await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS room_objects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            room_id INTEGER NOT NULL,
+            name TEXT NOT NULL, -- Display name (e.g., "a weathered fountain")
+            description TEXT DEFAULT 'It looks unremarkable.',
+            keywords TEXT NOT NULL DEFAULT '[]', -- JSON list of lowercase keywords for targeting
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(room_id) REFERENCES rooms(id) ON DELETE CASCADE
+        )
+        """)
+        log.info("Checked/Created 'room_objects' table.")
         # Races
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS races (
@@ -482,6 +496,27 @@ async def init_db(conn: aiosqlite.Connection):
             )
             log.info("Areas & Rooms populated.")
         except aiosqlite.Error as e: log.error("Failed to populate default rooms: %s", e)
+
+        # Add inside init_db, after populating rooms (Phase 5)
+        # --- V V V Populate Room Objects V V V ---
+        log.info("Step 5c: Populating Room Objects...") # Example step number
+        default_room_objects = [
+        # room_id, name, description, keywords_json
+        (MARKET_ID, "a weathered fountain", "A large stone fountain depicting leaping dolphins stands in the center of the square. It's currently dry and stained with age and bird droppings.", json.dumps(["fountain", "weathered fountain", "stone fountain"])),
+        (TEMPLE_ID, "an altar of driftwood", "Polished smooth by time and sea, this large piece of driftwood serves as the temple's central altar. Offerings of shells and sea glass rest upon it.", json.dumps(["altar", "driftwood", "driftwood altar"])),
+        (TAVERN_ID, "a sticky bar", "The long wooden bar is dark with age and stained from countless spills. Several sturdy stools sit before it.", json.dumps(["bar", "sticky bar", "wooden bar"])),
+        (LIBRARY_ID, "towering bookshelves", "Floor-to-ceiling bookshelves, crammed with leather-bound volumes, line the library walls.", json.dumps(["bookshelves", "shelves", "bookshelf", "tomes", "books"])),
+        (GRAVEYARD_ID, "weathered headstones", "Leaning at odd angles, these stone markers bear faded names and dates, testaments to lives long past.", json.dumps(["headstone", "headstones", "gravestone", "gravestones", "stone", "stones", "marker", "markers"])),
+        ]
+        try:
+            await conn.executemany(
+            """INSERT OR IGNORE INTO room_objects (room_id, name, description, keywords)
+            VALUES (?, ?, ?, ?)""", default_room_objects
+            )
+            await conn.commit() # Commit room objects
+            log.info("Default room objects populated.")
+        except aiosqlite.Error as e:
+            log.error("Failed to populate default room objects: %s", e)
 
         # --- Phase 5b: Populate Armory ---
         log.info("Step 5b: Populating Armory...")
@@ -854,6 +889,11 @@ async def load_items_for_room(conn: aiosqlite.Connection, room_id: int) -> list[
     if rows is None: # Indicates an error in fetch_all
         return None
     return [row['item_template_id'] for row in rows]
+
+async def load_objects_for_room(conn: aiosqlite.Connection, room_id: int) -> list[aiosqlite.Row] | None:
+    """Loads all object rows for a specific room."""
+    query = "SELECT id, name, description, keywords FROM room_objects WHERE room_id = ?"
+    return await fetch_all(conn, query, (room_id,))
 
 async def load_coinage_for_room(conn: aiosqlite.Connection, room_id: int) -> int | None:
     """Loads the amount of coinage on the ground in a room."""

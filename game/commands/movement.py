@@ -57,6 +57,28 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
     look_string = target_room.get_look_string(character, world)
     await character.send(look_string)
 
+    ground_items_output = []
+    item_counts = {}
+    # Access items directly from the target_room object's cache
+    for item_id in target_room.items:
+        item_counts[item_id] = item_counts.get(item_id, 0) + 1
+
+    for template_id, count in sorted(item_counts.items()):
+        # Use world object passed into _perform_move
+        template = world.get_item_template(template_id)
+        item_name = template['name'] if template else f"Item #{template_id}"
+        display_name = item_name
+        if count > 1: display_name += f" (x{count})"
+        ground_items_output.append(display_name)
+    
+    # Access coinage directly from the target_room object's cache
+    coinage = target_room.coinage
+    if coinage > 0:
+        ground_items_output.append(utils.format_coinage(coinage)) # Ensure utils imported
+
+    if ground_items_output:
+        await character.send("You also see here: " + ", ".join(ground_items_output) + ".")
+
     base_rt = 1.0 # Base movement roundtime
     total_av = character.get_total_av(world)
     rt_penalty = math.floor(total_av / 20) * 1.0 # +1.0s RT per 20 AV

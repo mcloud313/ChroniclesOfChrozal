@@ -4,6 +4,7 @@ Manages the game world's loaded state, including rooms and areas.
 import time
 import math
 import logging
+import json
 import aiosqlite
 import config
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
@@ -88,7 +89,7 @@ class World:
                 log.info("Loaded %d item templates.", len(self.item_templates))
             except Exception as e: load_success = False; log.exception(...)
 
-        # --- Load Rooms & Initial Items/Coins/Mobs ---
+        # --- Load Rooms & Initial Items/Coins/Mobs and OBJECTS ---
         if load_success:
             try:
                 room_rows = await database.load_all_rooms(db_conn) # Use local db_conn var
@@ -123,6 +124,18 @@ class World:
                             coinage = await database.load_coinage_for_room(db_conn, room_id) # Use local db_conn
                             if coinage is not None: room.coinage = coinage; coin_load_count += (1 if coinage > 0 else 0)
                             else: load_success = False; log.error(...)
+
+                            loaded_objects = await database.load_objects_for_room(db_conn, room_id)
+                            if loaded_objects is not None:
+                                temp_objects = []
+                                for obj_row in loaded_objects:
+                                    obj_dict = dict(obj_row)
+                                    # PArse keywords JSON string into list
+                                    try: obj_dict['keywords'] = json.loads(obj_dict.get('keywords', '[]') or '[]')
+                                    except json.JSONDecodeError: obj_dict['keywords'] = []
+                                    temp_objects.append(obj_dict)
+                                room.objects = temp_objects # Assign parsed list
+                            else: load_success = False; log.error("Failed loading objects for Room %d", room_id)
                         except Exception as load_e: load_success = False; log.exception(...)
                     log.info("Loaded initial state for %d rooms (%d items, %d coin piles > 0).", len(self.rooms), item_load_count, coin_load_count)
 
@@ -351,7 +364,7 @@ class World:
         log.info("Processing respawn for %s...", character.name)
 
         # 1. Determine Respawn Location (Room 1 for V1)
-        respawn_room_id = 1 # TODO: Make configurable or based on player choices later
+        respawn_room_id = getattr(config, 'DEFAULT_RESPAWN_ROOM_ID', 1)
         respawn_room = self.get_room(respawn_room_id)
 
         if not respawn_room:

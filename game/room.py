@@ -36,6 +36,7 @@ class Room:
         self.area_id: int = db_data['area_id']
         self.name: str = db_data['name']
         self.description: str = db_data['description']
+        self.objects: List[Dict[str, Any]] = []
         self.items: List[int] = []
         self.coinage: int = 0
 
@@ -158,6 +159,10 @@ class Room:
             for name, count in mob_counts.items():
                 formatted_mob_list.append(f"{name}" + (f" (x{count})" if count > 1 else ""))
             output_lines.append("Visible Creatures: " + ", ".join(formatted_mob_list) + ".")
+
+        if self.objects:
+            object_names = [obj.get('name', 'an object') for obj in self.objects]
+            output_lines.append("Objects of interest: " + ", ".join(sorted(object_names)) + ".")
 
         # Join all parts with MUD newlines
         return "\n\r".join(output_lines)
@@ -347,3 +352,18 @@ class Room:
         except Exception as e:
             log.exception("Unexpected error in add_coinage for room %d: %s", self.dbid, e)
             return False
+
+    def get_object_by_keyworld(self, keyword: str) -> Optional[Dict[str, Any]]:
+        """Finds the first object in the room matching a keyword."""
+        keyword_lower = keyword.lower()
+        for obj_data in self.objects:
+            # Ensure keywords are loaded as a list (handle potential errors)
+            keywords = obj_data.get("keywords", [])
+            if isinstance(keywords, str): # IF loaded as a string, parse JSON
+                try: keywords = json.loads(keywords)
+                except json.JSONDecodeError: keywords = []
+            if not isinstance(keywords, list): keywords = [] # Fallback
+
+            if keyword_lower in keywords:
+                return obj_data
+        return None

@@ -5,8 +5,10 @@ General player commands like look, say, quit, who help.
 import math
 import logging
 import config
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Union, Dict, Any, List
 from .. import utils
+from ..item import Item
+from ..mob import Mob
 
 # Avoid circular imports with type checking
 if TYPE_CHECKING:
@@ -93,6 +95,13 @@ async def cmd_look(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
             output_buffer.append(f"\r\n{target_mob.description}\r\n")
             # Maybe add brief HP status? ("looks healthy", "is wounded") - later polish
             # output_buffer.append(f"{target_mob.name.capitalize()} looks healthy.")
+
+    if not target_found and hasattr(character.location, 'get_object_by_keyword'):
+        target_obj_data = character.location.get_object_by_keyword(target_name)
+        if target_obj_data:
+            target_found = True
+            # Just display the object's description
+            output_buffer.append(f"\r\n{target_obj_data.get('description', 'It looks unremarkable.')}\r\n")
 
     # 3. Check Items on Ground (if no char/mob found)
     if not target_found:
