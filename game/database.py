@@ -935,52 +935,59 @@ async def update_room_coinage(conn: aiosqlite.Connection, room_id: int, amount_c
 async def create_character(
     conn: aiosqlite.Connection, player_id: int, first_name: str, last_name: str, sex: str,
     race_id: int, class_id: int, stats_json: str, skills_json: str, description: str,
-    hp: int, max_hp: int, essence: int, max_essence: int, known_spells_json: str = '[]',
-    known_abilities_json: str = '[]', location_id: int = 1, spiritual_tether: int = 1
+    hp: float, max_hp: float, essence: float, max_essence: float,
+    known_spells_json: str = '[]', known_abilities_json: str = '[]',
+    location_id: int = 10, # Default Tavern
+    spiritual_tether: int = 1, # Passed or calculated
+    # Add params for inventory, equipment, coinage with defaults
+    inventory_json: str = '[]',
+    equipment_json: str = '{}',
+    coinage: int = 0
 ) -> int | None:
-    """ Creates a new character record, calculating initial spiritual tether. """
+    """ Creates a new character record, relying less on DB defaults. """
+
+    # --- V V V Update Query (20 columns, 20 placeholders) V V V ---
     query = """
         INSERT INTO characters (
             player_id, first_name, last_name, sex, race_id, class_id,
             stats, skills, description, hp, max_hp, essence, max_essence,
-            known_spells, known_abilities, location_id, spiritual_tether,
-            -- level, xp_pool, xp_total use DB defaults (1, 0, 0)
-            -- points use DB defaults (0, 0) - awarded after creation by handler
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            spiritual_tether, inventory, equipment, coinage,
+            known_spells, known_abilities, location_id
+            -- Status, Level, XP, Points still use DB defaults
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
-    # --- Calculate initial tether ---
-    initial_tether = 1 # Default minimum
+    # --- ^ ^ ^ ---
+
+    # Recalculate initial tether (use aura from stats_json)
+    initial_tether = 1
     try:
         stats_dict = json.loads(stats_json or '{}')
         aura = stats_dict.get("aura", 10)
         aura_mod = utils.calculate_modifier(aura)
-        # Level is 1 initially, floor(1/4) = 0
-        initial_tether = max(1, aura_mod + math.floor(1 / 4))
-        initial_tether = max(1, aura_mod) 
+        initial_tether = max(1, aura_mod)
     except Exception as e:
         log.error("Error calculating initial tether for new character: %s", e)
-        initial_tether = 1 # Fallback to minimum
+        initial_tether = 1
 
+    # --- V V V Update Params Tuple (20 values, matching query order) V V V ---
     params = (
-        player_id, first_name, last_name, sex, race_id, class_id,
-        stats_json, skills_json, description, hp, max_hp, essence, max_essence,
-        location_id, spiritual_tether, known_spells_json, known_abilities_json
+        player_id, first_name, last_name, sex, race_id, class_id,           # 1-6
+        stats_json, skills_json, description, hp, max_hp, essence, max_essence, # 7-13
+        initial_tether, inventory_json, equipment_json, coinage,             # 14-17
+        known_spells_json, known_abilities_json, location_id                 # 18-20
     )
+    # --- ^ ^ ^ ---
 
     try:
-        # Use execute_query which returns lastrowid on success
         new_char_id = await execute_query(conn, query, params)
         if new_char_id:
             log.info("Successfully created character '%s %s' with ID %s for player %s.",
-            first_name, last_name, new_char_id, player_id)
+                    first_name, last_name, new_char_id, player_id)
             return new_char_id
         else:
-            # This might happen if execute_query returns 0 or None unexpectedly
             log.error("Character creation for player %s failed, execute_query returned %s",
-            player_id, new_char_id)
+                    player_id, new_char_id)
             return None
-        
     except Exception as e:
-        # Catch potential errors during creation (like UNIQUE constraint violation maybe?)
         log.exception("Exception during character creation for player %s: %s", player_id, e, exc_info=True)
         return None
