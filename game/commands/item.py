@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Optional, Dict
 import json # Needed for parsing item stats
 import aiosqlite
 from .. import combat as combat_logic
+from .. import utils
 
 if TYPE_CHECKING:
     from ..character import Character
@@ -23,13 +24,7 @@ from ..definitions import slots as equip_slots
 log = logging.getLogger(__name__)
 
 # --- Helper ---
-def get_item_template_from_world(world: 'World', template_id: int) -> Optional[dict]:
-    """Gets item template data as a dict, handling potential errors."""
-    template_row = world.get_item_template(template_id)
-    if not template_row:
-        log.error("Could not find template data for ID %d", template_id)
-        return None
-    return dict(template_row) # Convert row to dict
+
 
 # --- Commands ---
 async def cmd_inventory(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
@@ -47,7 +42,7 @@ async def cmd_inventory(character: 'Character', world: 'World', db_conn: 'aiosql
     for slot in slot_order:
         template_id = character.equipment.get(slot)
         if template_id:
-            template = get_item_template_from_world(world, template_id)
+            template = utils.get_item_template_from_world(world, template_id)
             item_name = template['name'] if template else f"Unknown Item ({template_id})"
             # Format: <Slot> Item Name
             equipped_items.append(f" <{slot.replace('_',' ').title():<12}> {item_name}")
@@ -73,7 +68,7 @@ async def cmd_inventory(character: 'Character', world: 'World', db_conn: 'aiosql
             item_counts[template_id] = item_counts.get(template_id, 0) + 1
 
         for template_id, count in sorted(item_counts.items()):
-            template = get_item_template_from_world(world, template_id)
+            template = utils.get_item_template_from_world(world, template_id)
             item_name = template['name'] if template else f"Unknown Item #{template_id}"
             display_name = f"{item_name}"
             if count > 1:
@@ -143,7 +138,7 @@ async def cmd_get(character: 'Character', world: 'World', db_conn: 'aiosqlite.Co
     item_index_in_room = -1
     
     for i, template_id in enumerate(items_on_ground):
-        template = get_item_template_from_world(world, template_id)
+        template = utils.get_item_template_from_world(world, template_id)
         if template and target_name in template['name'].lower():
             item_template_id_to_get = template_id
             item_template_data = template
@@ -206,7 +201,7 @@ async def cmd_drop(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
     if item_added_to_room:
         # Remove first instance from character inventory (cache only, saved later)
         character.inventory.remove(template_id_to_drop)
-        template = get_item_template_from_world(world, template_id_to_drop)
+        template = utils.get_item_template_from_world(world, template_id_to_drop)
         item_name = template['name'] if template else f"Item #{template_id_to_drop}"
         await character.send(f"You drop {item_name}.")
         await character.location.broadcast(f"\r\n{character.name} drops {item_name}.\r\n", exclude={character})
@@ -384,7 +379,7 @@ async def cmd_examine(character: 'Character', world: 'World', db_conn: 'aiosqlit
         elif character.location: # Check ground
             items_on_ground = list(character.location.items)
             for t_id in items_on_ground:
-                template = get_item_template_from_world(world, t_id)
+                template = utils.get_item_template_from_world(world, t_id)
                 if template and template['name'].lower() == target_name:
                     item_location = "ground"
                     template_id = t_id
@@ -428,7 +423,7 @@ async def cmd_drink(character: 'Character', world: 'World', db_conn: aiosqlite.C
         await character.send("You aren't carrying that.")
         return True
     
-    template = get_item_template_from_world(world, template_id)
+    template = utils.get_item_template_from_world(world, template_id)
     if not template or template.get('type') != "DRINK":
         await character.send("You can't drink that.")
         return True
@@ -462,7 +457,7 @@ async def cmd_eat(character: 'Character', world: 'World', db_conn: aiosqlite.Con
         await character.send("You aren't carrying that.")
         return True
 
-    template = get_item_template_from_world(world, template_id)
+    template = utils.get_item_template_from_world(world, template_id)
     if not template or template.get('type') != "FOOD":
         await character.send("You can't eat that.")
         return True

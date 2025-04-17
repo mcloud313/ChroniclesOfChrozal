@@ -67,26 +67,37 @@ async def cmd_look(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
     target_char = character.location.get_character_by_name(target_name)
     if target_char:
         target_found = True
-        if target_char == character:
-            # Look self - show score? Or basic desc? Let's show basic desc like looking at others
-            output_buffer.append("\r\n" + character.description + "\r\n")
-            race_name = world.get_race_name(character.race_id)
-            class_name = world.get_class_name(character.class_id)
-            pronoun_subj, _, _, verb_is, _ = utils.get_pronouns(character.sex)
-            output_buffer.append(f"({race_name} {class_name}, Level {character.level})")
-            output_buffer.append(f"{pronoun_subj} {verb_is} wearing:\r\n Nothing.") # Placeholder
-        else:
-            # Look other character
-            try:
-                target_race_name = world.get_race_name(target_char.race_id)
-                target_class_name = world.get_class_name(target_char.class_id)
-                pronoun_subj, _, _, verb_is, _ = utils.get_pronouns(target_char.sex)
-                output_buffer.append("\r\n" + target_char.description + "\r\n")
-                output_buffer.append(f"({target_race_name} {target_class_name}, Level {target_char.level})")
-                output_buffer.append(f"{pronoun_subj} {verb_is} wearing:\r\n Nothing.") # Placeholder
-            except Exception:
-                log.exception("Error generating look description for target %s:", target_char.name, exc_info=True)
-                output_buffer.append("You look, but your vision blurs momentarily.")
+        # Format look output for character (self or other)
+        try:
+            # Use target_char consistently whether it's self or other
+            output_buffer.append("\r\n" + target_char.description + "\r\n") # Display stored description
+            race_name = world.get_race_name(target_char.race_id)
+            class_name = world.get_class_name(target_char.class_id)
+            pronoun_subj, _, _, verb_is, _ = utils.get_pronouns(target_char.sex)
+            output_buffer.append(f"({race_name} {class_name}, Level {target_char.level})")
+
+            # --- V V V Display Equipment V V V ---
+            output_buffer.append(f"{pronoun_subj} {verb_is} wearing:")
+            equipped_items_desc = []
+            # Use defined slot order later if needed
+            slot_order = target_char.equipment.keys()
+            for slot in slot_order:
+                template_id = target_char.equipment.get(slot)
+                if template_id:
+                    template = utils.get_item_template_from_world(world, template_id)
+                    item_name = template['name'] if template else f"Unknown Item ({template_id})"
+                    # Format slot name nicely
+                    slot_display = slot.replace('_',' ').title()
+                    equipped_items_desc.append(f" <{slot_display:<12}> {item_name}")
+
+            if not equipped_items_desc:
+                output_buffer.append(" Nothing significant.") # Changed placeholder slightly
+            else:
+                    # Append each item on a new line for clarity
+                output_buffer.extend(equipped_items_desc)
+        except Exception:
+            log.exception("Error generating look description for target %s:", target_char.name, exc_info=True)
+            output_buffer.append("You look, but your vision blurs momentarily.")
 
     # 2. Check Mobs in room (if no character found)
     if not target_found:

@@ -226,9 +226,7 @@ class World:
     
     
     async def update_roundtimes(self, dt: float):
-        """
-        Called by the game ticker to decrease active roundtime for characters
-        """
+        """ Decreases active roundtime, checks/clears invalid combat state, and resolves casting. """
         from . import combat
         from .definitions import abilities as ability_defs # Also needed here
         # Use a list copy in case characters disconnect during iteration
@@ -237,6 +235,17 @@ class World:
             return
         # log.debug("updating roundtime for %d characters (dt=%.3f)", len(active_chars)
         for char in active_chars:
+
+            if char.is_fighting and (
+                not char.target # Target cleared elsewhere
+                or not hasattr(char.target, 'location')
+                or char.target.location != char.location
+            ):
+                log.debug("Cleared fighting state for %s; target %s is invalid.",
+                        char.name, getattr(char.target, 'name', 'None'))
+                char.is_fighting = False
+                char.target = None
+
             if char.roundtime > 0:
                 new_roundtime = char.roundtime - dt
                 char.roundtime = max(0.0, new_roundtime) # Decrease, clamp at 0

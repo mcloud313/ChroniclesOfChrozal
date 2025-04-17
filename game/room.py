@@ -326,27 +326,35 @@ class Room:
     async def add_coinage(self, amount: int, world: 'World') -> bool:
         """Adds coinage to room cache AND database."""
         # Debug print added previously - keep or remove as needed
-        # print(f"!!! DEBUG ADD_COINAGE: Received world type: {type(world)}, world object: {repr(world)} !!!")
-        if amount <= 0: return False
+        print(f"!!! DEBUG ADD_COINAGE: Received world type: {type(world)}, world object: {repr(world)} !!!")
+        if amount == 0: return True
+
         try:
             db_conn = world.db_conn
+            if amount < 0 and abs(amount) > self.coinage:
+                log.warning("Attempted to remove %d coinage from Room %d, but only %d present.", abs(amount), self.dbid, self.coinage)
+                # Return False, player cannot get more than what's there.
+                # cmd_get should ideally check this first too.
+                return False
+            
             rowcount = await database.update_room_coinage(db_conn, self.dbid, amount)
 
             # --- V V V Modified Rowcount Check V V V ---
             # Treat any positive rowcount as likely success due to anomaly
             if rowcount is not None and rowcount > 0:
-                self.coinage += amount # Update cache
-                log.debug("Added %d coinage to room %d (New total: %d, DB Rowcount: %s)",
-                        amount, self.dbid, self.coinage, rowcount) # Log actual count
+                new_coinage = self.coinage + amount
+                self.coinage = max(0, new_coinage) # Update cache, ensure not negative
+                log.debug("Updated coinage in room %d by %d (New total: %d, DB Rowcount: %s)",
+                    self.dbid, amount, self.coinage, rowcount) # Log actual count
                 return True
             elif rowcount == 0:
+                # This means WHERE clause failed - room ID likely invalid
                 log.error("Failed to update coinage for room %d in DB (rowcount 0 - room not found?).", self.dbid)
                 return False
-            else: # None (DB error) or unexpected negative?
-                log.error("Error updating coinage for room %d in DB (DB function returned: %s).", self.dbid, rowcount)
+            else: # None indicates DB error in execute_query
+                log.error("Error updating coinage for room %d in DB (DB function returned None).", self.dbid)
                 return False
-            # --- ^ ^ ^ End Modified Check ^ ^ ^ ---
-
+        # --- ^ ^ ^ End Corrected Check ^ ^ ^ ---
         except AttributeError as e:
             log.error("!!! ADD_COINAGE: Failed to get world.db_conn. 'world' parameter was type %s. Error: %s", type(world), e)
             return False

@@ -20,6 +20,14 @@ log = logging.getLogger(__name__)
 # IMPORTANT: These are basic SHA256 hashes for initial development.
 # Plan to replace with bcrypt for production.
 
+def get_item_template_from_world(world: 'World', template_id: int) -> Optional[dict]:
+    """Gets item template data as a dict, handling potential errors."""
+    template_row = world.get_item_template(template_id)
+    if not template_row:
+        log.error("Could not find template data for ID %d", template_id)
+        return None
+    return dict(template_row) # Convert row to dict
+
 def hash_password(password: str) -> str:
     """
     Hashes a password using SHA256

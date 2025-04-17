@@ -529,9 +529,6 @@ class CreationHandler:
         if facial_feature_sentence: # Only add if there were features to describe
             description_parts.append(facial_feature_sentence)
 
-        # Sentence 6: Equipment (Placeholder)
-        description_parts.append(f"\r\n{subj} {verb_is} wearing:\r\n Nothing.")
-
         # Join sentences into a paragraph
         full_description = " ".join(p for p in description_parts if p) # Filter empty parts
 
