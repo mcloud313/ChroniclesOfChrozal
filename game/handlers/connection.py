@@ -3,7 +3,8 @@
 Handles the lifecycle of a single client connection, including login,
 character selection, and passing commands to the command handler.
 """
-
+import time
+import config
 import asyncio
 import logging
 import aiosqlite
@@ -21,6 +22,7 @@ from game.definitions import skills as skill_defs
 from game.definitions import races as race_defs
 from game.definitions import classes as class_defs
 
+
 # Assume command handler will exist later
 # from ..comands import handler as command_handler
 
@@ -28,7 +30,7 @@ log = logging.getLogger(__name__)
 
 # Simple Message of the Day
 MOTD = """
-\r\n--- Welcome to Chronicles of Chrozal (Alpha 0.48) ---
+\r\n--- {CWelcome to Chronicles of Chrozal (Alpha 0.48) ---{x
 \r\n  
 \r\n  ___  _  _  ____   __   __ _  __  ___  __    ____  ____       
 \r\n / __)/ )( \(  _ \ /  \ (  ( \(  )/ __)(  )  (  __)/ ___)      
@@ -42,7 +44,7 @@ MOTD = """
 \r\n                       / __)/ )( \(  _ \ /  \(__  ) / _\ (  )  
 \r\n                      ( (__ ) __ ( )   /(  O )/ _/ /    \/ (_/\
 \r\n                      \___)\_)(_/(__\_) \__/(____)\_/\_/\____/
-\r\n--------------------------------------------------
+\r\n{W--------------------------------------------------{x
 \r\n"""
 
 # Define connection states
@@ -137,14 +139,29 @@ class ConnectionHandler:
             self.state = ConnectionState.DISCONNECTED
             return None
         
-    async def _send(self, message: str):
-        """Safely sends a message to the client using writer."""
+    async def _send(self, message: str, add_newline: bool = True): # add_newline was in prev example, add if needed
+        """Safely sends a message to the client, applying color codes."""
         if self.writer.is_closing():
+            log.debug("Attempted to send to closing writer for %s.", self.addr) # Added debug
             return
-        if not message.endswith('\r\n'):
-            message += '\r\n' # Ensure proper newline for telnet
-        try: 
-            self.writer.write(message.encode('utf-8'))
+
+        original_message = message # Keep original for logging if desired
+
+        # --- V V V Apply Colorization V V V ---
+        try:
+            message_to_send = utils.colorize(message)
+        except Exception as color_e:
+            log.error("Error applying color codes: %s", color_e)
+            message_to_send = message # Send uncolored on error
+        # --- ^ ^ ^ ---
+
+        # Ensure proper newline for telnet
+        if add_newline and not message_to_send.endswith(('\r\n', '\n')):
+            message_to_send += '\r\n'
+
+        try:
+            log.debug("Sending to %s: %r", self.addr, original_message) # Log original message for clarity
+            self.writer.write(message_to_send.encode(config.ENCODING)) # Send the colorized version
             await self.writer.drain()
         except (ConnectionResetError, BrokenPipeError) as e:
             log.warning("Connection lost from %s during write: %s", self.addr, e)
@@ -429,6 +446,9 @@ class ConnectionHandler:
         #6 Announce Arrival to Room
         arrival_msg = f"\r\n{self.active_character.name} slowly approaches.\r\n"
         await room.broadcast(arrival_msg, exclude={self.active_character})
+
+        self.active_character.login_timestamp = time.monotonic()
+        log.debug("Set login timestamp for %s", self.active_character.name)
 
         # 7. Change State to Playing
         self.state = ConnectionState.PLAYING

@@ -301,42 +301,37 @@ class Character:
                 log.exception("Failed to instantiate Item from template %d", template_id)
         return None
 
-    async def send(self, message: str):
-        """
-        Sends a message string to the character's connected client.
-        Appends a newline characters if not present.
+    async def send(self, message: str, add_newline: bool = True): # <<< Added add_newline parameter back
+        """Safely sends a message to this character's client, applying color codes."""
+        if not hasattr(self, 'writer') or self.writer.is_closing():
+            return # Cannot send
 
-        Args:
-            message: the string message to send.
-        """
-        if not self.writer or self.writer.is_closing():
-            log.warning("Attempted to send to closed writer for character %s", self.name)
-            return
+        original_message = message # For logging clarity
 
-        # Ensure message ends with standard MUD newline (\r\n) for telnet clients
-        if not message.endswith('\r\n'):
-            if message.endswith('\n'):
-                message = message[:-1] + '\r\n'
-            elif message.endswith('\r'):
-                message = message[:-1] + '\r\n'
-            else:
-                message += '\r\n'
-
+        # --- V V V Apply Colorization V V V ---
         try:
-            # Encode message to bytes (UTF-8 is standard)
-            self.writer.write(message.encode('utf-8'))
-            await self.writer.drain() # Wait until buffer has flushed
-            
+            # Call colorize and assign to message_to_send
+            message_to_send = utils.colorize(message)
+        except Exception as color_e:
+            log.error("Error applying color codes for char %s: %s", self.name, color_e)
+            message_to_send = message # Fallback to uncolored on error
+        # --- ^ ^ ^ ---
+
+        # Ensure proper newline (using message_to_send and add_newline)
+        if add_newline and not message_to_send.endswith(('\r\n', '\n')):
+            message_to_send += '\r\n'
+
+        # Encode and send
+        try:
+            log.debug("Sent to %s: %r", self.name, original_message) # Log original
+            # Write the processed message_to_send
+            self.writer.write(message_to_send.encode(config.ENCODING))
+            await self.writer.drain()
         except (ConnectionResetError, BrokenPipeError) as e:
-            log.warning("Network error sending to character %s: %s. Writer closed.", self.name, e)
-            # Connection is likely dead, try to close gracefully
-            try:
-                self.writer.close()
-                await self.writer.wait_closed()
-            except Exception:
-                pass # Ignore errors during close
+            log.warning("Connection lost for %s during write: %s", self.name, e)
+            # Consider how to handle state if write fails - maybe disconnect needed from handler?
         except Exception as e:
-            log.exception("Unexpected error sending to character %s", self.name, exc_info=True)
+            log.exception("Unexpected error writing to %s:", self.name, exc_info=True)
 
     async def save(self, db_conn: aiosqlite.Connection):
         """Gathers essential character data and saves it to the database."""

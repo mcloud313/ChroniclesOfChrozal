@@ -8,6 +8,7 @@ import logging
 import math
 import config
 from typing import Optional, TYPE_CHECKING
+from .definitions import colors as color_defs
 if TYPE_CHECKING:
     from game.character import Character # Use relative path if needed '.character'
 
@@ -199,3 +200,12 @@ def format_coinage(total_talons: int) -> str:
     if talons > 0: parts.append(f"{talons}t")
 
     return " ".join(parts) if parts else "0t"
+
+def colorize(text: str) -> str:
+    """
+    Replaces custom color codes (e.g., {R, {x) in text with ANSI escape codes.
+    """
+    output = text
+    for code, ansi_sequence in color_defs.COLOR_MAP.items():
+        output = output.replace(code, ansi_sequence)
+    return output

@@ -100,6 +100,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     # --- V V V Add Skill Spending Command V V V ---
     "spend": skill_cmds.cmd_spend,
     "invest": skill_cmds.cmd_spend, # Alias
+    "improve": skill_cmds.cmd_improve, # <<< ADD THIS
     # --- ^ ^ ^ ---
 
     "@teleport": admin_cmds.cmd_teleport,
