@@ -21,6 +21,10 @@ log = logging.getLogger(__name__)
 async def cmd_use(character: Character, world: 'World', db_conn: aiosqlite.Connection, args_str: str) -> bool:
     """HAndles the 'use <ability_name> [target_name]' command."""
 
+    if character.stance != "Standing":
+        await character.send("You must be standing to perform an ability.")
+        return True
+
     if not args_str:
         await character.send("Use which ability?")
         return True

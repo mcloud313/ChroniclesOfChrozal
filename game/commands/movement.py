@@ -96,6 +96,9 @@ async def cmd_move(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
         log.warning("Character %s tried to move but has no location.", character.name)
         await character.send("You cannot seem to move from the void.")
         return True # Stay connected
+    if character.stance != "Standing":
+        await character.send("You must be standing to move.")
+        return True
 
     # Normalize direction just in case
     direction = direction.lower()
@@ -181,6 +184,9 @@ async def cmd_go(character: 'Character', world: 'World', db_conn: 'aiosqlite.Con
     if not character.location:
         log.warning("Character %s tried to 'go' but has no location.", character.name)
         await character.send("You cannot seem to go anywhere from the void.")
+        return True
+    if character.stance != "Standing":
+        await character.send("You must be standing to move.")
         return True
     
     exit_name = args_str.strip().lower() # Use the argument as the exit key

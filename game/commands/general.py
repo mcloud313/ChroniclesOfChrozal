@@ -388,6 +388,9 @@ async def cmd_meditate(character: 'Character', world: 'World', db_conn: 'aiosqli
     if character.status != "ALIVE":
         await character.send("You cannot meditate right now.")
         return True
+    if character.stance != "Sitting":
+        await character.send("You must be sitting down to meditate properly.")
+        return True
     if character.is_fighting:
         await character.send("You cannot meditate while fighting!")
         return True
@@ -481,4 +484,81 @@ async def cmd_tell(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
         await character.send("Your message could not be delivered.")
 
     # Tells usually don't take roundtime
+    return True
+
+async def cmd_sit(character: 'Character', world: 'World', db_conn: aiosqlite.Connection, args_str: str) -> bool:
+    """Makes the character sit down."""
+    if character.status == "DYING" or character.status == "DEAD":
+        await character.send("You cannot do that right now.")
+        return True
+    if character.is_fighting:
+        await character.send("You cannot sit down while fighting!")
+        return True
+    if character.roundtime > 0:
+        await character.send("You are too busy to sit down.")
+        return True
+    if character.casting_info:
+        await character.send("You cannot sit while preparing an action.")
+        return True
+    if character.stance == "Sitting":
+        await character.send("You are already sitting.")
+        return True
+    
+    # Sitting takes a moment
+    character.roundtime = 4.0
+    character.stance = "Sitting"
+    await character.send("You sit down.")
+    if character.location:
+        await character.location.broadcast(f"\r\n{character.name} sits down.\r\n", exclude={character})
+    return True
+
+async def cmd_stand(character: 'Character', world: 'World', db_conn: aiosqlite.Connection, args_str: str) -> bool:
+    """Makes the character stand up."""
+    if character.status == "DYING" or character.status == "DEAD":
+        await character.send("You cannot do that right now.")
+        return True
+    # Can stand while fighting (might be necessary if knocked down later)
+    # if character.is_fighting: await character.send(...); return True
+    if character.roundtime > 0:
+        await character.send("You are too busy to stand up.")
+        return True
+    if character.casting_info: # Interrupt casting? Yes.
+        await character.send("You stop preparing your action and stand up.")
+        character.casting_info = None
+    if character.stance == "Standing":
+        await character.send("You are already standing.")
+        return True
+
+    # Standing is quick
+    character.roundtime = 2.0
+    character.stance = "Standing"
+    await character.send("You stand up.")
+    if character.location:
+        await character.location.broadcast(f"\r\n{character.name} stands up.\r\n", exclude={character})
+    return True
+
+async def cmd_lie(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Makes the character lie down."""
+    if character.status == "DYING" or character.status == "DEAD":
+        await character.send("You cannot do that right now.")
+        return True
+    if character.is_fighting:
+        await character.send("You cannot lie down while fighting!")
+        return True
+    if character.roundtime > 0:
+        await character.send("You are too busy to lie down.")
+        return True
+    if character.casting_info:
+        await character.send("You cannot lie down while preparing an action.")
+        return True
+    if character.stance == "Lying":
+        await character.send("You are already lying down.")
+        return True
+    
+    # Lying down takes a bit longer
+    character.roundtime = 5.0
+    character.stance = "Lying"
+    await character.send("You lie down.")
+    if character.location:
+        await character.location.broadcast(f"\r\n{character.name} lies down.\r\n", exclude={character})
     return True

@@ -116,6 +116,27 @@ async def cmd_get(character: 'Character', world: 'World', db_conn: 'aiosqlite.Co
     item_template_id_to_get = None
     item_template_data = None
 
+    if target_name in ["coins", "coin", "money", "talons", "t"]: # Keywords for getting coins
+        room_coinage = character.location.coinage
+        if room_coinage <= 0:
+            await character.send("There are no coins here.")
+            return True
+
+        # Attempt to remove coinage from room (DB and cache)
+        # Pass world object to room method
+        coinage_updated = await character.location.add_coinage(-room_coinage, world)
+
+        if coinage_updated:
+            character.coinage += room_coinage # Add to player
+            formatted_coins = utils.format_coinage(room_coinage)
+            await character.send(f"You pick up {formatted_coins}.")
+            await character.location.broadcast(f"\r\n{character.name} picks up some coins.\r\n", exclude={character})
+            character.roundtime = 1.0 # Apply small roundtime
+        else:
+            # DB update failed for some reason
+            await character.send("You try to pick up the coins, but fail.")
+        return True
+
     # Find the first item on the ground matching the name
     # Need a mutable list copy if removing during iteration
     items_on_ground = list(character.location.items)

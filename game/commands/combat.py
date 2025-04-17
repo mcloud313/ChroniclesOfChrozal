@@ -22,6 +22,9 @@ log = logging.getLogger(__name__)
 
 async def cmd_attack(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Handles the 'attack <target>' command."""
+    if character.stance != "Standing":
+        await character.send("You must be standing to attack.")
+        return True
     if not args_str:
         await character.send("Attack whom?")
         return True

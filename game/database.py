@@ -187,6 +187,7 @@ async def init_db(conn: aiosqlite.Connection):
                 hp REAL DEFAULT 50.0, max_hp REAL DEFAULT 50.0, essence REAL DEFAULT 20.0, max_essence REAL DEFAULT 20.0,
                 spiritual_tether INTEGER, xp_pool REAL DEFAULT 0.0, xp_total REAL DEFAULT 0.0,
                 status TEXT NOT NULL DEFAULT 'ALIVE', unspent_skill_points INTEGER NOT NULL DEFAULT 0, unspent_attribute_points INTEGER NOT NULL DEFAULT 0,
+                stance TEXT NOT NULL DEFAULT 'Standing',
                 stats TEXT DEFAULT '{}', skills TEXT DEFAULT '{}', known_spells TEXT NOT NULL DEFAULT '[]', known_abilities TEXT NOT NULL DEFAULT '[]',
                 location_id INTEGER DEFAULT 10, -- Start in Tavern now
                 inventory TEXT NOT NULL DEFAULT '[]', equipment TEXT NOT NULL DEFAULT '{}', coinage INTEGER NOT NULL DEFAULT 0,
@@ -203,7 +204,8 @@ async def init_db(conn: aiosqlite.Connection):
             (1, "Chrozalin", "Versatile humans, common throughout the lands."),
             (2, "Dwarf", "Stout and hardy mountain folk."),
             (3, "Elf", "Graceful, long-lived forest dwellers."),
-            (4, "Yan-tar", "Ancient, wise turtle-like people.")
+            (4, "Yan-tar", "Ancient, wise turtle-like people."),
+            (5, "Grak", "Grak are towering humanoids known for their formidable strength and hardy builds, often found in harsh climates or working demanding physical labor.")
         ]
         await conn.executemany("INSERT OR IGNORE INTO races(id, name, description) VALUES(?, ?, ?)", default_races)
 
@@ -831,7 +833,7 @@ async def save_character_data(conn: aiosqlite.Connection, character_id: int, dat
         "stats", "skills", "description", "sex", "race_id", "class_id",
         "max_hp", "max_essence", "inventory", "equipment", "coinage",
         "unspent_skill_points", "unspent_attribute_points", "known_spells",
-        "known_abilities", "status"
+        "known_abilities", "status", "stance"
     ]
 
     for key, value in data.items():

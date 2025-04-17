@@ -132,6 +132,7 @@ class Character:
         self.death_timer_ends_at: Optional[float] = None # Timer not active initially
         self.description: str = db_data['description']
         self.status: str = 'ALIVE' # Possible values: ALIVE, DYING, DEAD
+        self.stance: str = db_data['stance'] if 'stance' in db_data.keys() else 'Standing'
         self.target: Optional[Union['Character', 'Mob']] = None # Who are we fighting? Needs Mob import below
         self.is_fighting: bool = False # Add fighting flag
         self.casting_info: Optional[Dict[str, Any]] = None
@@ -307,15 +308,11 @@ class Character:
             return # Cannot send
 
         original_message = message # For logging clarity
-
-        # --- V V V Apply Colorization V V V ---
         try:
-            # Call colorize and assign to message_to_send
             message_to_send = utils.colorize(message)
         except Exception as color_e:
             log.error("Error applying color codes for char %s: %s", self.name, color_e)
             message_to_send = message # Fallback to uncolored on error
-        # --- ^ ^ ^ ---
 
         # Ensure proper newline (using message_to_send and add_newline)
         if add_newline and not message_to_send.endswith(('\r\n', '\n')):
@@ -347,6 +344,7 @@ class Character:
             "unspent_attribute_points": self.unspent_attribute_points,
             "spiritual_tether": self.spiritual_tether,
             "status": self.status,
+            "stance": self.stance,
             "stats": json.dumps(self.stats), # Save current stats
             "skills": json.dumps(self.skills), # Save current skills
             "known_spells": json.dumps(self.known_spells),

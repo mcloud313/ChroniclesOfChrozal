@@ -54,6 +54,9 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "emote": general_cmds.cmd_emote,
     ":": general_cmds.cmd_emote, # Common alias
     "tell": general_cmds.cmd_tell,
+    "sit": general_cmds.cmd_sit,
+    "stand": general_cmds.cmd_stand,
+    "lie": general_cmds.cmd_lie,
 
 
     # Movement Commands (Pass direction directly to the handler)

@@ -170,24 +170,25 @@ class Room:
     async def broadcast(self, message: str, exclude: Optional[Set[Any]] = None):
         """
         Sends a message to all characters in the room, optionally excluding some.
-
-        Args:
-            message: The string message to send. MUST include line endings if needed.
-            exclude: A set of Character objects to NOT send the message to.
         """
         if exclude is None:
             exclude = set()
 
         # Make a copy of the set in case it changes during iteration
+        # Only message characters, as Mobs don't have a send method
         characters_to_message = self.characters.copy()
-        
+
         for character in characters_to_message:
+
             if character not in exclude:
                 try:
-                    # Assumes character object has a 'send' method
-                    await character.send(message)
-                except AttributeError:
-                    log.error(f"Room {self.dbid}: Tried to broadcast to object without send method: {character} ")
+                    log.debug("!!! Broadcasting to %s: %r", character.name, message)
+                    await character.send(message, add_newline=False) # Pass add_newline=False if message already has \r\n
+                    # Note: Ensure your broadcast messages INCLUDE \r\n if needed,
+                    # or pass add_newline=True to character.send if it supports it
+
+                except AttributeError: # Should not happen if check above works
+                    log.error(f"Room {self.dbid}: Tried to broadcast to Character object without send method?: {character} ")
                 except Exception as e:
                     # Catch potential errors during send (e.g., connection closed)
                     log.error(f"Room {self.dbid}: Error broadcasting to {getattr(character, 'name', '?')}: {e}", exc_info=True)

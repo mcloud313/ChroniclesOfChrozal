@@ -59,7 +59,6 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
 
         if dropped_coinage > 0 and target_loc:
             log.info("%s corpse drops %d coinage in Room %d.", target_name.capitalize(), dropped_coinage, target_loc.dbid)
-            # --- V V V Pass world object V V V ---
             coinage_added = await target_loc.add_coinage(dropped_coinage, world)
             # --- ^ ^ ^ ---
             if coinage_added: await target_loc.broadcast(...) # Announce only if added successfully
@@ -93,6 +92,7 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
         if target.status == "ALIVE": # Only trigger dying sequence once
             target.hp = 0 # Ensure HP is 0
             target.status = "DYING"
+            target.stance = "Lying"
             target.is_fighting = False
             target.target = None
             # Calculate death timer based on Vitality score

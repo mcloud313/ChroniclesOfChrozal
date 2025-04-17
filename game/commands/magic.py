@@ -21,6 +21,10 @@ log = logging.getLogger(__name__)
 async def cmd_cast(character: Character, world: 'World', db_conn: aiosqlite.Connection, args_str: str) -> bool:
     """Handles the 'cast <spell_name> [target_name]' command."""
 
+    if character.stance != "Standing":
+        await character.send("You must be standing to cast.")
+        return True
+
     if not args_str:
         await character.send("Cast which spell?")
         # Maybe list known spells? For now, just basic message.
