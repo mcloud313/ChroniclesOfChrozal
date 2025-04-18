@@ -226,68 +226,91 @@ class World:
     
     
     async def update_roundtimes(self, dt: float):
-        """ Decreases active roundtime, checks/clears invalid combat state, and resolves casting. """
+        """
+        Decreases active roundtime for ALL participants, checks/clears invalid
+        combat state for Characters, and resolves casting for Characters
+        when RT reaches 0.
+        """
+        # Import locally to avoid top-level circular dependencies
         from . import combat
-        from .definitions import abilities as ability_defs # Also needed here
-        # Use a list copy in case characters disconnect during iteration
-        active_chars = self.get_active_characters_list()
-        if not active_chars:
-            return
-        # log.debug("updating roundtime for %d characters (dt=%.3f)", len(active_chars)
-        for char in active_chars:
+        from .definitions import abilities as ability_defs
+        from .character import Character
+        from .mob import Mob
 
-            if char.is_fighting and (
-                not char.target # Target cleared elsewhere
-                or not hasattr(char.target, 'location')
-                or char.target.location != char.location
-            ):
-                log.debug("Cleared fighting state for %s; target %s is invalid.",
-                        char.name, getattr(char.target, 'name', 'None'))
-                char.is_fighting = False
-                char.target = None
+        # Combine active characters and all mobs from all rooms
+        participants: List[Union[Character, Mob]] = list(self.active_characters.values())
+        for room in self.rooms.values():
+            # Ensure we're adding Mob instances, handling potential issues if room.mobs isn't guaranteed Set[Mob]
+            try:
+                participants.extend(list(room.mobs))
+            except Exception:
+                log.exception("Error extending participants with mobs from room %d", room.dbid)
 
-            if char.roundtime > 0:
-                new_roundtime = char.roundtime - dt
-                char.roundtime = max(0.0, new_roundtime) # Decrease, clamp at 0
 
-                if char.roundtime == 0.0 and char.casting_info:
-                    # Store info and clear state immediately to prevent re-entry
+        if not participants: return
+
+        for participant in participants:
+            # --- 1. Decrement Roundtime for Everyone ---
+            rt_before_decrement = participant.roundtime # Store value before decrement
+            if rt_before_decrement > 0:
+                participant.roundtime = max(0.0, rt_before_decrement - dt)
+                # log.debug("Decremented RT for %s (%s) from %.2f to %.2f",
+                #           getattr(participant, 'name', '?'), participant.__class__.__name__,
+                #           rt_before_decrement, participant.roundtime)
+
+            # --- 2. Character-Specific Checks ---
+            if isinstance(participant, Character):
+                char = participant # Alias for clarity
+
+                # --- 2a. Clear Invalid Combat State ---
+                if char.is_fighting and (
+                    not char.target
+                    or not char.target.is_alive()
+                    or not hasattr(char.target, 'location')
+                    or char.target.location != char.location
+                ):
+                    log.debug("Clearing fighting state for %s; target %s is invalid.",
+                            char.name, getattr(char.target, 'name', 'None'))
+                    char.is_fighting = False
+                    char.target = None
+
+                # --- 2b. Resolve Finished Casting/Ability Use ---
+                # Check if RT *just reached* zero this tick AND casting info exists
+                if rt_before_decrement > 0 and char.roundtime == 0.0 and char.casting_info:
                     info = char.casting_info
-                    char.casting_info = None
+                    char.casting_info = None # Clear state immediately
                     ability_key = info.get("key")
                     log.debug("Character %s finished casting/using '%s'. Resolving effect.",
                             char.name, ability_key)
-                    
+
                     ability_data = ability_defs.get_ability_data(ability_key)
                     if not ability_data:
                         log.error("Finished casting unknown ability key '%s' for %s.", ability_key, char.name)
-                        continue
+                        continue # Skip rest for this character
 
                     # Check and Deduct Cost
                     cost = ability_data.get("cost", 0)
                     if char.essence >= cost:
-                        if cost > 0: char.essence -= cost # Deduce cost now
+                        if cost > 0: char.essence -= cost
 
                         # Resolve the actual effect
                         try:
-                            # Pass relevant info to central resolver
                             await combat.resolve_ability_effect(
                                 char, info.get("target_id"), info.get("target_type"),
-                                ability_data, self
+                                ability_data, self # Pass world (self)
                             )
                         except Exception as e:
-                            log.exception("Error resolving ability effect '%s' for %s: %s",
-                                        ability_key, char.name, e)
+                            log.exception("Error resolving ability effect '%s' for %s: %s", ability_key, char.name, e)
                             await char.send("Something went wrong as your action finished.")
-                            # Don't apply post-cast RT on error? Or apply small one? Apply small one.
-                            char.roundtime = 0.5
-                            continue # Skip normal post-cast RT
-                        # Apply post-cast roundtime (recover) + armor penalty
-                        base_rt = ability_data.get("roundtime", 1.0)
-                        total_av = char.get_total_av(self) # Pass world
+                            char.roundtime = 0.5 # Apply small error RT
+                            continue # Skip post-cast RT
+
+                        # Apply Post-Cast Roundtime (Recovery) + Armor Penalty
+                        base_rt = ability_data.get("roundtime", 1.0) # The 'recovery' RT
+                        total_av = char.get_total_av(self)
                         rt_penalty = math.floor(total_av / 20) * 1.0
                         final_rt = base_rt + rt_penalty
-                        char.roundtime = final_rt
+                        char.roundtime = final_rt # Apply post-cast RT
                         log.debug("Applied %.1fs post-cast RT to %s for %s (Base: %.1f, AV Pen: %.1f)",
                                 final_rt, char.name, ability_key, base_rt, rt_penalty)
                         if rt_penalty > 0:
@@ -295,8 +318,11 @@ class World:
 
                     else: # Not enough essence
                         log.info("Character %s fizzled '%s' due to insufficient essence.", char.name, ability_key)
-                        await char.send(f"You lose focus ({ability_data['name']}) - not enough essence!")
+                        await char.send(f"{{RYou lose focus ({ability_data.get('name', ability_key)}) - not enough essence!{{x")
                         char.roundtime = 0.5 # Small fizzle roundtime
+
+            # --- End Character-Specific Checks ---
+        # --- End Participant Loop ---
 
 
     async def update_mob_ai(self, dt: float):
@@ -458,6 +484,7 @@ class World:
         Args:
             dt: Delta time (Seconds) since the last tick.
         """
+        XP_POOL_EMPTY_THRESHOLD = 1e-9 # A very small positive number (0.000000001)
         # Use configured rate per second, adjust by delta time
         absorb_rate = getattr(config, 'XP_ABSORB_RATE_PER_SEC', 10)
         xp_to_process_this_tick = absorb_rate * dt
@@ -479,13 +506,10 @@ class World:
             if absorb_amount > 0:
                 char.xp_pool -= absorb_amount
                 char.xp_total += absorb_amount
-                log.debug("Character %s absorbed %.2f XP (Pool: %.2f, Total: %.2f)",
-                    char.name, absorb_amount, char.xp_pool, char.xp_total)
-                
                 # Simple message when pool becomes empty
-                if char.xp_pool <= 0:
+                if char.xp_pool < XP_POOL_EMPTY_THRESHOLD:
                     char.xp_pool = 0 #Ensures it doesn't go negative
-                    log.info("Character %s XP Pool empty. Sending absorption complete message.", char.name)
+                    log.debug("Character %s XP Pool empty. Sending absorption complete message.", char.name)
                     try:
                         await char.send("You feel you have asborbed all you can for now.")
                     except Exception: pass

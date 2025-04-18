@@ -290,7 +290,7 @@ async def resolve_physical_attack(
     # Calculate weapon skill bonus
     if relevant_weapon_skill and hasattr(attacker, 'get_skill_rank'):
         wep_skill_rank = attacker.get_skill_rank(relevant_weapon_skill)
-        weapon_skill_bonus = math.floor(wep_skill_rank / 25)
+        weapon_skill_bonus = math.floor(wep_skill_rank / 10)
 
     # Final attacker rating includes base (potentially modified) + skill bonus
     final_attacker_rating = base_attacker_rating + weapon_skill_bonus
@@ -300,19 +300,47 @@ async def resolve_physical_attack(
     base_target_pds = target.pds
     target_av = 0 # Calculated later if needed
     target_bv = target.barrier_value # Get current barrier value
+
+
     # Calculate DV bonuses/penalties
     dodge_bonus = 0; parry_bonus = 0
     if hasattr(target, 'get_skill_rank'):
-        dodge_bonus = math.floor(target.get_skill_rank("dodge") / 25)
-        parry_bonus = math.floor(target.get_skill_rank("parrying") / 25)
+        dodge_bonus = math.floor(target.get_skill_rank("dodge") / 10)
+        parry_bonus = math.floor(target.get_skill_rank("parrying") / 10)
     final_target_dv = base_target_dv + dodge_bonus + parry_bonus
+
+
+
     # Apply stance penalty
     if hasattr(target, 'stance'):
         if target.stance == "Lying": final_target_dv = math.floor(final_target_dv * 0.5)
         elif target.stance == "Sitting": final_target_dv = math.floor(final_target_dv * 0.75)
 
+    base_block_chance: float = 0.0
+    shield_skill_bonus_pct: float = 0.0
+    shield_item: Optional[Item] = None
+
+    if isinstance(target, Character):
+        # Get shield must be called on Character obj, needs world
+        shield_item = target.get_shield(world) # Ensure get_shield exists
+        if shield_item: #Only calculate if shield exists
+            # Get base block chance from shield stats JSON
+
+            base_block_chance = shield_item.block_chance
+
+            # Get Shield skill Bonus
+            if hasattr(target, 'get_skill_rank'): # check if target has skills
+                shield_skill_rank = target.get_skill_rank("shield usage")
+                shield_skill_bonus_pct = math.floor(shield_skill_rank / 10) * 0.01
+                if shield_skill_bonus_pct > 0: log.debug("Target %s shield skill bonus: +%.0f%%", target_name, shield_skill_bonus_pct * 100)
+    
+
+    effective_block_chance: float = base_block_chance + shield_skill_bonus_pct
+
     # --- 3. Block Check (Deferred V1) ---
     # effective_block_chance calculated previously based on shield/skill, use here if implementing
+    effective_block_chance = max(0.0, min(0.75, effective_block_chance))
+
 
     # --- 4. Hit Check ---
     hit_roll = random.randint(1, 20)
@@ -350,6 +378,43 @@ async def resolve_physical_attack(
         if attacker_loc: await attacker_loc.broadcast(f"\r\n{miss_msg_room}\r\n", exclude={attacker, target})
         if rt_penalty > 0 and isinstance(attacker, Character): await attacker.send(f"{{yYour armor slightly hinders you (+{rt_penalty:.1f}s).{{x")
         return
+    
+    # --- Step 5b Block Check (Only if the Hit Succeeds) ---
+    can_block = False
+    shield_item: Optional[Item] = None
+    if isinstance(target, Character) and target.stance == "Standing":
+        shield_item = target.get_shield(world) # Use helper
+        if shield_item:
+            can_block = True
+
+    if can_block:
+        block_roll = random.random()
+        if block_roll < effective_block_chance:
+            log.info("%s BLOCKED %s's attack with shield!", target_name, attacker)
+            # Apply roundtime to attacker (treat as miss for RT)
+            base_rt = wpn_speed + bonus_rt_from_ability
+            rt_penalty = 0.0
+            if isinstance(attacker, Character):
+                total_av = attacker.get_total_av(world); rt_penalty = math.floor(total_av / 20) * 1.0
+            final_rt = base_rt + rt_penalty
+            attacker.roundtime = final_rt
+
+            # Send messages
+            # block_msg_attacker = f"{{y{target_name} blocks your {attk_name} with their shield!{x}"
+            # block_msg_target = f"{{gYou block {attacker_name}'s {attk_name} with your shield!{x"
+            # block_msg_room = f"{target_name} blocks {attacker_name}'s {attk_name} with their shield."
+
+            block_msg_attacker = utils.colorize("{y}") + f"{target_name} blocks your {attk_name} with their shield!" + utils.colorize("{x}")
+            block_msg_target = utils.colorize("{g}") + f"You block {attacker_name}'s {attk_name} with your shield!" + utils.colorize("{x}")
+            block_msg_room = f"{target_name} blocks {attacker_name}'s {attk_name} with their shield." # Room message usually uncolored
+
+            if isinstance(attacker, Character): await attacker.send(block_msg_attacker)
+            if isinstance(target, Character): await target.send(block_msg_target)
+            if attacker_loc: await attacker_loc.broadcast(f"\r\n{block_msg_room}\r\n", exclude={attacker, target})
+            # Add armor penalty msg if needed
+            if rt_penalty > 0 and isinstance(attacker, Character): await attacker.send(...)
+
+            return # Attack ends here, no damage dealt
 
     # --- 6. Calculate Damage ---
     rng_roll_result = 0; exploded = False
@@ -469,6 +534,13 @@ async def resolve_physical_attack(
     log.debug("Applied %.1fs RT to %s for hit (Base: %.1f, Ability: %.1f, AV Pen: %.1f)", final_rt, attacker.name, wpn_speed, bonus_rt_from_ability, rt_penalty)
     if rt_penalty > 0 and isinstance(attacker, Character):
         await attacker.send(f"{{yYour armor slightly hinders your attack (+{rt_penalty:.1f}s).{{x")
+
+    if isinstance(attacker, Mob):
+        log.info("COMBAT SET RT: Mob ID %d (%s) roundtime set to %.2f (wpn_speed=%.1f, bonus_rt=%.1f)",
+                attacker.instance_id, attacker.name, final_rt, wpn_speed, bonus_rt_from_ability)
+    else: # Log for characters too for completeness
+        log.info("COMBAT SET RT: Character %s roundtime set to %.2f (Base: %.1f, AV Pen: %.1f)",
+                attacker.name, final_rt, base_rt, rt_penalty)
 
     # 11. Check Defeat
     if target.hp <= 0:
@@ -639,8 +711,8 @@ async def resolve_magical_attack(
     # Don't show roll details for always_hits spells like Magic Missile
     if not always_hits:
         verbose_details += f"\n\r   {{cRoll: {vb_hit_check}{{x"
-    verbose_details += f"\n\r   {{yDmg: {vb_damage_calc}{{x" \
-                    f"\n\r   {{bMit: {vb_mitigation}{{x"
+        verbose_details += f"\n\r   {{yDmg: {vb_damage_calc_magic}{{x"
+        verbose_details += f"\n\r   {{bMit: {vb_mitigation}{{x"
 
     # Send Messages (Always Verbose for Participants)
     if isinstance(caster, Character): await caster.send(std_dmg_msg_caster + verbose_details)

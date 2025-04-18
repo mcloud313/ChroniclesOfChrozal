@@ -157,11 +157,6 @@ class Mob:
     def is_alive(self) -> bool:
         return self.hp > 0 and self.time_of_death is None
 
-    def tick_roundtime(self, dt: float):
-        """Decrements active roundtime."""
-        if self.roundtime > 0:
-            self.roundtime = max(0.0, self.roundtime - dt)
-
     def choose_attack(self) -> Optional[Dict[str, Any]]:
         """Selects an attack from the available list (basic random)."""
         if not self.attacks:
@@ -259,40 +254,54 @@ class Mob:
         from . import combat
         from .definitions import abilities as ability_defs
 
-        if not self.is_alive(): return
-        self.tick_roundtime(dt)
-        if self.roundtime > 0: return
+        # 1. Basic Checks - Can the mob act?
+        if not self.is_alive():
+            return
+        if self.roundtime > 0:
+            return # Mob is still recovering, do nothing this tick
 
-        # --- Combat Logic (if fighting) ---
+        # 2. Combat Logic (if fighting)
         if self.is_fighting and self.target:
-            # Check if target is still valid first
-            target_is_valid = self.target.is_alive() and hasattr(self.target, 'location') and self.target.location == self.location
+            # Check if target is still valid
+            target_is_valid = (
+                self.target.is_alive() and
+                hasattr(self.target, 'location') and
+                self.target.location == self.location
+            )
             if not target_is_valid:
+                # Clear combat state if target is invalid
+                log.debug("Mob %d clearing invalid target %s", self.instance_id, getattr(self.target, 'name', 'None'))
                 self.target = None
                 self.is_fighting = False
-                return # <<< ADDED/CONFIRMED return statement here
+                # Don't immediately move or aggro, wait for next tick
+                return
             else:
                 # Target IS valid, proceed with attack attempt
                 attack_data = self.choose_attack()
                 if attack_data:
                     attk_name = attack_data.get("name", "attack")
-                    damage_type = attack_data.get("damage_type", ability_defs.DAMAGE_PHYSICAL).lower()
-
-                    if damage_type in combat.MAGICAL_DAMAGE_TYPES:
-                        log.info("%s uses magical attack '%s' (Type: %s)", self.name, attk_name, damage_type)
-                        log.debug("%s uses %s against %s!", self.name.capitalize(), attk_name, self.target.name)
-                        # Pass attack_data as spell_data, self (mob) as caster
-                        await combat.resolve_magical_attack(self, self.target, attack_data, world)
-                    else: # Physical Attack
-                        await combat.resolve_physical_attack(self, self.target, attack_data, world)
-                        self.roundtime = 1.0 # Small cooldown after error
+                    log.info("MOB ATTACK: %s (ID: %d) uses '%s' on %s.",
+                            self.name.capitalize(), self.instance_id, attk_name,
+                            getattr(self.target, 'name', 'Unknown Target'))
+                    try:
+                        damage_type = attack_data.get("damage_type", ability_defs.DAMAGE_PHYSICAL).lower()
+                        if damage_type in combat.MAGICAL_DAMAGE_TYPES:
+                            await combat.resolve_magical_attack(self, self.target, attack_data, world)
+                        else:
+                            await combat.resolve_physical_attack(self, self.target, attack_data, world)
+                        # Roundtime is now applied *inside* the resolve functions
+                    except Exception as combat_e:
+                        log.exception("Error during mob %s resolving attack on %s: %s", self.name, getattr(self.target, 'name', '?'), combat_e)
+                        self.roundtime = 1.0 # Small RT after error
                 else:
-                    log.warning("%s is fighting %s but has no attacks defined!", self.name, self.target.name)
-                    self.roundtime = 2.0 # Default cooldown
+                    log.warning("Mob %s (ID: %d) is fighting but failed to choose an attack.", self.name, self.instance_id)
+                    self.roundtime = 2.0 # Apply cooldown if attack choice fails
+                # After attacking (or failing to choose attack), the mob's turn is done for this tick
+                return # Ensures mob doesn't move/aggro immediately after attacking
 
-        # --- Movement Logic (if NOT fighting and can move) ---
+        # 3. Movement Logic (if NOT fighting and can move)
+        # Only consider moving if not fighting AND roundtime is 0
         if not self.is_fighting and self.movement_chance > 0 and not self.has_flag("STATIONARY"):
-            is_aggressive = self.has_flag("AGGRESSIVE")
             if random.random() < self.movement_chance:
                 possible_exits = [
                     direction for direction, target in self.location.exits.items()
@@ -300,39 +309,24 @@ class Mob:
                 ]
                 if possible_exits:
                     chosen_direction = random.choice(possible_exits)
+                    log.debug("Mob %d decided to move %s", self.instance_id, chosen_direction)
                     await self.move(chosen_direction, world)
-                    # Return after attempting move prevents AGGRO check in same tick
-                    return
+                    # move() applies its own roundtime, so end tick here
+                    return # Prevent aggro check immediately after moving
 
-
-        # --- Aggressive Check (if NOT fighting and didn't move) ---
-        # Use elif to ensure this doesn't run if the mob just moved
+        # 4. Aggressive Check (if NOT fighting and didn't move)
+        # Only check if not fighting AND roundtime is 0
         if self.has_flag("AGGRESSIVE") and not self.is_fighting:
-            if not self.location: # Safety check
-                log.warning("Aggressive mob %s has no location!", self.name)
-                return
-            
-            current_char_set = self.location.characters
-            current_char_names = {c.name for c in current_char_set} # Get names for logging
-            current_chars_in_room = list(self.location.characters) # Get current characters
-            
-        
-            potential_targets = [
-                char for char in self.location.characters if char.is_alive()
-            ]
+            if not self.location: log.warning(...); return # Safety check
+
+            potential_targets = [char for char in self.location.characters if char.is_alive()]
             if potential_targets:
                 self.target = random.choice(potential_targets)
                 self.is_fighting = True
                 log.info("%s becomes aggressive towards %s!", self.name.capitalize(), self.target.name)
-                # Optional: Announce aggression?
-                # await self.location.broadcast(...)
-                # Try to attack immediately if roundtime allows
-                if self.roundtime == 0.0:
-                    # We can safely call recursively here, as the next iteration
-                    # will enter the 'is_fighting' block and not this 'AGGRESSIVE' one.
-                    await self.simple_ai_tick(0.0, world)
-
-                    #TODO: Add other mob abilities, healing, area attacks, legendary actions
+                # Don't need recursive call - next tick's roundtime check will be 0,
+                # allowing immediate entry into the is_fighting block if needed.
+                # await self.simple_ai_tick(0.0, world) # REMOVED recursive call
 
     def get_total_av(self, world: 'World') -> int:
         """Mobs don't wear armor in V1. Returns 0."""

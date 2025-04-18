@@ -228,7 +228,7 @@ async def init_db(conn: aiosqlite.Connection):
             (3, "a small pouch", "Holds small items. Requires a belt.", "CONTAINER", json.dumps({"wear_location": "BELT_ITEM", "weight": 0, "value": 2, "capacity": 5}), json.dumps(["CONTAINER"]), None), # Added BELT_ITEM location concept
             (4, "heavy work boots", "Scuffed but sturdy.", "ARMOR", json.dumps({"wear_location": "FEET", "armor": 1, "speed": 0.2, "weight": 3, "value": 20}), json.dumps([]), None),
             (5, "an iron ring", "A plain band.", "ARMOR", json.dumps({"wear_location": ["FINGER_L", "FINGER_R"], "armor": 0, "weight": 0, "value": 10}), json.dumps([]), None),
-            (6, "a wooden shield", "Offers basic defense.", "SHIELD", json.dumps({"wear_location": "WIELD_OFF", "armor": 2, "block_chance": 0.1, "speed": 0.5, "weight": 5, "value": 30}), json.dumps([]), None),
+            (6, "a wooden shield", "Offers basic defense.", "SHIELD", json.dumps({"wear_location": "WIELD_OFF", "armor": 2, "block_chance": 0.05, "speed": 0.5, "weight": 5, "value": 30}), json.dumps([]), None),
             (7, "stale bread", "Looks barely edible.", "FOOD", json.dumps({"weight": 0, "value": 1, "effect": "heal_hp", "amount": 2}), json.dumps([]), None),
             (8, "cloth trousers", "Simple leg coverings.", "ARMOR", json.dumps({"wear_location": "LEGS", "armor": 1, "weight": 1, "value": 10}), json.dumps([]), None),
             (9, "a leather cap", "Minimal head protection.", "ARMOR", json.dumps({"wear_location": "HEAD", "armor": 1, "weight": 1, "value": 15}), json.dumps([]), None),
