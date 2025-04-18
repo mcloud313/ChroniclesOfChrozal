@@ -257,6 +257,7 @@ class Mob:
         """Basic AI logic called by the ticker via Room/World."""
         # Import combat locally within the method to prevent cycles
         from . import combat
+        from .definitions import abilities as ability_defs
 
         if not self.is_alive(): return
         self.tick_roundtime(dt)
@@ -275,12 +276,15 @@ class Mob:
                 attack_data = self.choose_attack()
                 if attack_data:
                     attk_name = attack_data.get("name", "attack")
-                    # self.target is guaranteed to be non-None here
-                    log.debug("%s uses %s against %s!", self.name.capitalize(), attk_name, self.target.name)
-                    try:
+                    damage_type = attack_data.get("damage_type", ability_defs.DAMAGE_PHYSICAL).lower()
+
+                    if damage_type in combat.MAGICAL_DAMAGE_TYPES:
+                        log.info("%s uses magical attack '%s' (Type: %s)", self.name, attk_name, damage_type)
+                        log.debug("%s uses %s against %s!", self.name.capitalize(), attk_name, self.target.name)
+                        # Pass attack_data as spell_data, self (mob) as caster
+                        await combat.resolve_magical_attack(self, self.target, attack_data, world)
+                    else: # Physical Attack
                         await combat.resolve_physical_attack(self, self.target, attack_data, world)
-                    except Exception as combat_e:
-                        log.exception("Error during mob %s resolving attack on %s: %s", self.name, self.target.name, combat_e)
                         self.roundtime = 1.0 # Small cooldown after error
                 else:
                     log.warning("%s is fighting %s but has no attacks defined!", self.name, self.target.name)

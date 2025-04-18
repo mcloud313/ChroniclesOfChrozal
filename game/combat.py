@@ -25,6 +25,17 @@ physical_damage_types = [
     ability_defs.DAMAGE_BLUDGEON,
 ]
 
+MAGICAL_DAMAGE_TYPES = {
+    ability_defs.DAMAGE_FIRE,
+    ability_defs.DAMAGE_COLD,
+    ability_defs.DAMAGE_LIGHTNING,
+    ability_defs.DAMAGE_EARTH,
+    ability_defs.DAMAGE_ARCANE,
+    ability_defs.DAMAGE_DIVINE,
+    ability_defs.DAMAGE_POISON,
+    ability_defs.DAMAGE_SONIC,
+}
+
 log = logging.getLogger(__name__)
 
 # Placeholder functions - implementations below
@@ -464,7 +475,7 @@ async def resolve_physical_attack(
         await handle_defeat(attacker, target, world)
 
 async def resolve_magical_attack(
-    caster: Character, # Assume caster is always Character for now
+    caster: Union[Character, Mob], 
     target: Union[Character, Mob],
     spell_data: Dict[str, Any], # Data for the specific spell
     world: World
@@ -480,7 +491,14 @@ async def resolve_magical_attack(
     caster_loc = caster.location # Use caster's location for broadcast
 
     # 1. Get Caster Power & Target Defense
-    caster_rating = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr # Use APR or DPR based on school
+
+    if isinstance(caster, Character):
+        caster_rating = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr # Use APR or DPR based on school
+
+    elif isinstance(caster, Mob):
+        # Mobs use APR/DPR based on Int/Aura Mods for now
+        caster_rating = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr
+
     # Calculate target defenses (including potential skill/stance mods if applicable later)
     base_target_dv = target.dv
     dodge_bonus = 0; parry_bonus = 0 # Magic generally not parried, maybe dodged? Add skills later.
@@ -547,8 +565,15 @@ async def resolve_magical_attack(
             rng_roll_result = random.randint(1, rng_dmg)
             exploded = False
 
+    stat_modifier = 0
+    if isinstance(caster, Character):
+
     # Add caster's power modifier (logic remains same)
-    stat_modifier = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr
+        stat_modifier = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr
+    elif isinstance(caster, Mob):
+        # Use Int mod for Arcane, Aura mod for Divine? Or just Int mod for all magic?
+        # Let's use Int mod for now as a simple default for mob magic damage scaling
+        stat_modifier = caster.int_mod
     pre_mitigation_damage = max(0, base_dmg + rng_roll_result + stat_modifier)
 
     # Build Verbose Damage String (Update to show breakdown if crit)
