@@ -54,6 +54,7 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
     log.info("%s has defeated %s!", attacker_name, target_name)
 
     # --- If Mob is defeated ---
+    if isinstance(attacker, Character): await attacker.send(f"You have slain {target_name}!")
     if isinstance(target, Mob):
         slain_msg = f"\r\n{attacker_name} has slain {target_name}!\r\n"
         if target_loc:
@@ -66,9 +67,12 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
         if dropped_coinage > 0 and target_loc:
             log.info("%s corpse drops %d coinage in Room %d.", target_name.capitalize(), dropped_coinage, target_loc.dbid)
             coinage_added = await target_loc.add_coinage(dropped_coinage, world)
-            # --- ^ ^ ^ ---
-            if coinage_added: await target_loc.broadcast(...) # Announce only if added successfully
-            else: log.error("Failed to add dropped coinage %d to room %d", dropped_coinage, target_loc.dbid)
+            coin_msg = f"\r\n{dropped_coinage} talons fall from {target_name}!\r\n"
+            await target_loc.broadcast(coin_msg, exclude={attacker})
+            if isinstance(attacker, Character):
+                    await attacker.send(f"You find {utils.format_coinage(dropped_coinage)} on the corpse.")
+        else: 
+                log.error("Failed to add dropped coinage %d to room %d", dropped_coinage, target_loc.dbid)
 
         if dropped_item_ids and target_loc:
             dropped_item_names = []
@@ -187,7 +191,7 @@ async def award_xp(attacker: 'Character', defeated_mob: 'Mob'):
 
     if actual_xp_added > 0:
         attacker.xp_pool += actual_xp_added
-        await attacker.send(f"You gain {actual_xp_added} experience points into your pool.")
+        await attacker.send(f"You gain {int(actual_xp_added)} experience points into your pool.")
     else:
         await attacker.send("Your mind cannot hold any more raw experience right now.")
         return
@@ -339,22 +343,37 @@ async def resolve_physical_attack(
     # --- 6. Calculate Damage ---
     rng_roll_result = 0; exploded = False
     if wpn_rng_dmg > 0:
-        if is_crit: rng_roll_result = roll_exploding_dice(wpn_rng_dmg); exploded = rng_roll_result > wpn_rng_dmg
-        else: rng_roll_result = random.randint(1, wpn_rng_dmg) # Min 1 if wpn_rng_dmg >= 1
+        if is_crit:
+            # --- V V V New Crit Damage Logic V V V ---
+            log.debug("Crit! Rolling extra dice...")
+            # Roll the normal damage dice once
+            first_roll = random.randint(1, wpn_rng_dmg)
+            # Roll the "extra" set using exploding dice logic
+            extra_exploding_roll = roll_exploding_dice(wpn_rng_dmg)
+            # Total random damage is the sum
+            rng_roll_result = first_roll + extra_exploding_roll
+            # Mark as exploded only if the *extra* roll actually exploded
+            if extra_exploding_roll > wpn_rng_dmg:
+                exploded = True
+                log.debug("Crit Exploding Dice Result: %d (First: %d, Extra: %d)", rng_roll_result, first_roll, extra_exploding_roll)
+            else:
+                log.debug("Crit Normal Dice Result: %d (First: %d, Extra: %d)", rng_roll_result, first_roll, extra_exploding_roll)
+            # --- ^ ^ ^ End New Crit Damage Logic ^ ^ ^ ---
+        else: # Normal hit
+            rng_roll_result = random.randint(1, wpn_rng_dmg)
+            exploded = False # No explosion on normal hits
 
-    # Determine stat modifier added to damage
+    # Determine stat modifier added to damage (logic remains same)
     stat_modifier_to_add = 0
-    if isinstance(attacker, Character):
-        if weapon is not None: stat_modifier_to_add = attacker.might_mod # Melee weapon
-        elif ability_mods: stat_modifier_to_add = attacker.might_mod # Assume physical ability uses might
-        # else: unarmed, modifier is already in wpn_base_dmg, so add 0 here
-    elif isinstance(attacker, Mob):
-        stat_modifier_to_add = attacker.might_mod # Mob uses might mod
+    # ... (Determine stat_modifier_to_add based on attacker/weapon/ability) ...
 
     pre_mitigation_damage = max(0, wpn_base_dmg + rng_roll_result + stat_modifier_to_add)
 
-    # --- Build Verbose Damage String ---
-    vb_damage_calc = f"{{y(Base:{wpn_base_dmg} + Roll:d{wpn_rng_dmg}={rng_roll_result}{'{r}*{x' if exploded else ''} + Mod:{stat_modifier_to_add} = {pre_mitigation_damage}){{x"
+    # Build Verbose Damage String (Update to show breakdown if crit)
+    if is_crit:
+        vb_damage_calc = f"{{y(Crit Dmg: Base({wpn_base_dmg}) + Roll1(d{wpn_rng_dmg}={first_roll}) + Roll2(d{wpn_rng_dmg}x={extra_exploding_roll}{'{r}*{x' if exploded else ''}) + Mod({stat_modifier_to_add}) = {pre_mitigation_damage}){{x"
+    else: # Normal hit verbose string
+        vb_damage_calc = f"{{y(Dmg: Base({wpn_base_dmg}) + Roll(d{wpn_rng_dmg}={rng_roll_result}) + Mod({stat_modifier_to_add}) = {pre_mitigation_damage}){{x"
 
     # --- 7. Mitigation ---
     # PDS
@@ -405,7 +424,7 @@ async def resolve_physical_attack(
 
     # 9. Send Messages
     hit_desc = "hit"; crit_indicator = ""
-    if is_crit: hit_desc = "{{rCRITICALLY HIT{{x"; crit_indicator = " {{rCRITICAL!{{x"
+    if is_crit: hit_desc = "{rCRITICALLY HIT"; crit_indicator = " {rCRITICAL!{x"
     attacker_pronoun_subj, _, attacker_pronoun_poss, _, _ = utils.get_pronouns(getattr(attacker, 'sex', None))
 
     # --- Standard Messages ---
@@ -508,21 +527,35 @@ async def resolve_magical_attack(
         # Note: No roundtime applied here; post-cast RT is handled by the resolver in world.py
         return # End resolution
 
-    # 4. Calculate Damage
+    # 4. Calculate Damage (Crit = Roll normal dice + Roll exploding dice)
     base_dmg = effect_details.get("damage_base", 0)
-    rng_dmg = effect_details.get("damage_rng", 0)
+    rng_dmg = effect_details.get("damage_rng", 0) # This is the dX for the spell
     rng_roll_result = 0; exploded = False
-    if rng_dmg > 0:
-        # Only allow crits/exploding dice if it wasn't an always_hits spell
-        if is_crit and not always_hits:
-            rng_roll_result = roll_exploding_dice(rng_dmg); exploded = rng_roll_result > rng_dmg
-        else: rng_roll_result = random.randint(1, rng_dmg)
 
-    # Add caster's power modifier (APR or DPR)
+    if rng_dmg > 0:
+        # Allow crits unless always_hits is true
+        if is_crit and not always_hits:
+            # --- V V V New Crit Damage Logic V V V ---
+            log.debug("Magic Crit! Rolling extra dice...")
+            first_roll = random.randint(1, rng_dmg)
+            extra_exploding_roll = roll_exploding_dice(rng_dmg)
+            rng_roll_result = first_roll + extra_exploding_roll
+            if extra_exploding_roll > rng_dmg: exploded = True; log.debug(...) # Log if desired
+            else: log.debug(...)
+            # --- ^ ^ ^ End New Crit Damage Logic ^ ^ ^ ---
+        else: # Normal hit or always_hits spell
+            rng_roll_result = random.randint(1, rng_dmg)
+            exploded = False
+
+    # Add caster's power modifier (logic remains same)
     stat_modifier = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr
     pre_mitigation_damage = max(0, base_dmg + rng_roll_result + stat_modifier)
 
-    # Build Verbose Damage String
+    # Build Verbose Damage String (Update to show breakdown if crit)
+    if is_crit and not always_hits:
+        vb_damage_calc_magic = f"{{y(Crit Dmg: Base({base_dmg}) + Roll1(d{rng_dmg}={first_roll}) + Roll2(d{rng_dmg}x={extra_exploding_roll}{'{r}*{x' if exploded else ''}) + Mod({stat_modifier}) = {pre_mitigation_damage}){{x"
+    else: # Normal hit verbose string
+        vb_damage_calc_magic = f"{{y(Dmg: Base({base_dmg}) + Roll(d{rng_dmg}={rng_roll_result}) + Mod({stat_modifier}) = {pre_mitigation_damage}){{x"
     vb_damage_calc = f"{{y(Base:{base_dmg} + Roll:d{rng_dmg}={rng_roll_result}{'{r}*{x' if exploded else ''} + Mod:{stat_modifier} = {pre_mitigation_damage}){{x"
 
     # 5. Mitigation (SDS + BV)

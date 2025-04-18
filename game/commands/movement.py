@@ -179,92 +179,135 @@ async def cmd_move(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
     return True # Keep connection active
 
 async def cmd_go(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
-    """Handles the 'go <target>' command for special exits."""
+    """Handles the 'go <target>' command for special and simple exits (if named)."""
 
     if not character.location:
-        log.warning("Character %s tried to 'go' but has no location.", character.name)
         await character.send("You cannot seem to go anywhere from the void.")
         return True
     if character.stance != "Standing":
         await character.send("You must be standing to move.")
         return True
-    
-    exit_name = args_str.strip().lower() # Use the argument as the exit key
+    if character.roundtime > 0: # Check roundtime before proceeding
+        await character.send(f"You are still recovering for {character.roundtime:.1f} seconds.")
+        return True
+
+    exit_name = args_str.strip().lower()
+    if not exit_name:
+        await character.send("Go where? (e.g., go hole, go climb cliff)")
+        return True
+
     exit_data = character.location.exits.get(exit_name)
 
-    if not exit_name:
-        await character.send("Go where? (e.g., go hole, go doorway)")
+    if exit_data is None:
+        await character.send(f"You see no exit like '{exit_name}' here.")
         return True
-    
-    target_room_id: Optional[int] = None
-    skill_check_data: Optional[Dict[str, Any]] = None
 
+    target_room_id: Optional[int] = None
+    skill_check_required: bool = False
+
+    # Determine target and if skill check needed
     if isinstance(exit_data, int):
         target_room_id = exit_data
+        # Simple exits named explicitly (like 'go doorway' if doorway: 123) might have short RT
+        character.roundtime = 0.5 # Very quick if using 'go' for a simple named exit
     elif isinstance(exit_data, dict):
         target_room_id = exit_data.get('target')
         if not isinstance(target_room_id, int):
-            log.error("Room %d exit '%s' dict invalid target: %r", character.location.dbid, exit_name, target_room_id)
+            log.error(...) # Keep error log
             await character.send("The way forward seems broken.")
             return True
-        skill_check_data = exit_data.get('skill_check')
-    else:
-        log.error("Room %d exit '%s' has invalid data type: %r", character.location.dbid, exit_name, exit_data)
+        # Check if skill check is defined
+        if isinstance(exit_data.get('skill_check'), dict):
+            skill_check_required = True
+        else:
+            # Dict exit without skill check? Treat as simple for RT?
+            character.roundtime = 0.5
+    else: # Invalid exit data type
+        log.error(...) # Keep error log
         await character.send("The way forward seems confused.")
         return True
 
-    if skill_check_data and isinstance(skill_check_data, dict):
+    # --- Perform Skill Check if Required ---
+    if skill_check_required:
+        skill_check_data = exit_data['skill_check']
         skill_name = skill_check_data.get('skill')
         dc = skill_check_data.get('dc', 10)
+
         if not skill_name:
-            log.error("Room %d exit '%s' skill_check missing 'skill' key.", character.location.dbid, exit_name)
+            log.error(...) # Keep error log
             await character.send("The obstacle seems undefined.")
             return True
 
-        log.debug("Performing skill check: Char=%s, Skill=%s, DC=%d", character.name, skill_name, dc)
-        success = utils.skill_check(character, skill_name, difficulty_mod=dc)
 
-        character.roundtime = 10.0
-        log.debug("Applied 10.0s roundtime to %s for skill check exit attempt.", character.name)
+        check_result = utils.skill_check(character, skill_name, dc=dc)
+        success = check_result['success']
+        roll = check_result['roll']
+        target_roll_dc = check_result['dc']
+        skill_val = check_result['skill_value']
+        total_check = check_result['total_check']
 
+        # Build the message parts
+        msg_parts = []
+        msg_parts.append(f"You attempt {skill_name.title()}... ")
+        msg_parts.append(utils.colorize("{c}")) # Start color
+        msg_parts.append(f"Roll: {roll}")
+        msg_parts.append(utils.colorize("{x}")) # End color
+        msg_parts.append(f" + Skill: {skill_val}")
+        msg_parts.append(utils.colorize("{x}")) # End color
+        msg_parts.append(f" = {total_check}")
+        msg_parts.append(utils.colorize("{x}")) # End color
+        msg_parts.append(f" vs DC: {target_roll_dc}") # Use dc from result
+        msg_parts.append(utils.colorize("{x}")) # End color
+        msg_parts.append("] ")
+        msg_parts.append(utils.colorize("{gSuccess!{x" if success else "{rFailure!{x"))
+
+        feedback_msg = "".join(msg_parts) # Join all parts together
+        await character.send(feedback_msg)
+        # --- End Verbose Feedback ---
+        
         if not success:
-            fail_msg = skill_check_data.get('fail_message', f"You fail the {skill_name} check.")
+            fail_msg = skill_check_data.get('fail_msg', f"You fail the {skill_name} check.") # Use fail_msg key
             fail_damage = skill_check_data.get('fail_damage', 0)
             await character.send(fail_msg)
-            if fail_damage > 0:
-                character.hp = max(0, character.hp - fail_damage)
-                await character.send(f"You take {fail_damage} damage!")
-                # TODO: Check for death
-            character.roundtime = 2.0
-            return True
-        else:
-            success_msg = skill_check_data.get('success_message', f"You succeed the {skill_name} check!")
-            await character.send(success_msg)
 
+            if fail_damage > 0:
+                final_damage_taken = float(fail_damage) # Ensure floats
+                character.hp = max(0.0, character.hp - final_damage_taken)
+                await character.send(f"{{rYou take {int(final_damage_taken)} damage from the failure! ({int(character.hp)}/{int(character.max_hp)} HP){{x")
+
+                if skill_name == "climbing" and fail_damage > 0:
+                    if character.stance != "Lying":
+                        character.stance = "Lying"
+                        await character.send("You fall prone!")
+                        log.debug("Character %s fell prone after failing climb check.", character.name)
+
+                # Check for death immediately
+                if character.hp <= 0:
+                    log.info("Character %s potentially defeated by skill check failure.", character.name)
+                    # Pass world to handle_defeat
+                    await combat.handle_defeat(character, character, world) # Attacker=self? Crude but works for now
+                    return True # Stop further action if defeated
+
+            character.roundtime = 1.0 # Apply short RT on failure
+            return True # Stop movement attempt on failure
+        else:
+            # Skill check succeeded
+            success_msg = skill_check_data.get('success_msg', f"You succeed the {skill_name} check!") # Use success_msg key
+            await character.send(success_msg)
+            # Apply base RT for attempt, _perform_move will add more
+            character.roundtime = 1.0 # Time for the check itself
+            # Execution continues below to perform the move
+
+    # --- Perform Movement (if simple exit or skill check succeeded) ---
     target_room = world.get_room(target_room_id)
     if target_room is None:
         log.error("Exit '%s' in room %d points to non-existent room %d!",
                 exit_name, character.location.dbid, target_room_id)
-        await character.send(f"You try to go '{exit_name}', but the way is blocked.")
+        await character.send(f"You try to go '{exit_name}', but the way seems to vanish.")
         return True
 
-    await _perform_move(character, world, target_room, exit_name)
-    
-    target_room_id = character.location.exits.get(exit_name)
-
-    if target_room_id is None:
-        await character.send(f"You see no exit like '{exit_name}' here.")
-        return True
-    
-    target_room = world.get_room(target_room_id)
-
-    if target_room is None:
-        log.error("Character %s exit '%s' in room %d points to non-existent room %d!",
-                character.name, exit_name, character.location.dbid, target_room_id)
-        await character.send(f"You try to go '{exit_name}', but the way is blocked.")
-        return True
-    
-    # Call the helper to perform the actual move
+    # Call the helper to perform the actual move (adds its own roundtime)
     await _perform_move(character, world, target_room, exit_name)
 
-    return True # keep connection alive
+
+    return True # Keep connection alive

@@ -7,7 +7,7 @@ import hashlib
 import logging
 import math
 import config
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Dict, Any
 from .definitions import colors as color_defs
 if TYPE_CHECKING:
     from game.character import Character # Use relative path if needed '.character'
@@ -150,50 +150,48 @@ def get_article(word: str) -> str:
     # Simple check for common vowel sounds (lowercase)
     return "an" if word.lower()[0] in 'aeiou' else "a"
 
-def skill_check(character: 'Character', skill_name: str, difficulty_mod: int = 0) -> bool:
+def skill_check(character: 'Character', skill_name: str, dc: int = 10) -> Dict[str, Any]:
     """
-    Performs a skill check for a character against a difficulty. 
+    Performs a skill check for a character against a difficulty.
     Rolls d100 <= Skill_Rank + Attribute_Modifier - Difficulty_Modifier
 
     Args:
         character: The character performing the check.
         skill_name: The name of the skill being used (case-insensitive).
         difficulty_mod: A modifier representing the check's difficulty.
-                        Positive values make it harder, negative easier, Defaults to 0.
+        Positive values make it harder, negative easier.
+
+    Returns:
+        A dictionary containing:
+        { 'success': bool, 'roll': int, 'target_roll': int, 'skill_value': int }
+        Returns {'success': False} if check cannot be performed.
     """
     skill_name = skill_name.lower()
     if not hasattr(character, 'get_skill_modifier'):
         log.error("skill_check: Character object missing get_skill_modifier method.")
-        return False # Cannot perform check
+        return {'success': False, 'roll': 0, 'target_roll': 0, 'skill_value': 0} # Cannot perform check
+    
+    skill_value = character.get_skill_modifier(skill_name) # Rank + Attr Mod
+    roll = random.randint(1, 20) # d20 roll
+    total_check = roll + skill_value # Final result to compare against DC
 
-    # Get the character's total modifier for the skill (Rank + Attr Mod)
-    skill_value = character.get_skill_modifier(skill_name)
+    # Success if total meets or exceeds DC
+    success = (total_check >= dc)
 
-    # Calculate the target number to roll under/equal to
-    target_roll = skill_value - difficulty_mod
-    # Ensure there's always a small chance to succeed/fail? Not for V1.
-    # Clamp maybe? target_roll = max(1, min(99, target_roll)) # e.g. 1 always fails, 100 always passes
-
-    # Roll d100
-    roll = random.randint(1, 100)
-
-    success = (roll <= target_roll)
-
-    log.debug("SKILL CHECK: Char=%s, Skill=%s(%d), DiffMod=%d, TargetRoll=%d, Rolled=%d -> %s",
-            character.name, skill_name, skill_value, difficulty_mod, target_roll, roll,
-            "SUCCESS" if success else "FAILURE")
-
-    return success
+    return {'success': success, 'roll': roll, 'dc': dc, 'skill_value': skill_value, 'total_check': total_check}
 
 def format_coinage(total_talons: int) -> str:
-    """Formats total lowest denomination into Crowns, Orbs, Shards, Talons"""
-    if total_talons < 0: return "Invalid Amount"
-    if total_talons == 0: return "0t"
+    """Formats total lowest denomination (Talons) into Crowns, Orbs, Shards, Talons."""
+    if total_talons < 0: return "{rInvalid Amount{x" # Added color
+    if total_talons == 0: return "0 Talons" # Use full name for zero
 
+    # --- Define conversion rates ---
+    # Adjust these if your currency system is different (e.g., 100 copper = 1 silver)
     talons_per_shard = 10
     shards_per_orb = 10
-    orbs_per_crown = 10
+    orbs_per_crown = 10 # Assuming 1 Crown = 10 Orbs = 100 Shards = 1000 Talons
 
+    # --- Calculate amounts for each denomination ---
     talons = total_talons % talons_per_shard
     total_shards = total_talons // talons_per_shard
     shards = total_shards % shards_per_orb
@@ -201,13 +199,19 @@ def format_coinage(total_talons: int) -> str:
     orbs = total_orbs % orbs_per_crown
     crowns = total_orbs // orbs_per_crown
 
+    # --- Build the display string with full names and plurals ---
     parts = []
-    if crowns > 0: parts.append(f"{crowns}c")
-    if orbs > 0: parts.append(f"{orbs}o")
-    if shards > 0: parts.append(f"{shards}s")
-    if talons > 0: parts.append(f"{talons}t")
+    if crowns > 0:
+        parts.append(f"{crowns} {'Crown' if crowns == 1 else 'Crowns'}")
+    if orbs > 0:
+        parts.append(f"{orbs} {'Orb' if orbs == 1 else 'Orbs'}")
+    if shards > 0:
+        parts.append(f"{shards} {'Shard' if shards == 1 else 'Shards'}")
+    if talons > 0:
+        parts.append(f"{talons} {'Talon' if talons == 1 else 'Talons'}")
 
-    return " ".join(parts) if parts else "0t"
+    # Join the parts with commas and spaces for readability, handle empty case
+    return ", ".join(parts) if parts else "0 Talons"
 
 def colorize(text: str) -> str:
     """
