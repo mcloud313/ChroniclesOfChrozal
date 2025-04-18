@@ -553,7 +553,6 @@ async def resolve_magical_attack(
     if rng_dmg > 0:
         # Allow crits unless always_hits is true
         if is_crit and not always_hits:
-            # --- V V V New Crit Damage Logic V V V ---
             log.debug("Magic Crit! Rolling extra dice...")
             first_roll = random.randint(1, rng_dmg)
             extra_exploding_roll = roll_exploding_dice(rng_dmg)
@@ -578,10 +577,11 @@ async def resolve_magical_attack(
 
     # Build Verbose Damage String (Update to show breakdown if crit)
     if is_crit and not always_hits:
+        explode_indicator = '{r}*{x' if exploded else ''
         vb_damage_calc_magic = f"{{y(Crit Dmg: Base({base_dmg}) + Roll1(d{rng_dmg}={first_roll}) + Roll2(d{rng_dmg}x={extra_exploding_roll}{'{r}*{x' if exploded else ''}) + Mod({stat_modifier}) = {pre_mitigation_damage}){{x"
     else: # Normal hit verbose string
         vb_damage_calc_magic = f"{{y(Dmg: Base({base_dmg}) + Roll(d{rng_dmg}={rng_roll_result}) + Mod({stat_modifier}) = {pre_mitigation_damage}){{x"
-    vb_damage_calc = f"{{y(Base:{base_dmg} + Roll:d{rng_dmg}={rng_roll_result}{'{r}*{x' if exploded else ''} + Mod:{stat_modifier} = {pre_mitigation_damage}){{x"
+    #vb_damage_calc = f"{{y(Base:{base_dmg} + Roll:d{rng_dmg}={rng_roll_result}{'{r}*{x' if exploded else ''} + Mod:{stat_modifier} = {pre_mitigation_damage}){{x"
 
     # 5. Mitigation (SDS + BV)
     mit_sds = mit_bv = 0 # Initialize mitigation amounts
@@ -626,8 +626,9 @@ async def resolve_magical_attack(
     if is_crit: hit_desc = "{{rCRITICALLY HITS{{x"; crit_indicator = " {{rCRITICAL!{{x"
 
     # Standard Messages
+    # Removed Double S here
     std_dmg_msg_caster = f"Your {spell_display_name} {hit_desc} {target_name} for {{y{int(final_damage)}{{x damage!{crit_indicator}" # Show int damage
-    std_dmg_msg_target = f"{{R{caster_name}'s {spell_display_name} {hit_desc.upper()}S you for {{y{int(final_damage)}{{x damage!{crit_indicator}{{x"
+    std_dmg_msg_target = f"{{R{caster_name}'s {spell_display_name} {hit_desc.upper()} you for {{y{int(final_damage)}{{x damage!{crit_indicator}{{x"
     std_dmg_msg_target += f" {{x({int(target.hp)}/{int(target.max_hp)} HP)"
     std_dmg_msg_room = f"{caster_name}'s {spell_display_name} {hit_desc.upper()}S {target_name}!"
     if final_damage > 0: std_dmg_msg_room += f" ({int(final_damage)} dmg)"

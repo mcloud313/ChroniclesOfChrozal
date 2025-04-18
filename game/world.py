@@ -400,7 +400,7 @@ class World:
         # 4. Notify Player
         await character.send("{WYou feel yourself drawn back to the mortal plane...{x") # Color later
         # Send look of the respawn room
-        look_string = respawn_room.get_look_string(character)
+        look_string = respawn_room.get_look_string(character, self)
         await character.send(look_string)
         # Optionally broadcast arrival in respawn room? Might be spammy.
 
