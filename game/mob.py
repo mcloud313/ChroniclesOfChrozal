@@ -10,6 +10,7 @@ import logging
 from . import utils
 # from . import combat
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Set, Union
+from .definitions import abilities as ability_defs # For STAT_ constants
 
 if TYPE_CHECKING:
     import aiosqlite
@@ -58,13 +59,21 @@ class Mob:
     def sds(self) -> int: return utils.calculate_modifier(self.stats.get("aura", 10))
     @property
     def dv(self) -> int: return self.agi_mod * 2
-
+    
     @property
     def barrier_value(self) -> int:
-        """Mobs don't benefit from magical barriers in V1."""
-        #TODO: ALLOW FOR MOBS TO BENEFIT FROM MAGICAL BARRIERS
-        # Could check self.effects later if mobs can get buffs/barriers
-        return 0
+        """Calculates total Barrier Value (BV) from base stats and active effects."""
+        # Start with base value loaded from template stats in __init__
+        total_bv = getattr(self, 'base_barrier_value', 0) # Use getattr for safety
+        current_time = time.monotonic()
+        # Add buffs/debuffs from effects dictionary
+        if hasattr(self, 'effects') and self.effects:
+            for effect_data in list(self.effects.values()): # Iterate copy
+                # Check expiry AND if it modifies the correct stat
+                if effect_data.get("ends_at", 0) > current_time and \
+                effect_data.get("stat") == ability_defs.STAT_BARRIER_VALUE:
+                    total_bv += effect_data.get("amount", 0)
+        return max(0, total_bv) # Ensure non-negative
 
     def __init__(self, template_data: Dict[str, Any], current_room: 'Room'):
         """
@@ -328,10 +337,19 @@ class Mob:
                 # allowing immediate entry into the is_fighting block if needed.
                 # await self.simple_ai_tick(0.0, world) # REMOVED recursive call
 
-    def get_total_av(self, world: 'World') -> int:
-        """Mobs don't wear armor in V1. Returns 0."""
-        # TODO: Mobs should definitely get some armor value eventually...
-        return 0
+    def get_total_av(self, world: Optional['World'] = None) -> int:
+        """Calculates total Armor Value (AV) from base stats and active effects."""
+        # Start with base value loaded from template stats in __init__
+        total_av = getattr(self, 'base_armor_value', 0) # Use getattr for safety
+        current_time = time.monotonic()
+        # Add buffs/debuffs from effects dictionary
+        if hasattr(self, 'effects') and self.effects:
+            for effect_data in list(self.effects.values()): # Iterate copy
+                if effect_data.get("ends_at", 0) > current_time and \
+                effect_data.get("stat") == ability_defs.STAT_ARMOR_VALUE:
+                    total_av += effect_data.get("amount", 0)
+        # Mobs don't benefit from Armor Training skill multiplier
+        return max(0, total_av) # Ensure non-negative
 
     def __repr__(self) -> str:
         return f"<Mob Inst:{self.instance_id} Tmpl:{self.template_id} '{self.name}' HP:{self.hp}/{self.max_hp}>"
