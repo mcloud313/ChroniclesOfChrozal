@@ -109,8 +109,12 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "@teleport": admin_cmds.cmd_teleport,
     "@examine": admin_cmds.cmd_examine,
     "@setstat": admin_cmds.cmd_setstat,
-    "@dig": admin_cmds.cmd_dig_placeholder, # Placeholder
-    "@tunnel": admin_cmds.cmd_tunnel_placeholder, # Placeholder
+    "@roomstat": admin_cmds.cmd_roomstat,
+    "@roomlist": admin_cmds.cmd_roomlist,
+    "@setdesc": admin_cmds.cmd_setdesc,
+    "@dig": admin_cmds.cmd_dig,
+    "@setexit": admin_cmds.cmd_setexit,
+    "@delexit": admin_cmds.cmd_delexit,
 
 }
 

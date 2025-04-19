@@ -764,6 +764,7 @@ async def resolve_magical_attack(
             else:
                 log.debug(...) # Success log
 
+    hit_desc = "hits"; crit_indicator = ""
     # 7. Send Messages
     if is_crit:
         hit_desc = "{rCRITICALLY HITS{x"
