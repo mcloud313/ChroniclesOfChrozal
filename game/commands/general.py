@@ -263,7 +263,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
 
     # Derived Stats
     might_val = stats.get("might", 10)
-    max_carry_weight = might_val * 3
+    max_w = character.get_max_weight()
     curr_w = character.get_current_weight(world)
 
     # --- Calculate Armor Values ---
@@ -280,7 +280,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     output += f" Race : {race_name:<28} Class: {class_name}\r\n"
     output += f" Level: {level:<31}\r\n"
     output += "=" * 50 + "\r\n"
-    output += f" HP   : {int(hp):>4}/{int(max_hp):<28} Carry: {curr_w:>2}/{max_carry_weight:<3} stones\r\n"
+    output += f" HP   : {int(hp):>4}/{int(max_hp):<28} Carry: {curr_w:>2}/{max_w:<3} stones\r\n"
     output += f" Armor: {effective_av:>4}/{total_av:<28} (Effective/Total)\r\n"
     output += f" Barrier: {barrier_val:<28} \r\n" # Display Barrier Value
     output += f" Essn : {int(essence):>4}/{int(max_essence):<31}\r\n"

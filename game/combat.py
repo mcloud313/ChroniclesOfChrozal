@@ -442,7 +442,7 @@ async def resolve_physical_attack(
                 fumble_msg_room += " What a mistake!"
 
             # Send fumble messages (verbose check still applies conceptually)
-            vb_fumble_hit_check = f" {{c(Roll:{hit_roll}{x}){{x"
+            vb_fumble_hit_check = " " + utils.colorize("{c}") + f"(Roll:{hit_roll})" + utils.colorize("{x}")
             if isinstance(attacker, Character): await attacker.send(fumble_msg_attacker + vb_fumble_hit_check)
             if isinstance(target, Character): await target.send(fumble_msg_target + vb_fumble_hit_check) # Target sees less detail?
             if attacker_loc: await attacker_loc.broadcast(f"\r\n{fumble_msg_room}\r\n", exclude={attacker, target})
@@ -765,8 +765,9 @@ async def resolve_magical_attack(
                 log.debug(...) # Success log
 
     # 7. Send Messages
-    hit_desc = "hits"; crit_indicator = ""
-    if is_crit: hit_desc = "{{rCRITICALLY HITS{{x"; crit_indicator = " {{rCRITICAL!{{x"
+    if is_crit:
+        hit_desc = "{rCRITICALLY HITS{x"
+        crit_indicator = " {rCRITICAL!{x"
 
     # Standard Messages
     # Removed Double S here
@@ -960,11 +961,11 @@ async def apply_heal(
     target.hp += actual_healed
 
     # Send messages
-    heal_msg_caster = f"You heal {target.name} for {actual_healed} hit points."
-    heal_msg_target = f"{caster.name.capitalize()} heals you for {actual_healed} hit points."
+    heal_msg_caster = f"You heal {target.name} for {int(actual_healed)} hit points."
+    heal_msg_target = f"{caster.name.capitalize()} heals you for {int(actual_healed)} hit points."
     heal_msg_room = f"{caster.name.capitalize()} heals {target.name}."
 
-    if caster == target: heal_msg_caster = f"You heal yourself for {actual_healed} hit points."
+    if caster == target: heal_msg_caster = f"You heal yourself for {int(actual_healed)} hit points."
 
     await caster.send(heal_msg_caster)
     if target != caster and isinstance(target, Character): await target.send(heal_msg_target)
