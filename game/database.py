@@ -252,7 +252,6 @@ async def init_db(conn: aiosqlite.Connection):
             log.error("Rollback failed: %s", rb_e)
         raise # Re-raise original error to prevent server starting with bad DB state
 
-
 async def execute_query(
     conn: aiosqlite.Connection, query: str, params: tuple = ()
 ) -> int | None:
@@ -327,8 +326,7 @@ async def fetch_all(
     except aiosqlite.Error as e:
         log.error("Database fetch_all error - Query: %s Params: %s Error: %s", query, params, e, exc_info=True)
         return None
-# --- Hashing Utility (Remains synchronous - CPU bound, okay outside event loop if complex) ---
-# Consider running complex hashing in executor if it becomes blocking
+
 def hash_password(password: str) -> str:
     """Basic password hashing using sha256. TODO: Replace with bcrypt later"""
     # For production, use bcrypt and run it in an executor:
@@ -591,6 +589,37 @@ async def update_room_basic(conn: aiosqlite.Connection, room_id: int, field: str
     rowcount = await execute_query(conn, query, (value, room_id))
     return rowcount is not None and rowcount > 0
 
+async def update_room_field(conn: aiosqlite.Connection, room_id: int, field: str, value: Any) -> int | None:
+    """Updates a specific field for a room. Handles JSON conversion for exits/flags/spawners."""
+    # Validate field name
+    valid_fields = ["name", "description", "exits", "flags", "spawners", "coinage", "area_id"]
+    if field not in valid_fields:
+        log.error("Attempted to update invalid room field: %s for room %d", field, room_id)
+        return None
+
+    # Prepare value - serialize if it's a dict/list/set meant for a TEXT JSON column
+    param_value = value
+    if field in ["exits", "flags", "spawners"]:
+        try:
+            # Ensure flags are saved as a list
+            if field == "flags" and isinstance(value, set):
+                param_value = json.dumps(sorted(list(value)))
+            else: # Assume dict/list for exits/spawners
+                param_value = json.dumps(value)
+        except (TypeError, OverflowError) as e:
+            log.error("Failed to serialize value for room %d field %s: %s", room_id, field, e)
+            return None
+    elif field in ["coinage", "area_id"]: # Ensure numeric types are correct
+        try:
+            param_value = int(value)
+        except (ValueError, TypeError):
+            log.error("Invalid numeric value '%s' for room %d field %s", value, room_id, field)
+            return None
+
+    query = f"UPDATE rooms SET {field} = ? WHERE id = ?"
+    # execute_query returns rowcount for UPDATE
+    return await execute_query(conn, query, (param_value, room_id))
+
 async def update_room_json_field(conn: aiosqlite.Connection, room_id: int, field: str, json_data: str) -> bool:
     """Updates JSON fields (exits, flags, spawners) for a room."""
     if field not in ["exits", "flags", "spawners"]:
@@ -601,15 +630,14 @@ async def update_room_json_field(conn: aiosqlite.Connection, room_id: int, field
     rowcount = await execute_query(conn, query, (json_data, room_id))
     return rowcount is not None and rowcount > 0
 
-async def delete_room(conn: aiosqlite.Connection, room_id: int) -> bool:
-    """Deletes a room. Be careful with dependencies!"""
-    log.warning("DB: Attempting to delete room ID %d", room_id)
+async def delete_room(conn: aiosqlite.Connection, room_id: int) -> int | None:
+    """Deletes a room record by its ID."""
+    # Assumes safety checks (no players, mobs, items, objects, incoming exits)
+    # are done *before* calling this function.
+    # Foreign keys (room_items, room_objects) should CASCADE DELETE.
+    # Character location_id should SET DEFAULT (to 1).
     query = "DELETE FROM rooms WHERE id = ?"
-    rowcount = await execute_query(conn, query, (room_id,))
-    deleted = rowcount is not None and rowcount > 0
-    if deleted: log.info("DB: Deleted room ID %d", room_id)
-    else: log.error("DB: Failed to delete room ID %d", room_id)
-    return deleted
+    return await execute_query(conn, query, (room_id,))
 
 async def get_room_data(conn: aiosqlite.Connection, room_id: int) -> Optional[aiosqlite.Row]:
     """Fetches all data for a single room."""
@@ -625,3 +653,121 @@ async def get_all_rooms_basic(conn: aiosqlite.Connection) -> Optional[List[aiosq
     # Join with areas to get area name easily later? Or do lookup in command.
     query = "SELECT r.id, r.name, r.area_id, a.name as area_name FROM rooms r JOIN areas a ON r.area_id = a.id ORDER BY r.area_id, r.id"
     return await fetch_all(conn, query)
+
+async def create_area(conn: aiosqlite.Connection, name: str, description: str = "An undescribed area.") -> int | None:
+    """Creates a new area and returns its ID."""
+    query = "INSERT INTO areas (name, description) VALUES (?, ?)"
+    # execute_query returns lastrowid for INSERT
+    new_id = await execute_query(conn, query, (name, description))
+    log.info("Created Area ID %s with name '%s'", new_id, name)
+    return new_id
+
+async def update_area_field(conn: aiosqlite.Connection, area_id: int, field: str, value: str) -> int | None:
+    """Updates a specific field (name or description) for an area."""
+    # Validate field name to prevent SQL injection on column names
+    valid_fields = ["name", "description"]
+    if field not in valid_fields:
+        log.error("Attempted to update invalid area field: %s", field)
+        return None
+    query = f"UPDATE areas SET {field} = ? WHERE id = ?"
+    # execute_query returns rowcount for UPDATE
+    return await execute_query(conn, query, (value, area_id))
+
+async def get_room_count_for_area(conn: aiosqlite.Connection, area_id: int) -> int:
+    """Counts how many rooms belong to a specific area."""
+    query = "SELECT COUNT(*) as count FROM rooms WHERE area_id = ?"
+    row = await fetch_one(conn, query, (area_id,))
+    return row['count'] if row else 0
+
+async def delete_area(conn: aiosqlite.Connection, area_id: int) -> int | None:
+    """Deletes an area ONLY if it contains no rooms."""
+    room_count = await get_room_count_for_area(conn, area_id)
+    if room_count > 0:
+        log.warning("Attempted to delete Area ID %d which contains %d rooms.", area_id, room_count)
+        return -1 # Indicate error: cannot delete non-empty area
+
+    # If room_count is 0, proceed with deletion
+    query = "DELETE FROM areas WHERE id = ?"
+    # execute_query returns rowcount
+    return await execute_query(conn, query, (area_id,))
+
+# Need get_area_details (similar to load_character_data)
+async def load_area_data(conn: aiosqlite.Connection, area_id: int) -> aiosqlite.Row | None:
+    """Fetches all data for a specific area by its ID."""
+    return await fetch_one(conn, "SELECT * FROM areas WHERE id = ?", (area_id,))
+
+async def create_item_template(conn: aiosqlite.Connection, name: str, type: str, description: str = "An ordinary item.", stats_json: str = '{}', flags_json: str = '[]', damage_type: Optional[str] = None) -> Optional[aiosqlite.Row]:
+    """Creates a new item template and returns the full row data of the new item."""
+    query = """
+        INSERT INTO item_templates (name, description, type, stats, flags, damage_type)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """
+    params = (name, description, type.upper(), stats_json, flags_json, damage_type)
+    new_id = await execute_query(conn, query, params)
+    if new_id:
+        log.info("Created Item Template ID %s with name '%s'", new_id, name)
+        # Fetch the newly created row to return it
+        return await load_item_template(conn, new_id)
+    else:
+        log.error("Failed to create item template with name '%s'", name)
+        return None
+    
+async def update_item_template_field(conn: aiosqlite.Connection, template_id: int, field: str, value: Any) -> Optional[aiosqlite.Row]:
+    """Updates a specific field for an item template. Handles JSON conversion. Returns updated row data."""
+    valid_fields = ["name", "description", "type", "stats", "flags", "damage_type"]
+    if field not in valid_fields:
+        log.error("Attempted to update invalid item template field: %s for template %d", field, template_id)
+        return None
+
+    param_value = value
+    if field in ["stats", "flags"]: # Fields stored as JSON TEXT
+        # Ensure the provided value is a valid JSON string (basic check)
+        try:
+            json.loads(value) # Try parsing to validate
+            param_value = value # Use the string directly
+        except (json.JSONDecodeError, TypeError):
+            log.error("Invalid JSON provided for item template %d field %s: %r", template_id, field, value)
+            return None # Indicate failure due to bad JSON value
+    elif field == "type":
+        param_value = str(value).upper() # Ensure type is uppercase string
+
+    query = f"UPDATE item_templates SET {field} = ? WHERE id = ?"
+    rowcount = await execute_query(conn, query, (param_value, template_id))
+    if rowcount == 1:
+        log.info("Updated item template %d field '%s'", template_id, field)
+        return await load_item_template(conn, template_id) # Return updated data
+    else:
+        log.error("Failed to update item template %d field '%s' (rowcount: %s)", template_id, field, rowcount)
+        return None
+    
+async def copy_item_template(conn: aiosqlite.Connection, source_id: int, new_name: str) -> Optional[aiosqlite.Row]:
+    """Copies an existing item template to a new one with a new name."""
+    source_data = await load_item_template(conn, source_id)
+    if not source_data:
+        log.error("Cannot copy item template: Source ID %d not found.", source_id)
+        return None
+
+    # Create new template using data from source, but with new name
+    return await create_item_template(
+        conn, new_name, source_data['description'], source_data['type'],
+        source_data['stats'], source_data['flags'], source_data['damage_type']
+    )
+
+async def delete_item_template(conn: aiosqlite.Connection, template_id: int) -> int | None:
+    """Deletes an item template by ID. WARNING: Does not check usage!"""
+    # TODO: Add checks later to see if item is in room_items, character inv/equip, loot tables
+    # For now, allow deletion but log a warning.
+    log.warning("ADMIN ACTION: Attempting to delete Item Template ID %d. Usage checks not implemented.", template_id)
+    query = "DELETE FROM item_templates WHERE id = ?"
+    return await execute_query(conn, query, (template_id,))
+
+# Modify load_all_item_templates to allow searching
+async def load_all_item_templates(conn: aiosqlite.Connection, search_term: Optional[str] = None) -> list[aiosqlite.Row] | None:
+    """Fetches item templates, optionally filtering by name."""
+    if search_term:
+        query = "SELECT id, name, type FROM item_templates WHERE name LIKE ? ORDER BY id"
+        params = (f"%{search_term}%",)
+    else:
+        query = "SELECT id, name, type FROM item_templates ORDER BY id"
+        params = ()
+    return await fetch_all(conn, query, params)

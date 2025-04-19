@@ -20,6 +20,38 @@ log = logging.getLogger(__name__)
 # IMPORTANT: These are basic SHA256 hashes for initial development.
 # Plan to replace with bcrypt for production.
 
+VALID_DIRECTIONS: set[str] = {
+    "north", "n",
+    "south", "s",
+    "east", "e",
+    "west", "w",
+    "up", "u",
+    "down", "d",
+    "northeast", "ne",
+    "southeast", "se",
+    "southwest", "sw",
+    "northwest", "nw",
+    # Add any other custom directions like "in", "out", "portal" if desired later
+}
+
+OPPOSITE_DIRECTIONS: Dict[str, str] = {
+    "north": "south", "n": "s",
+    "south": "north", "s": "n",
+    "east": "west", "e": "w",
+    "west": "east", "w": "e",
+    "up": "down", "u": "d",
+    "down": "up", "d": "u",
+    "northeast": "southwest", "ne": "sw",
+    "southeast": "northwest", "se": "nw",
+    "southwest": "northeast", "sw": "ne",
+    "northwest": "southeast", "nw": "se",
+    # Add opposites for custom directions if needed
+}
+
+def get_opposite_direction(direction: str) -> Optional[str]:
+    """Returns the opposite direction for a given direction string (lowercase)."""
+    return OPPOSITE_DIRECTIONS.get(direction.lower())
+
 def get_item_template_from_world(world: 'World', template_id: int) -> Optional[dict]:
     """Gets item template data as a dict, handling potential errors."""
     template_row = world.get_item_template(template_id)
