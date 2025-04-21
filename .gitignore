@@ -13,3 +13,5 @@ venv/
 # OS-specific files
 .DS_Store
 Thumbs.db
+chrozal.db-shm
+chrozal.db-wal
