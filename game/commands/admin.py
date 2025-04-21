@@ -325,7 +325,7 @@ async def cmd_dig(character: 'Character', world: 'World', db_conn: 'aiosqlite.Co
         return True
 
     direction = parts[0].lower()
-    new_room_name = parts[1].strip()
+    new_room_name = parts[1].strip().title()
     current_room = character.location
 
     # Validate direction
@@ -408,7 +408,7 @@ async def cmd_setexit(character: 'Character', world: 'World', db_conn: 'aiosqlit
     if not success: await character.send("Failed to update exit in database!"); return True
 
     # --- Link Back ---
-    reverse_dir = utils.get_reverse_exit(direction)
+    reverse_dir = utils.get_opposite_direction(direction)
     if reverse_dir:
         try:
             target_exits = json.loads(target_room.exits_str or '{}') # Reload from DB string maybe? Use memory for now.
@@ -509,6 +509,10 @@ async def cmd_roomset(character: 'Character', world: 'World', db_conn: 'aiosqlit
         try:
             new_area_id = int(value_str)
             # Check if target area exists
+            target_area_data = world.get_area(new_area_id) # Check cache
+            log.info("Attempting to set room %d area to %d. Target area exists: %s",
+                    current_room.dbid, new_area_id, bool(target_area_data))
+
             if world.get_area(new_area_id):
                 current_room.area_id = new_area_id # Update memory
                 rowcount = await database.update_room_field(db_conn, current_room.dbid, "area_id", new_area_id)
@@ -585,7 +589,7 @@ async def cmd_roomdelete(character: 'Character', world: 'World', db_conn: 'aiosq
     target_room = world.get_room(room_id_to_delete) # Check in-memory first
     if not target_room:
         # Verify it doesn't exist in DB either before confirming deletion
-        db_room = await database.load_room_data(db_conn, room_id_to_delete)
+        db_room = await database.get_room_data(db_conn, room_id_to_delete)
         if not db_room:
             await character.send(f"Room ID {room_id_to_delete} does not exist.")
             return True
@@ -650,18 +654,22 @@ async def cmd_roomdelete(character: 'Character', world: 'World', db_conn: 'aiosq
 #---Area creation---
 async def cmd_areacreate(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Admin Command: Creates a new area."""
-    area_name = args_str.strip()
-    if not area_name:
+    area_name_input = args_str.strip().title()
+    if not area_name_input:
         await character.send("Usage: @areacreate <New Area Name>")
         return True
 
-    # TODO: Add validation for area name length/characters?
+    area_name = area_name_input.title() # Apply capitalization here
 
-    new_id = await database.create_area(db_conn, area_name)
-    if new_id:
+    new_area_row = await database.create_area(db_conn, area_name) # Get the full row back
+
+    if new_area_row:
+        new_id = new_area_row['id']
+        # --- V V V Update World Cache V V V ---
+        world.areas[new_id] = dict(new_area_row) # Add new area to in-memory dict
+        log.info("Added new area %d ('%s') to world cache.", new_id, area_name)
+        # --- ^ ^ ^ ---
         await character.send(f"Area '{area_name}' created with ID {new_id}.")
-        # TODO: Reload world areas cache? For now, restart needed to see in list.
-        # world.reload_areas(db_conn)?
     else:
         await character.send("{rFailed to create area (check logs, maybe name exists?).{x")
     return True
@@ -969,5 +977,183 @@ async def cmd_idelete(character: 'Character', world: 'World', db_conn: 'aiosqlit
         await character.send(f"Failed to delete Item Template {template_id} (already gone?).")
     else: # None or other error
         await character.send("{rDatabase error deleting item template.{x")
+
+    return True
+#---Mob creation---
+async def cmd_mcreate(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Creates a basic mob template.
+    Usage: @mcreate <Name> [Level] [Description]
+    Example: @mcreate "Cave Bat" 2 "A fluttering menace."
+    Use @mset to configure stats, attacks, loot, etc.
+    """
+    parts = args_str.split(" ", 2)
+    name = parts[0].strip().title() if len(parts) > 0 else None
+    level = 1
+    description = "A creature."
+
+    if not name:
+        await character.send("Usage: #@mcreate <Name> [Level] [Description]")
+        return True
+    
+    if len(parts) > 1 and parts[1].isdigit():
+        level = int(parts[1])
+        if len(parts) > 2: description = parts[2].strip()
+    elif len(parts) > 1: # assume level wasn't specified, second part is in desc
+        description = parts[1].strip()
+
+    level = max(1, level) # Ensure level is at least 1
+
+    new_mob_row = await database.create_mob_template(db_conn, name, level, description)
+    if new_mob_row:
+        new_id = new_mob_row['id']
+        # Add/Update world cache
+        world.mob_templates[new_id] = dict(new_mob_row)
+        await character.send(f"Mob Template '{name}' created with Id {new_id}.")
+        await character.send("Use @mset to configure details (stats, attacks, loot, flags, etc).")
+    else:
+        await character.send("Failed to create mob template (check logs, maybe name exists?).")
+    return True
+
+async def cmd_mlist(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Lists mob templates. Usage: @mlist [search_term]"""
+    search_term = args_str.strip() if args_str else None
+    templates = await database.get_mob_templates(db_conn, search_term)
+    if templates is None: await character.send("Error fetching mob templates."); return True
+    if not templates: await character.send("No matching mob templates found."); return True
+
+    output = ["\r\n--- Mob Templates ---"]
+    for tpl in templates:
+        output.append(f" [{tpl['id']: >3}] {tpl['name']} (Lvl {tpl['level']})")
+    output.append("-------------------")
+    await character.send("\r\n".join(output))
+    return True
+
+async def cmd_mstat(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Shows details for a mob template. Usage: @mstart <template_id>"""
+    if not args_str.strip().isdigit(): await character.send("Usage: @mstart <template_id>"); return True
+    template_id = int(args_str.strip())
+
+    template = world.get_mob_template(template_id) # Check cache first
+    if not template: template = await database.load_mob_template(db_conn, template_id) # Try DB
+    if not template: await character.send(f"Mob Template ID {template_id} not found."); return True
+
+    # Convert Row to dict if needed for consistent access
+    if not isinstance(template, dict): template = dict(template)
+
+    output = [f"\r\n--- Mob Template [ID: {template['id']}] ---"]
+    output.append(f"Name       : {template.get('name', 'N/A')}")
+    output.append(f"Level      : {template.get('level', '?')}")
+    output.append(f"Mob Type   : {template.get('mob_type', 'None')}")
+    output.append(f"Max HP     : {template.get('max_hp', '?')}")
+    output.append(f"Respawn(s) : {template.get('respawn_delay_seconds', '?')}")
+    output.append(f"Move %     : {template.get('movement_chance', 0.0):.1%}")
+    output.append(f"Description: {template.get('description', '')}")
+    output.append(f"Stats JSON : {template.get('stats', '{}')}")
+    output.append(f"AttacksJSON: {template.get('attacks', '[]')}")
+    output.append(f"Loot JSON  : {template.get('loot', '{}')}")
+    output.append(f"Flags JSON : {template.get('flags', '[]')}")
+    output.append(f"VarianceJSN: {template.get('variance', '{}')}")
+    output.append("-----------------------------")
+    await character.send("\r\n".join(output))
+    return True
+
+async def cmd_mset(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Sets properties of a mob template.
+    Usage: @mset <template_id> <field> <value>
+    Fields: name, description, mob_type, level, max_hp, respawn_delay_seconds,
+            movement_chance, stats, attacks, loot, flags, variance
+    Note: JSON fields (stats, attacks, loot, flags, variance) require valid JSON string values.
+    Example: @mset 1 stats '{\"might\": 12, \"vitality\": 15}'
+            @mset 1 flags '[\"AGGRESSIVE\", \"SENTINEL\"]'
+    """
+    parts = args_str.split(" ", 2)
+    if len(parts) < 3:
+        await character.send("Usage: @mset <template_id> <field> <value>")
+        await character.send("Fields: name, description, mob_type, level, max_hp, respawn_delay_seconds, movement_chance, stats, attacks, loot, flags, variance")
+        await character.send("Note: JSON fields need valid JSON string: '{\"key\": val}', '[\"val\"]'")
+        return True
+
+    try: template_id = int(parts[0])
+    except ValueError: await character.send("{rInvalid Template ID.{x"); return True
+
+    field = parts[1].lower()
+    value = parts[2].strip() # Keep as string for now, DB helper handles conversion
+
+    valid_fields = [ # List from DB helper
+        "name", "description", "mob_type", "level", "stats", "max_hp",
+        "attacks", "loot", "flags", "respawn_delay_seconds", "variance",
+        "movement_chance"
+    ]
+    if field not in valid_fields:
+        await character.send(f"Invalid field '{field}'. Valid: {', '.join(valid_fields)}")
+        return True
+    if not value:
+        await character.send(f"Cannot set {field} to an empty value.")
+        return True
+
+    updated_row = await database.update_mob_template_field(db_conn, template_id, field, value)
+
+    if updated_row:
+        # Update world cache
+        world.mob_templates[template_id] = dict(updated_row)
+        await character.send(f"Mob Template {template_id} field '{field}' updated.")
+        await character.send("{yNote: Changes to stats/attacks affect newly spawned mobs.{x")
+    else:
+        await character.send(f"Failed to update Mob Template {template_id} (not found or DB error/invalid value).")
+    return True
+
+async def cmd_mcopy(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Copies a mob template. Usage: @mcopy <source_id> <New Name>"""
+    parts = args_str.split(" ", 1)
+    if len(parts) < 2 or not parts[0].isdigit():
+        await character.send("Usage: @mcopy <source_template_id> <New Mob Name>")
+        return True
+
+    source_id = int(parts[0])
+    new_name = parts[1].strip().title() # Capitalize new name
+
+    if not new_name:
+        await character.send("You must provide a new name for the copied mob.")
+        return True
+
+    new_mob_row = await database.copy_mob_template(db_conn, source_id, new_name)
+
+    if new_mob_row:
+        new_id = new_mob_row['id']
+        world.mob_templates[new_id] = dict(new_mob_row) # Add to cache
+        await character.send(f"Mob Template {source_id} copied to new template '{new_name}' (ID: {new_id}).")
+    else:
+        await character.send(f"Failed to copy Mob Template {source_id} (not found or DB error).")
+    return True
+
+async def cmd_mdelete(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Deletes a mob template. Usage: @mdelete <template_id>"""
+    if not args_str.strip().isdigit(): await character.send("Usage: @mdelete <template_id>"); return True
+    template_id = int(args_str.strip())
+
+    # Check if template exists (optional check)
+    template = world.get_mob_template(template_id)
+    if not template: template = await database.load_mob_template(db_conn, template_id)
+    if not template: await character.send(f"Mob Template ID {template_id} not found."); return True
+
+    template_name = template['name'] # Get name for messages before deleting
+
+    # Warning!
+    await character.send(f"WARNING: Deleting Mob Template {template_id} ('{template_name}')!")
+    await character.send("{rThis does NOT currently check if spawners use this template! Doing so may cause errors.{x")
+    # Add confirmation step later
+    # await character.send(f"Type '@mdelete {template_id} confirm' to proceed.")
+    # return True
+
+    log.warning("ADMIN ACTION: %s attempting to delete Mob Template ID %d ('%s'). Spawner usage check skipped!",
+                character.name, template_id, template_name)
+
+    rowcount = await database.delete_mob_template(db_conn, template_id)
+
+    if rowcount == 1:
+        if template_id in world.mob_templates: del world.mob_templates[template_id] # Remove from cache
+        await character.send(f"Mob Template {template_id} ('{template_name}') deleted.")
+    elif rowcount == 0: await character.send(f"Failed to delete Mob Template {template_id} (already gone?).")
+    else: await character.send("{rDatabase error deleting mob template.{x")
 
     return True

@@ -133,6 +133,13 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "@icopy": admin_cmds.cmd_icopy,
     "@idelete": admin_cmds.cmd_idelete,
 
+    "@mcreate": admin_cmds.cmd_mcreate,
+    "@mlist": admin_cmds.cmd_mlist,
+    "@mstat": admin_cmds.cmd_mstat,
+    "@mset": admin_cmds.cmd_mset,
+    "@mcopy": admin_cmds.cmd_mcopy,
+    "@mdelete": admin_cmds.cmd_mdelete,
+
 }
 
 def _parse_input(raw_input: str) -> Tuple[str, str]:

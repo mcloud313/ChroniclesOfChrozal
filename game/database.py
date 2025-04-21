@@ -274,6 +274,8 @@ async def execute_query(
             last_id = cursor.lastrowid
             row_count = cursor.rowcount
         await conn.commit() # Commit the transaction
+        result = last_id if last_id else row_count
+        log.info("execute_query successful: Query=[%s], Params=%r, Result (last_id or rowcount)=%r", query, params, result)
         return last_id if last_id else row_count
     except aiosqlite.Error as e:
         log.error("Database execute error - Query: %s Params: %s Error: %s", query, params, e, exc_info=True)
@@ -449,9 +451,22 @@ async def load_all_classes(conn: aiosqlite.Connection) -> list[aiosqlite.Row] | 
     """Fetches all available classes."""
     return await fetch_all(conn, "SELECT id, name, description FROM classes ORDER BY id")
 
-async def load_all_item_templates(conn: aiosqlite.Connection) -> list[aiosqlite.Row] | None:
-    """Fetches all rows from the item_templates table."""
-    return await fetch_all(conn, "SELECT * FROM item_templates ORDER BY id")
+async def load_all_item_templates(conn: aiosqlite.Connection, search_term: Optional[str] = None) -> list[aiosqlite.Row] | None:
+    """Fetches item templates, optionally filtering by name using LIKE."""
+    if search_term:
+        # Use LIKE for partial matching, add wildcards
+        query = "SELECT id, name, type FROM item_templates WHERE name LIKE ? ORDER BY id"
+        # Parameter tuple for LIKE requires wildcards %
+        params = (f"%{search_term}%",)
+        log.debug("Loading item templates matching: %s", search_term)
+    else:
+        # Fetch all templates if no search term
+        query = "SELECT id, name, type FROM item_templates ORDER BY id" # Select specific columns for list
+        params = ()
+        log.debug("Loading all item templates.")
+
+    # Use fetch_all helper which handles errors and returns list or None
+    return await fetch_all(conn, query, params)
 
 async def load_item_template(conn: aiosqlite.Connection, template_id: int) -> aiosqlite.Row | None:
     """Fetches a specific item template by its ID."""
@@ -618,6 +633,7 @@ async def update_room_field(conn: aiosqlite.Connection, room_id: int, field: str
 
     query = f"UPDATE rooms SET {field} = ? WHERE id = ?"
     # execute_query returns rowcount for UPDATE
+    log.info("Executing update_room_field: Query=[%s], Params=(%r, %d)", query, param_value, room_id)
     return await execute_query(conn, query, (param_value, room_id))
 
 async def update_room_json_field(conn: aiosqlite.Connection, room_id: int, field: str, json_data: str) -> bool:
@@ -654,13 +670,17 @@ async def get_all_rooms_basic(conn: aiosqlite.Connection) -> Optional[List[aiosq
     query = "SELECT r.id, r.name, r.area_id, a.name as area_name FROM rooms r JOIN areas a ON r.area_id = a.id ORDER BY r.area_id, r.id"
     return await fetch_all(conn, query)
 
-async def create_area(conn: aiosqlite.Connection, name: str, description: str = "An undescribed area.") -> int | None:
-    """Creates a new area and returns its ID."""
+async def create_area(conn: aiosqlite.Connection, name: str, description: str = "An undescribed area.") -> Optional[aiosqlite.Row]: # Changed return type
+    """Creates a new area and returns its full data row."""
     query = "INSERT INTO areas (name, description) VALUES (?, ?)"
-    # execute_query returns lastrowid for INSERT
     new_id = await execute_query(conn, query, (name, description))
-    log.info("Created Area ID %s with name '%s'", new_id, name)
-    return new_id
+    if new_id:
+        log.info("Created Area ID %s with name '%s'", new_id, name)
+        # Fetch the newly created row to return it
+        return await load_area_data(conn, new_id) # Use existing loader
+    else:
+        log.error("Failed to create area with name '%s'", name)
+        return None
 
 async def update_area_field(conn: aiosqlite.Connection, area_id: int, field: str, value: str) -> int | None:
     """Updates a specific field (name or description) for an area."""
@@ -761,13 +781,120 @@ async def delete_item_template(conn: aiosqlite.Connection, template_id: int) -> 
     query = "DELETE FROM item_templates WHERE id = ?"
     return await execute_query(conn, query, (template_id,))
 
-# Modify load_all_item_templates to allow searching
-async def load_all_item_templates(conn: aiosqlite.Connection, search_term: Optional[str] = None) -> list[aiosqlite.Row] | None:
-    """Fetches item templates, optionally filtering by name."""
+
+async def create_mob_template(conn: aiosqlite.Connection, name: str, level: int = 1, description: str = "A creature.") -> Optional[aiosqlite.Row]:
+    """Creates a basic mob template with defaults and returns the new row data."""
+    # Define default JSON structures
+    default_stats = json.dumps({"might": 10, "vitality": 10, "agility": 10, "intellect": 10, "aura": 10, "persona": 10})
+    default_attacks = json.dumps([{"name": "hit", "damage_base": 1, "damage_rng": 2, "speed": 2.5, "damage_type": "physical"}])
+    default_loot = json.dumps({})
+    default_flags = json.dumps([])
+    default_variance = json.dumps({})
+
+    query = """
+        INSERT INTO mob_templates
+        (name, description, level, stats, max_hp, attacks, loot, flags, variance)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    # Base max_hp often depends on level/stats, calculate simple default for now
+    # or rely on DB default? LEt's relyo n DB default (10) for simplicity here.
+    # Query adjusted: remove max_hp from insert list and vlaues
+    query_simple = """
+        INSERT INTO mob_templates
+        (name, description, level, stats, attacks, loot, flags, variance)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    params = (name, description, level, default_stats, default_attacks, default_loot, default_flags, default_variance)
+
+    new_id = await execute_query(conn, query_simple, params)
+    if new_id:
+        log.info("Created Mob Template ID %s with name '%s'", new_id, name)
+        return await load_mob_template(conn, new_id) # Use existing loader
+    else:
+        log.error("Failed to create mob template with name '%s'", name)
+        return None
+
+async def get_mob_templates(conn: aiosqlite.Connection, search_term: Optional[str] = None) -> list[aiosqlite.Row] | None:
+    """Fetches mob templates (id, name, level), optionally filtering by name."""
     if search_term:
-        query = "SELECT id, name, type FROM item_templates WHERE name LIKE ? ORDER BY id"
+        query = "SELECT id, name, level, FROM mob_templates WHERE name LIKE ? ORDER BY id"
         params = (f"%{search_term}%",)
     else:
-        query = "SELECT id, name, type FROM item_templates ORDER BY id"
+        query = "SELECT id, name, level FROM mob_templates ORDER BY id"
         params = ()
     return await fetch_all(conn, query, params)
+
+async def update_mob_template_field(conn: aiosqlite.Connection, template_id: int, field: str, value: Any) -> Optional[aiosqlite.Row]:
+    """Updates a specific field for a mob template. Handles type/JSON conversion. Returns updated row data."""
+    # List all columns from mob_templates schema except id, created at
+    valid_fields = [
+        "name", "description", "mob_type", "level", "stats", "max_hp",
+        "attacks", "loot", "flags", "respawn_delay_seconds", "variance",
+        "movement_chance"
+    ]
+    if field not in valid_fields:
+        log.error("Attempted to update invalid mob template field: %s for template %d", field, template_id)
+        return None
+    
+    param_value = value
+    # Type checking and JSON validation
+    if field in ["stats", "attacks", "loot", "flags", "variance"]:
+        try:
+            #Ensure it's valid JSON, pass the string directly
+            json.loads(value)
+            param_value = value
+        except (json.JSONDecodeError, TypeError):
+            log.error("Invalid JSON provided for mob template %d field %s: %r", template_id, field, value)
+            return None
+    elif field in ["level", "max_hp", "respawn_delay_seconds"]:
+        try: param_value = int(value)
+        except (ValueError, TypeError): log.error(...); return None
+    elif field == "movement_chance":
+        try: param_value = float(value)
+        except (ValueError, TypeError): log.error(...); return None
+    # name, description, mob_type are strings, handled by default
+
+    query = f"UPDATE mob_templates SET {field} = ? WHERE id = ?"
+    rowcount = await execute_query(conn, query, (param_value, template_id))
+    if rowcount == 1:
+        log.info("Updated mob template %d field '%s'", template_id, field)
+        return await load_mob_template(conn, template_id) # Return updated data
+    else:
+        log.error("Failed to update mob template %d field '%s' (rowcount: %s)", template_id, field, rowcount)   
+        return None
+
+async def copy_mob_template(conn: aiosqlite.Connection, source_id: int, new_name: str) -> Optional[aiosqlite.Row]:
+        """Copies an existing mob template to a new one with a new name."""
+        source_data = await load_mob_template(conn, source_id)
+        if not source_data:
+            log.error("Cannot copy mob template: Source ID %d not found.", source_id)
+            return None
+        
+        # Use INSERT with values from source_data, replacing name
+        query = """
+            INSERT INTO mob_templates (
+            name, description, mob_type, level, stats, max_hp, attacks, loot,
+            flags, respawn_delay_seconds, variance, movement_chance
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        params = (
+            new_name, source_data['description'], source_data['mob_type'], source_data['level'],
+            source_data['stats'], source_data['max_hp'], source_data['attacks'], source_data['loot'],
+            source_data['flags'], source_data['respawn_delay_seconds'], source_data['variance'],
+            source_data['movement_chance']
+        )
+        new_id = await execute_query(conn, query, params)
+        if new_id:
+            log.info("Copied Mob Template %d to new template '%s' (ID: %d)", source_id, new_name, new_id)
+            return await load_mob_template(conn, new_id)
+        else:
+            log.error("Failed to copy mob template %d to '%s'", source_id, new_name)
+            return None
+        
+async def delete_mob_template(conn: aiosqlite.Connection, template_id: int) -> int | None:
+    """Deletes a mob template by ID. WARNING: Does not check spawner usage!"""
+    # TODO: Implement check for spawners referencing this template_id by querying all rooms.
+    # This requires loading all rooms and parsing their spawners JSON - expensive! Defer check.
+    log.warning("ADMIN ACTION: Attempting to delete Mob Template ID %d. Spawner usage check not implemented.", template_id)
+    query = "DELETE FROM mob_templates WHERE id = ?"
+    return await execute_query(conn, query, (template_id,))
