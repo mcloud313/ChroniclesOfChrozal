@@ -7,7 +7,7 @@ import hashlib
 import logging
 import math
 import config
-from typing import Optional, TYPE_CHECKING, Dict, Any
+from typing import Optional, TYPE_CHECKING, List, Dict, Any
 from .definitions import colors as color_defs
 if TYPE_CHECKING:
     from game.character import Character # Use relative path if needed '.character'
@@ -253,3 +253,33 @@ def colorize(text: str) -> str:
     for code, ansi_sequence in color_defs.COLOR_MAP.items():
         output = output.replace(code, ansi_sequence)
     return output
+
+# Add this helper function to game/utils.py or keep it local in admin.py if not reused
+def parse_quoted_args(args_str: str, min_args: int, max_args: int) -> Optional[List[str]]:
+    """Parses args respecting quotes. Limited version for create commands."""
+    # This is a simple parser - shlex is more robust but adds dependency
+    args = []
+    current_arg = ""
+    in_quotes = False
+    i = 0
+    while i < len(args_str):
+        char = args_str[i]
+        if char == '"':
+            in_quotes = not in_quotes
+        elif char == ' ' and not in_quotes:
+            if current_arg:
+                args.append(current_arg)
+                current_arg = ""
+        else:
+            current_arg += char
+        i += 1
+    if current_arg: # Add last argument
+        args.append(current_arg)
+
+    if in_quotes: # Mismatched quotes
+        log.debug("Parse error: Mismatched quotes in input '%s'", args_str)
+        return None
+    if not (min_args <= len(args) <= max_args):
+        log.debug("Parse error: Incorrect number of args (%d) for '%s'", len(args), args_str)
+        return None
+    return args

@@ -1243,3 +1243,340 @@ async def cmd_mdelete(character: 'Character', world: 'World', db_conn: 'aiosqlit
     else: await character.send("{rDatabase error deleting mob template.{x")
 
     return True
+
+#---Spawner Creation ---
+async def cmd_listspawns(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Lists mob spawners defined for the current room."""
+    if not character.location:
+        await character.send("You are not in a room.")
+        return True
+
+    current_room = character.location
+    spawners = current_room.spawners
+
+    if not spawners:
+        await character.send("No mob spawners are defined for this room.")
+        return True
+
+    output = [f"\r\n--- Spawners for Room {current_room.dbid} ('{current_room.name}') ---"]
+    for mob_template_id, spawn_data in sorted(spawners.items()):
+        template = world.get_mob_template(mob_template_id)
+        mob_name = template.get('name', 'Unknown Mob') if template else "{r}Unknown Template ID{x"
+        max_present = spawn_data.get('max_present', 1)
+        # Add other data later? e.g., spawn chance?
+        output.append(f" - Mob ID {mob_template_id}: {mob_name} (Max Present: {max_present})")
+
+    output.append("---------------------------------------------------")
+    await character.send("\r\n".join(output))
+    return True
+
+async def cmd_setspawn(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Adds or modifies a mob spawner in the current room.
+    Usage: @setspawn <mob_template_id> [max_present]
+    Example: @setspawn 2 3  (Allow up to 3 Giant Crabs)
+            @setspawn 1    (Allow up to 1 Giant Rat - default max)
+    """
+    if not character.location:
+        await character.send("You must be in a room to set spawners.")
+        return True
+
+    parts = args_str.split()
+    if not parts:
+        await character.send("Usage: @setspawn <mob_template_id> [max_present=1]")
+        return True
+
+    try:
+        mob_template_id = int(parts[0])
+    except ValueError:
+        await character.send("{rInvalid Mob Template ID. Must be a number.{x")
+        return True
+
+    max_present = 1 # Default
+    if len(parts) > 1:
+        if parts[1].isdigit():
+            max_present = int(parts[1])
+        else:
+            await character.send("{rInvalid max_present value. Must be a positive number.{x")
+            return True
+
+    if max_present <= 0:
+        await character.send("{rMax_present must be 1 or greater.{x")
+        return True
+
+    # Check if mob template exists
+    template = world.get_mob_template(mob_template_id)
+    if not template:
+        # Double check DB in case cache is stale? Generally rely on cache.
+        template_row = await database.load_mob_template(db_conn, mob_template_id)
+        if not template_row:
+            await character.send(f"Mob Template ID {mob_template_id} does not exist.")
+            return True
+        template = dict(template_row) # Use if found in DB but not cache
+        world.mob_templates[mob_template_id] = template # Add to cache
+
+    current_room = character.location
+    # Modify the in-memory dictionary
+    current_room.spawners[mob_template_id] = {"max_present": max_present}
+
+    # Convert back to JSON and save to DB
+    try:
+        spawners_json = json.dumps(current_room.spawners)
+    except TypeError as e:
+        log.error("Failed to serialize spawners dict for room %d: %s", current_room.dbid, e)
+        await character.send("{rInternal error serializing spawner data.{x")
+        # Optional: Revert in-memory change if needed?
+        # Might need to reload room state from DB on error.
+        return True
+
+    rowcount = await database.update_room_field(db_conn, current_room.dbid, "spawners", spawners_json)
+
+    if rowcount is not None and rowcount > 0:
+        await character.send(f"Spawner for Mob ID {mob_template_id} ('{template.get('name', '?')}') set to max_present={max_present} in this room.")
+        # Mobs might start spawning on next suitable tick
+    else:
+        await character.send("{rFailed to save spawner update to database.{x")
+
+    return True
+
+async def cmd_delspawn(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Removes a mob spawner from the current room.
+    Usage: @delspawn <mob_template_id>
+    """
+    if not character.location:
+        await character.send("You must be in a room to delete spawners.")
+        return True
+    if not args_str.strip().isdigit():
+        await character.send("Usage: @delspawn <mob_template_id>")
+        return True
+
+    try:
+        mob_template_id = int(args_str.strip())
+    except ValueError:
+        await character.send("{rInvalid Mob Template ID.{x")
+        return True
+
+    current_room = character.location
+
+    # Check if spawner exists and remove from memory
+    if mob_template_id not in current_room.spawners:
+        await character.send(f"No spawner found for Mob ID {mob_template_id} in this room.")
+        return True
+
+    template = world.get_mob_template(mob_template_id) # Get name for feedback
+    mob_name = template.get('name', '?') if template else 'Unknown Mob'
+
+    del current_room.spawners[mob_template_id] # Remove from memory
+
+    # Convert back to JSON and save to DB
+    try:
+        spawners_json = json.dumps(current_room.spawners)
+    except TypeError as e:
+        log.error("Failed to serialize spawners dict for room %d after delete: %s", current_room.dbid, e)
+        await character.send("{rInternal error serializing spawner data after delete.{x")
+        # TODO: Need robust way to restore state if DB save fails after memory change
+        return True
+
+    rowcount = await database.update_room_field(db_conn, current_room.dbid, "spawners", spawners_json)
+
+    if rowcount is not None and rowcount > 0:
+        await character.send(f"Spawner for Mob ID {mob_template_id} ('{mob_name}') removed from this room.")
+        await character.send("{yNote: Existing mobs from this spawner will remain until killed/purged.{x")
+    else:
+        await character.send("{rFailed to save spawner removal to database.{x")
+
+    return True
+
+#---Room Objects---
+async def cmd_ocreate(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Creates a static object in the current room.
+    Usage: @ocreate "<Object Name>" '<Keywords JSON List>' ["Description"]
+    Example: @ocreate "a stone bench" '["bench", "stone bench", "seat"]' "A simple bench carved from stone."
+    Keywords MUST be a valid JSON list string (e.g., ['key1', 'key2']). Quotes required for multi-word args.
+    """
+    if not character.location: await character.send("You aren't in a room."); return True
+
+    args = utils.parse_quoted_args(args_str, 2, 3) # Expect 2 or 3 args after parsing quotes
+
+    if not args or len(args) < 2:
+        await character.send("Usage: @ocreate \"<Name>\" '<Keywords JSON List>' [\"Description\"]")
+        await character.send("Example: @ocreate \"stone bench\" '[\"bench\", \"stone\"]' \"It looks cold.\"")
+        return True
+    
+    name = args[0]
+    keywords_json_str = args[1]
+    description = args[2] if len(args) > 2 else "It looks unremarkable."
+
+    # Validate Keywords JSON
+    keywords_list = []
+    try:
+        keywords_list = json.loads(keywords_json_str)
+        if not isinstance(keywords_list, list): raise TypeError("Keywords must be a list.")
+        # Sanitize keywords (lowercase, strip)
+        keywords_list = [str(k).lower().strip() for k in keywords_list if str(k).strip()]
+        if not keywords_list: raise ValueError("Keyword list cannot be empty after cleanup.")
+        keywords_json_to_save = json.dumps(keywords_list) # Save cleaned list
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        await character.send(f"Invalid Keywords JSON: {e}. Must be like '[\"key1\", \"key2\"]'")
+        return True
+
+    if not name or not keywords_list:
+        await character.send("Object Name and Keywords cannot be empty.")
+        return True
+
+    new_obj_row = await database.create_room_object(db_conn, character.location.dbid, name, keywords_json_to_save, description)
+
+    if new_obj_row:
+        new_id = new_obj_row['id']
+        # Add to room cache immediately
+        new_obj_dict = dict(new_obj_row)
+        new_obj_dict['keywords'] = keywords_list # Store parsed list in cache
+        character.location.objects.append(new_obj_dict)
+        await character.send(f"Room Object '{name}' created with ID {new_id}.")
+    else:
+        await character.send("{rFailed to create room object (check logs).{x")
+    return True
+
+async def cmd_olist(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Lists static objects defined for the current room."""
+    if not character.location: await character.send("You aren't in a room."); return True
+
+    objects = character.location.objects
+    if not objects:
+        await character.send("No objects are defined for this room.")
+        return True
+
+    output = [f"\r\n--- Objects in Room {character.location.dbid} ('{character.location.name}') ---"]
+    for obj in objects:
+        output.append(f" [ID: {obj.get('id', '?'): >3}] {obj.get('name', 'Unknown')} (Keywords: {obj.get('keywords', [])})")
+    output.append("-----------------------------------------------")
+    await character.send("\r\n".join(output))
+    return True
+
+def _find_object_in_room(room: 'Room', target_id_or_keyword: str) -> Optional[Dict[str, Any]]:
+    """Helper to find object by ID or keyword in room cache."""
+    if target_id_or_keyword.isdigit():
+        target_id = int(target_id_or_keyword)
+        for obj in room.objects:
+            if obj.get('id') == target_id:
+                return obj
+    else: # Search by keyword
+        return room.get_object_by_keyword(target_id_or_keyword) # Use existing keyword search
+    return None
+
+async def cmd_ostat(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Shows details of a static object in the current room. Usage: @ostat <object_id | keyword>"""
+    if not character.location: await character.send("You aren't in a room."); return True
+    target_str = args_str.strip()
+    if not target_str: await character.send("Usage: @ostat <object_id | keyword>"); return True
+
+    obj_data = _find_object_in_room(character.location, target_str)
+
+    if not obj_data:
+        await character.send(f"Object '{target_str}' not found in this room.")
+        return True
+
+    output = [f"\r\n--- Object Info [ID: {obj_data.get('id', '?')}] ---"]
+    output.append(f"Name       : {obj_data.get('name', 'N/A')}")
+    output.append(f"Keywords   : {obj_data.get('keywords', [])}") # Show parsed list
+    output.append(f"Description: {obj_data.get('description', '')}")
+    output.append("--------------------------------")
+    await character.send("\r\n".join(output))
+    return True
+
+async def cmd_oset(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Sets properties of an object in the current room.
+    Usage: @oset <object_id | keyword> <field> <value>
+    Fields: name, description, keywords
+    Note: 'keywords' value must be a valid JSON list string: '[\"key1\", \"key2\"]'
+    Example: @oset fountain keywords '[\"fountain\", \"stone fountain\", \"water\"]'
+    """
+    if not character.location: await character.send("You aren't in a room."); return True
+
+    parts = args_str.split(" ", 2)
+    if len(parts) < 3:
+        await character.send("Usage: @oset <object_id | keyword> <field> <value>")
+        await character.send("Fields: name, description, keywords")
+        await character.send("Note: keywords value must be valid JSON list '[\"key1\"]'")
+        return True
+
+    target_str = parts[0].strip()
+    field = parts[1].lower()
+    value = parts[2].strip()
+
+    valid_fields = ["name", "description", "keywords"]
+    if field not in valid_fields:
+        await character.send(f"Invalid field '{field}'. Use: {', '.join(valid_fields)}")
+        return True
+
+    # Find the object in the room cache first
+    obj_data_cache = _find_object_in_room(character.location, target_str)
+    if not obj_data_cache:
+        await character.send(f"Object '{target_str}' not found in this room.")
+        return True
+
+    object_id = obj_data_cache.get('id')
+    if not object_id: # Should have ID if found in cache
+        await character.send("{rInternal error: Found object data missing ID.{x"); return True
+
+    # Validate keywords JSON string if that's the field being set
+    if field == "keywords":
+        try:
+            keywords_list = json.loads(value)
+            if not isinstance(keywords_list, list): raise TypeError
+            # Clean and re-dump for saving
+            keywords_list = [str(k).lower().strip() for k in keywords_list if str(k).strip()]
+            if not keywords_list: raise ValueError("Keywords list cannot be empty after cleanup.")
+            value = json.dumps(keywords_list) # Use validated, cleaned JSON string for DB update
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            await character.send(f"Invalid Keywords JSON: {e}. Use '[\"key1\", ...]")
+            return True
+
+    updated_row = await database.update_room_object_field(db_conn, object_id, field, value)
+
+    if updated_row:
+        # Update world cache (find object by ID in list and update dict)
+        updated_dict = dict(updated_row)
+        try: # Ensure keywords are list in cache
+            updated_dict['keywords'] = json.loads(updated_dict.get('keywords', '[]') or '[]')
+        except: updated_dict['keywords'] = []
+
+        for i, obj in enumerate(character.location.objects):
+            if obj.get('id') == object_id:
+                character.location.objects[i] = updated_dict
+                break
+        await character.send(f"Room Object {object_id} field '{field}' updated.")
+    else:
+        await character.send(f"Failed to update Room Object {object_id} (DB error?).")
+
+    return True
+
+async def cmd_odelete(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+    """Admin Command: Deletes a static object from the current room. Usage: @odelete <object_id | keyword>"""
+    if not character.location: await character.send("You aren't in a room."); return True
+    target_str = args_str.strip()
+    if not target_str: await character.send("Usage: @odelete <object_id | keyword>"); return True
+
+    # Find object in room cache
+    obj_data_cache = _find_object_in_room(character.location, target_str)
+    if not obj_data_cache:
+        await character.send(f"Object '{target_str}' not found in this room.")
+        return True
+
+    object_id = obj_data_cache.get('id')
+    object_name = obj_data_cache.get('name', 'Unknown Object')
+    if not object_id: await character.send("{rInternal error: Found object missing ID.{x"); return True
+
+    log.warning("ADMIN ACTION: %s attempting to delete Room Object ID %d ('%s') from Room %d.",
+                character.name, object_id, object_name, character.location.dbid)
+
+    rowcount = await database.delete_room_object(db_conn, object_id)
+
+    if rowcount is not None and rowcount > 0:
+        # Remove from world cache
+        character.location.objects = [obj for obj in character.location.objects if obj.get('id') != object_id]
+        await character.send(f"Room Object '{object_name}' (ID: {object_id}) deleted.")
+    else:
+        await character.send(f"Failed to delete Room Object {object_id} (DB error or already gone?).")
+
+    return True
+

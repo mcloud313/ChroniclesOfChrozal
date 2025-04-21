@@ -897,3 +897,60 @@ async def delete_mob_template(conn: aiosqlite.Connection, template_id: int) -> i
     log.warning("ADMIN ACTION: Attempting to delete Mob Template ID %d. Spawner usage check not implemented.", template_id)
     query = "DELETE FROM mob_templates WHERE id = ?"
     return await execute_query(conn, query, (template_id,))
+
+async def create_room_object(conn: aiosqlite.Connection, room_id: int, name: str, keywords_json: str, description: str = "It looks unremarkable.") -> Optional[aiosqlite.Row]:
+    """Creates a new room object and returns its full row data."""
+    # Validate keywords JSON before inserting? Or assume valid string passed.
+    # Let's assume valid JSON string for keywords is passed.
+    query = """
+        INSERT INTO room_objects (room_id, name, keywords, description)
+        VALUES (?, ?, ?, ?)
+    """
+    params = (room_id, name, keywords_json, description)
+    new_id = await execute_query(conn, query, params)
+    if new_id:
+        log.info("Created Room Object ID %s (Name: '%s') in Room %d", new_id, name, room_id)
+        # Fetch the newly created row to return it for cache update
+        return await get_room_object_by_id(conn, new_id) # Use helper below
+    else:
+        log.error("Failed to create room object '%s' in Room %d", name, room_id)
+        return None
+    
+async def get_room_object_by_id(conn: aiosqlite.Connection, object_id: int) -> Optional[aiosqlite.Row]:
+    """Fetches a single room object by its primary ID."""
+    query = "SELECT * FROM room_objects WHERE id = ?"
+    return await fetch_one(conn, query, (object_id,))
+
+async def update_room_object_field(conn: aiosqlite.Connection, object_id: int, field: str, value: str) -> Optional[aiosqlite.Row]:
+    """Updates a specific field (name, description, keywords) for a room object."""
+    valid_fields = ["name", "description", "keywords"]
+    if field not in valid_fields:
+        log.error("Attempted to update invalid room object field: %s for object %d", field, object_id)
+        return None
+
+    param_value = value
+    # Validate keywords JSON if setting that field
+    if field == "keywords":
+        try:
+            parsed = json.loads(value)
+            if not isinstance(parsed, list): raise TypeError("Keywords must be a JSON list []")
+            # Optional: Sanitize keywords (lowercase, strip) before saving?
+            param_value = json.dumps([str(k).lower().strip() for k in parsed]) # Save validated/cleaned JSON
+        except (json.JSONDecodeError, TypeError) as e:
+            log.error("Invalid JSON list provided for room object %d field %s: %r (%s)", object_id, field, value, e)
+            return None # Indicate failure
+
+    query = f"UPDATE room_objects SET {field} = ? WHERE id = ?"
+    rowcount = await execute_query(conn, query, (param_value, object_id))
+    if rowcount is not None and rowcount > 0:
+        log.info("Updated room object %d field '%s'", object_id, field)
+        return await get_room_object_by_id(conn, object_id) # Return updated data
+    else:
+        log.error("Failed to update room object %d field '%s' (rowcount: %s)", object_id, field, rowcount)
+        return None
+    
+async def delete_room_object(conn: aiosqlite.Connection, object_id: int) -> int | None:
+    """Deletes a room object by its ID."""
+    log.warning("ADMIN ACTION: Attempting to delete Room Object ID %d.", object_id)
+    query = "DELETE FROM room_objects WHERE id = ?"
+    return await execute_query(conn, query, (object_id,))
