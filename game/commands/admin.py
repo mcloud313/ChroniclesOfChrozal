@@ -24,7 +24,13 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 #---Room creation---
-VALID_ROOM_FLAGS = {"NODE", "RESPAWN", "INDOORS", "OUTDOORS", "WET", "DARK", "HOLY", "QUIET", "ROUGH_TERRAIN", "WINDY", "HEIGHTS", "SHOP"}
+VALID_ROOM_FLAGS = {"NODE", "RESPAWN", "INDOORS", "OUTDOORS", "WET", "DARK", "HOLY",
+                    "QUIET", "ROUGH_TERRAIN", "WINDY", "HEIGHTS", "SHOP"}
+
+VALID_ITEM_TYPES = {
+    "WEAPON", "ARMOR", "SHIELD", "CONTAINER", "CONSUMABLE", "FOOD",
+    "DRINK", "TOOL", "KEY", "LIGHT", "REAGENT", "TREASURE", "GENERAL", "AMMO"
+}
 
 async def cmd_teleport(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Admin command: Teleports the admin to a specified room ID."""
@@ -562,10 +568,12 @@ async def cmd_roomset(character: 'Character', world: 'World', db_conn: 'aiosqlit
         return True
 
     # --- Send final feedback ---
-    if updated:
+    if updated and rowcount is not None and rowcount > 0: # <<< Changed check from == 1
         await character.send(f"Room {current_room.dbid} field '{field}' updated successfully.")
-    else:
-        await character.send(f"Failed to update room field '{field}' (check logs).")
+    elif updated and rowcount == 0: # Update attempted but didn't find the row? Should be caught earlier.
+        await character.send(f"Failed to update room field '{field}' (Room ID not found during DB update?).")
+    else: # updated is False (JSON error, etc) OR rowcount is None (DB error)
+        await character.send(f"Failed to update room field '{field}' (Check logs for details).")
 
     return True
 
@@ -792,38 +800,70 @@ async def cmd_areadelete(character: 'Character', world: 'World', db_conn: 'aiosq
 #---Item creation---
 async def cmd_icreate(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Admin Command: Creates a basic item template.
-    Usage: @icreate <Name> <Type> <Description>
+    Usage: @icreate <"Item Name"> <TYPE> <"Description">
     Example: @icreate "a basic helm" ARMOR "A simple metal helmet."
-    Use @iset to add stats, flags, etc.
+    Quotes are needed for multi-word names/descriptions. Type must be one word.
     """
-    parts = args_str.split(" ", 2) # Split into name, type, description
-    if len(parts) < 3:
-        await character.send("Usage: @icreate <Name> <Type> <Description>")
-        await character.send("Types: WEAPON, ARMOR, SHIELD, CONTAINER, CONSUMABLE, FOOD, DRINK, TOOL, KEY, LIGHT, REAGENT, TREASURE, GENERAL, AMMO")
+    args = args_str.strip()
+    name = None
+    item_type = None
+    description = None
+
+    # --- Basic Quote-Aware Parsing ---
+    # 1. Try to extract Name (potentially quoted)
+    if args.startswith('"'):
+        end_quote_idx = args.find('"', 1)
+        if end_quote_idx != -1:
+            name = args[1:end_quote_idx].strip()
+            remaining_args = args[end_quote_idx+1:].strip()
+        else: # Mismatched quote
+            await character.send("{rName seems to have an unclosed quote.{x")
+            return True
+    else: # Assume single-word name
+        parts = args.split(" ", 1)
+        name = parts[0]
+        remaining_args = parts[1].strip() if len(parts) > 1 else ""
+
+    # 2. Try to extract Type (should be next word)
+    if remaining_args:
+        parts = remaining_args.split(" ", 1)
+        item_type_candidate = parts[0].upper()
+        if item_type_candidate in VALID_ITEM_TYPES:
+            item_type = item_type_candidate
+            remaining_args = parts[1].strip() if len(parts) > 1 else ""
+        else: # Type not found or invalid
+            await character.send(f"Invalid or missing item type '{parts[0]}'. Valid: {', '.join(VALID_ITEM_TYPES)}")
+            return True
+    else: # No type provided
+        await character.send("{rMissing item type after name.{x")
         return True
 
-    name, item_type, description = parts[0].strip(), parts[1].strip().upper(), parts[2].strip()
+    # 3. The rest is Description (potentially quoted)
+    description = remaining_args # Take whatever is left
+    if description.startswith('"') and description.endswith('"'):
+        description = description[1:-1].strip() # Remove surrounding quotes
+    elif description.startswith('"') or description.endswith('"'):
+        await character.send("{rDescription seems to have mismatched quotes.{x")
+        return True
 
+    # --- Validation ---
     if not name or not item_type or not description:
-        await character.send("Name, Type, and Description cannot be empty.")
+        await character.send("Usage: @icreate <\"Name\"> <TYPE> <\"Description\">")
         return True
+    if len(name) > 80: await character.send("Name too long (max 80)."); return True
+    if len(description) > 500: await character.send("Description too long (max 500)."); return True
 
-    # Basic type validation (can be expanded)
-    valid_types = {"WEAPON", "ARMOR", "SHIELD", "CONTAINER", "CONSUMABLE", "FOOD", "DRINK", "TOOL", "KEY", "LIGHT", "REAGENT", "TREASURE", "GENERAL", "AMMO"}
-    if item_type not in valid_types:
-        await character.send(f"Invalid item type '{item_type}'. Valid types are: {', '.join(valid_types)}")
-        return True
-
+    # --- Create Item ---
+    log.debug("Attempting @icreate: Name='%s', Type='%s', Desc='%s'", name, item_type, description)
     new_item_row = await database.create_item_template(db_conn, name, item_type, description)
 
     if new_item_row:
         new_id = new_item_row['id']
-        # Add to world cache immediately
-        world.item_templates[new_id] = dict(new_item_row) # Store as dict
-        await character.send(f"Item Template '{name}' created with ID {new_id}.")
+        world.item_templates[new_id] = dict(new_item_row) # Update cache
+        await character.send(f"Item Template '{name}' (Type: {item_type}) created with ID {new_id}.")
         await character.send("Use {y@iset{x to add stats, flags, etc.")
     else:
-        await character.send("{rFailed to create item template (check logs, maybe name exists?).{x")
+        await character.send("{rFailed to create item template (check logs, maybe name already exists?).{x")
     return True
 
 async def cmd_ilist(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
@@ -982,36 +1022,82 @@ async def cmd_idelete(character: 'Character', world: 'World', db_conn: 'aiosqlit
 #---Mob creation---
 async def cmd_mcreate(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Admin Command: Creates a basic mob template.
-    Usage: @mcreate <Name> [Level] [Description]
-    Example: @mcreate "Cave Bat" 2 "A fluttering menace."
+    Usage: @mcreate <"Mob Name"> [Level] ["Description"]
+    Example: @mcreate "Cave Bat" 2 "A large, fluttering menace."
+            @mcreate Goblin 1 "A basic goblin."
+    Quotes REQUIRED for multi-word names/descriptions. Level/Description optional.
     Use @mset to configure stats, attacks, loot, etc.
     """
-    parts = args_str.split(" ", 2)
-    name = parts[0].strip().title() if len(parts) > 0 else None
-    level = 1
-    description = "A creature."
+    args = args_str.strip()
+    name = None
+    level = 1 # Default level
+    description = "A creature." # Default description
+    remaining_args = args
 
-    if not name:
-        await character.send("Usage: #@mcreate <Name> [Level] [Description]")
+    if not args:
+        await character.send("Usage: @mcreate <\"Name\"> [Level] [\"Description\"]")
         return True
-    
-    if len(parts) > 1 and parts[1].isdigit():
-        level = int(parts[1])
-        if len(parts) > 2: description = parts[2].strip()
-    elif len(parts) > 1: # assume level wasn't specified, second part is in desc
-        description = parts[1].strip()
 
-    level = max(1, level) # Ensure level is at least 1
+    # --- V V V Improved Quote-Aware Parsing V V V ---
+    # 1. Extract Name (quoted or single word)
+    if remaining_args.startswith('"'):
+        end_quote_idx = remaining_args.find('"', 1)
+        if end_quote_idx != -1:
+            name = remaining_args[1:end_quote_idx].strip().title() # Extract and title-case
+            remaining_args = remaining_args[end_quote_idx+1:].strip() # Update remainder
+        else:
+            await character.send("{rName seems to have an unclosed quote.{x")
+            return True
+    else: # Assume single-word name
+        parts = remaining_args.split(" ", 1)
+        name = parts[0].title() # Title-case single word
+        remaining_args = parts[1].strip() if len(parts) > 1 else ""
 
+    # 2. Check for optional Level (must be next if present)
+    if remaining_args:
+        parts = remaining_args.split(" ", 1)
+        if parts[0].isdigit():
+            try:
+                level = int(parts[0])
+                level = max(1, level) # Ensure level >= 1
+                remaining_args = parts[1].strip() if len(parts) > 1 else "" # Update remainder
+            except ValueError:
+                # Should not happen if isdigit() is true, but safety
+                await character.send("{rInvalid number for level.{x"); return True
+        # Else: Doesn't start with a digit, assume it's the description
+
+    # 3. The rest is the Description (potentially quoted)
+    description_input = remaining_args # What's left is description
+    if description_input: # Only override default if something was provided
+        if description_input.startswith('"') and description_input.endswith('"'):
+            description = description_input[1:-1].strip() # Remove quotes
+        elif description_input.startswith('"') or description_input.endswith('"'):
+            await character.send("{rDescription seems to have mismatched quotes.{x")
+            return True
+        else: # Use as is if not quoted
+            description = description_input
+
+    # --- ^ ^ ^ End Parsing Logic ^ ^ ^ ---
+
+    # --- Validation ---
+    if not name: # Should be caught earlier, but double check
+        await character.send("Usage: @mcreate <\"Name\"> [Level] [\"Description\"]")
+        return True
+    if len(name) > 80: await character.send("{rName too long (max 80).{x"); return True
+    if len(description) > 500: await character.send("{rDescription too long (max 500).{x"); return True
+
+    # --- Create Mob Template ---
+    log.debug("Attempting @mcreate: Name='%s', Level=%d, Desc='%s'", name, level, description)
     new_mob_row = await database.create_mob_template(db_conn, name, level, description)
+
     if new_mob_row:
         new_id = new_mob_row['id']
         # Add/Update world cache
         world.mob_templates[new_id] = dict(new_mob_row)
-        await character.send(f"Mob Template '{name}' created with Id {new_id}.")
-        await character.send("Use @mset to configure details (stats, attacks, loot, flags, etc).")
+        await character.send(f"Mob Template '{name}' (Level {level}) created with ID {new_id}.")
+        await character.send("Use {y@mset{x to configure details (stats, attacks, loot, flags, etc).")
     else:
-        await character.send("Failed to create mob template (check logs, maybe name exists?).")
+        await character.send("{rFailed to create mob template (check logs, maybe name exists?).{x")
     return True
 
 async def cmd_mlist(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:

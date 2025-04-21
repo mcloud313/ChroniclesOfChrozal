@@ -753,7 +753,7 @@ async def update_item_template_field(conn: aiosqlite.Connection, template_id: in
 
     query = f"UPDATE item_templates SET {field} = ? WHERE id = ?"
     rowcount = await execute_query(conn, query, (param_value, template_id))
-    if rowcount == 1:
+    if rowcount is not None and rowcount > 0:
         log.info("Updated item template %d field '%s'", template_id, field)
         return await load_item_template(conn, template_id) # Return updated data
     else:
@@ -780,7 +780,6 @@ async def delete_item_template(conn: aiosqlite.Connection, template_id: int) -> 
     log.warning("ADMIN ACTION: Attempting to delete Item Template ID %d. Usage checks not implemented.", template_id)
     query = "DELETE FROM item_templates WHERE id = ?"
     return await execute_query(conn, query, (template_id,))
-
 
 async def create_mob_template(conn: aiosqlite.Connection, name: str, level: int = 1, description: str = "A creature.") -> Optional[aiosqlite.Row]:
     """Creates a basic mob template with defaults and returns the new row data."""
@@ -856,7 +855,7 @@ async def update_mob_template_field(conn: aiosqlite.Connection, template_id: int
 
     query = f"UPDATE mob_templates SET {field} = ? WHERE id = ?"
     rowcount = await execute_query(conn, query, (param_value, template_id))
-    if rowcount == 1:
+    if rowcount is not None and rowcount > 0:
         log.info("Updated mob template %d field '%s'", template_id, field)
         return await load_mob_template(conn, template_id) # Return updated data
     else:
