@@ -25,6 +25,17 @@ physical_damage_types = [
     ability_defs.DAMAGE_BLUDGEON,
 ]
 
+MAGICAL_DAMAGE_TYPES = {
+    ability_defs.DAMAGE_FIRE,
+    ability_defs.DAMAGE_COLD,
+    ability_defs.DAMAGE_LIGHTNING,
+    ability_defs.DAMAGE_EARTH,
+    ability_defs.DAMAGE_ARCANE,
+    ability_defs.DAMAGE_DIVINE,
+    ability_defs.DAMAGE_POISON,
+    ability_defs.DAMAGE_SONIC,
+}
+
 log = logging.getLogger(__name__)
 
 # Placeholder functions - implementations below
@@ -54,6 +65,7 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
     log.info("%s has defeated %s!", attacker_name, target_name)
 
     # --- If Mob is defeated ---
+    if isinstance(attacker, Character): await attacker.send(f"You have slain {target_name}!")
     if isinstance(target, Mob):
         slain_msg = f"\r\n{attacker_name} has slain {target_name}!\r\n"
         if target_loc:
@@ -66,9 +78,12 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
         if dropped_coinage > 0 and target_loc:
             log.info("%s corpse drops %d coinage in Room %d.", target_name.capitalize(), dropped_coinage, target_loc.dbid)
             coinage_added = await target_loc.add_coinage(dropped_coinage, world)
-            # --- ^ ^ ^ ---
-            if coinage_added: await target_loc.broadcast(...) # Announce only if added successfully
-            else: log.error("Failed to add dropped coinage %d to room %d", dropped_coinage, target_loc.dbid)
+            coin_msg = f"\r\n{dropped_coinage} talons fall from {target_name}!\r\n"
+            await target_loc.broadcast(coin_msg, exclude={attacker})
+            if isinstance(attacker, Character):
+                    await attacker.send(f"You find {utils.format_coinage(dropped_coinage)} on the corpse.")
+        else: 
+                log.error("Failed to add dropped coinage %d to room %d", dropped_coinage, target_loc.dbid)
 
         if dropped_item_ids and target_loc:
             dropped_item_names = []
@@ -96,15 +111,40 @@ async def handle_defeat(attacker: Union['Character', 'Mob'], target: Union['Char
     # --- If Character is defeated ---
     elif isinstance(target, Character):
         if target.status == "ALIVE": # Only trigger dying sequence once
+            log.info("%s has been defeated by %s!", target_name, attacker_name) # Log defeat first
             target.hp = 0 # Ensure HP is 0
             target.status = "DYING"
             target.stance = "Lying"
             target.is_fighting = False
             target.target = None
+            target.casting_info = None # Interrupt  casting
+
+            xp_lost_pool = target.xp_pool
+            target.xp_pool = 0.0
+
+            # Calculate 10% of XP earned *within the current level*
+            xp_at_start_of_level = utils.xp_needed_for_level(target.level - 1) if target.level > 1 else 0
+            xp_progress_in_level = target.xp_total - xp_at_start_of_level
+            xp_penalty_from_total = 0.0
+            if xp_progress_in_level > 0: # Only apply penalty if progress was made
+                xp_penalty_from_total = math.floor(xp_progress_in_level * 0.10) # 10% penalty
+
+            # Apply penalty, ensuring not dropping below start of level
+            target.xp_total = max(xp_at_start_of_level, target.xp_total - xp_penalty_from_total)
+
+            log.info("Character %s lost %.1f pool XP and %.1f level XP due to dying. New total: %.1f",
+                    target.name, xp_lost_pool, xp_penalty_from_total, target.xp_total)
+            
+            xp_loss_msg = "{rYou feel some of your experience drain away...{x"
+            if xp_lost_pool > 0: xp_loss_msg += " {rYour focus shatters, losing unabsorbed experience.{x"
+            await target.send(xp_loss_msg)
+
+
             # Calculate death timer based on Vitality score
             vit_score = target.stats.get('vitality', 10)
             timer_duration = float(vit_score) * 2 # Example: 1 second per vit point
             target.death_timer_ends_at = time.monotonic() + timer_duration
+            
 
             log.info("Character %s is now DYING (Timer: %.1f s).", target.name, timer_duration)
 
@@ -187,7 +227,7 @@ async def award_xp(attacker: 'Character', defeated_mob: 'Mob'):
 
     if actual_xp_added > 0:
         attacker.xp_pool += actual_xp_added
-        await attacker.send(f"You gain {actual_xp_added} experience points into your pool.")
+        await attacker.send(f"You gain {int(actual_xp_added)} experience points into your pool.")
     else:
         await attacker.send("Your mind cannot hold any more raw experience right now.")
         return
@@ -217,6 +257,8 @@ async def resolve_physical_attack(
     attacker_name = attacker.name.capitalize()
     target_name = target.name.capitalize()
     attacker_loc = attacker.location # Cache location
+
+    attacker_pronoun_subj, _, attacker_pronoun_poss, _, _ = utils.get_pronouns(getattr(attacker, 'sex', None))
 
     # --- Attacker Base Stats & Ability Setup ---
     base_attacker_rating = attacker.mar # Base MAR
@@ -275,7 +317,7 @@ async def resolve_physical_attack(
     # Calculate weapon skill bonus
     if relevant_weapon_skill and hasattr(attacker, 'get_skill_rank'):
         wep_skill_rank = attacker.get_skill_rank(relevant_weapon_skill)
-        weapon_skill_bonus = math.floor(wep_skill_rank / 25)
+        weapon_skill_bonus = math.floor(wep_skill_rank / 10)
 
     # Final attacker rating includes base (potentially modified) + skill bonus
     final_attacker_rating = base_attacker_rating + weapon_skill_bonus
@@ -285,19 +327,47 @@ async def resolve_physical_attack(
     base_target_pds = target.pds
     target_av = 0 # Calculated later if needed
     target_bv = target.barrier_value # Get current barrier value
+
+
     # Calculate DV bonuses/penalties
     dodge_bonus = 0; parry_bonus = 0
     if hasattr(target, 'get_skill_rank'):
-        dodge_bonus = math.floor(target.get_skill_rank("dodge") / 25)
-        parry_bonus = math.floor(target.get_skill_rank("parrying") / 25)
+        dodge_bonus = math.floor(target.get_skill_rank("dodge") / 10)
+        parry_bonus = math.floor(target.get_skill_rank("parrying") / 10)
     final_target_dv = base_target_dv + dodge_bonus + parry_bonus
+
+
+
     # Apply stance penalty
     if hasattr(target, 'stance'):
         if target.stance == "Lying": final_target_dv = math.floor(final_target_dv * 0.5)
         elif target.stance == "Sitting": final_target_dv = math.floor(final_target_dv * 0.75)
 
+    base_block_chance: float = 0.0
+    shield_skill_bonus_pct: float = 0.0
+    shield_item: Optional[Item] = None
+
+    if isinstance(target, Character):
+        # Get shield must be called on Character obj, needs world
+        shield_item = target.get_shield(world) # Ensure get_shield exists
+        if shield_item: #Only calculate if shield exists
+            # Get base block chance from shield stats JSON
+
+            base_block_chance = shield_item.block_chance
+
+            # Get Shield skill Bonus
+            if hasattr(target, 'get_skill_rank'): # check if target has skills
+                shield_skill_rank = target.get_skill_rank("shield usage")
+                shield_skill_bonus_pct = math.floor(shield_skill_rank / 10) * 0.01
+                if shield_skill_bonus_pct > 0: log.debug("Target %s shield skill bonus: +%.0f%%", target_name, shield_skill_bonus_pct * 100)
+    
+
+    effective_block_chance: float = base_block_chance + shield_skill_bonus_pct
+
     # --- 3. Block Check (Deferred V1) ---
     # effective_block_chance calculated previously based on shield/skill, use here if implementing
+    effective_block_chance = max(0.0, min(0.75, effective_block_chance))
+
 
     # --- 4. Hit Check ---
     hit_roll = random.randint(1, 20)
@@ -325,9 +395,57 @@ async def resolve_physical_attack(
         miss_msg_target = f"{attacker_name} tries to {attk_name} you, but {{Kmisses{{x."
         miss_msg_attacker = f"You try to {attk_name} {target_name}, but {{Kmiss.{{x"
         if is_fumble:
-            miss_msg_room = f"{attacker_name} {{Rfumbles{{x while trying to {attk_name} {target_name}!"
-            miss_msg_target = f"{attacker_name} {{Rfumbles{{x while trying to {attk_name} you!"
-            miss_msg_attacker = f"{{RYou fumble your attempt to {attk_name} {target_name}!{{x"
+            attacker.roundtime = wpn_speed + bonus_rt_from_ability + rt_penalty + 2.0 # Base Miss RT + Fumble Penalty RT
+            fumble_effect = random.randint(1, 4) # Choose effect
+            fumble_msg_room = f"{attacker_name} {{Rfumbles{{x their attack!"
+            fumble_msg_target = f"{attacker_name} {{Rfumbles{{x attacking you!"
+            fumble_msg_attacker = f"{{RYou fumble your {attk_name}!{{x"
+
+            if fumble_effect == 1 and isinstance(attacker, Character) and attacker.stance == "Standing":
+                attacker.stance = "Lying"
+                fumble_msg_attacker += " You stumble and fall prone!"
+                fumble_msg_room += f" {attacker_pronoun_subj} falls prone!"
+            elif fumble_effect == 2:
+                attacker.roundtime += 6.0 # Extra off-balance RT (total 8s + base?) - adjust number as needed
+                fumble_msg_attacker += " You lose your balance badly (+6s RT)!"
+                fumble_msg_room += f" {attacker_pronoun_subj} stumbles badly!"
+            elif fumble_effect == 3 and weapon: # Self-damage only with weapon
+                self_dmg = max(1, math.floor(wpn_base_dmg / 2) + wpn_rng_dmg // 4) # Example: 1/2 base + 1/4 rng
+                if attacker.hp > self_dmg: # Avoid instant suicide loops
+                    attacker.hp -= self_dmg
+                    fumble_msg_attacker += f" You strike yourself! ({int(self_dmg)} dmg)" # Show int damage
+                    fumble_msg_room += f" {attacker_pronoun_subj} manages to hit themself!"
+                else: # Not enough HP to take full fumble damage
+                    fumble_msg_attacker += " You nearly strike yourself!"
+                    fumble_msg_room += f" {attacker_pronoun_subj} nearly hits themself!"
+            elif fumble_effect == 4 and weapon: # Drop weapon only if wielding one
+                # Get weapon details BEFORE removing from equipment
+                weapon_id = attacker.equipment.get("WIELD_MAIN")
+                weapon_name = weapon.name # Use the weapon object we already have
+                if weapon_id:
+                    del attacker.equipment["WIELD_MAIN"]
+                    # Add item to room
+                    if attacker.location:
+                        added = await attacker.location.add_item(weapon_id, world)
+                        if added:
+                            fumble_msg_attacker += f" You drop your {weapon_name}!"
+                            fumble_msg_room += f" {attacker_pronoun_subj} drops their {weapon_name}!"
+                        else: # Failed to add to room? Fallback message
+                            fumble_msg_attacker += " You nearly drop your weapon!"
+                            log.error("Failed to add dropped fumble weapon %d to room %d", weapon_id, attacker.location.dbid)
+                    else: fumble_msg_attacker += " You nearly drop your weapon!" # No location?
+                else: # No weapon in slot somehow? Default fumble.
+                    fumble_msg_attacker += " You flail wildly!"
+
+            else: # Default fumble if no other effect applies
+                fumble_msg_attacker += " You flail uselessly!"
+                fumble_msg_room += " What a mistake!"
+
+            # Send fumble messages (verbose check still applies conceptually)
+            vb_fumble_hit_check = " " + utils.colorize("{c}") + f"(Roll:{hit_roll})" + utils.colorize("{x}")
+            if isinstance(attacker, Character): await attacker.send(fumble_msg_attacker + vb_fumble_hit_check)
+            if isinstance(target, Character): await target.send(fumble_msg_target + vb_fumble_hit_check) # Target sees less detail?
+            if attacker_loc: await attacker_loc.broadcast(f"\r\n{fumble_msg_room}\r\n", exclude={attacker, target})
 
         # Send Messages (Appending verbose string)
         if isinstance(attacker, Character): await attacker.send(miss_msg_attacker + f" {vb_hit_check}")
@@ -335,26 +453,78 @@ async def resolve_physical_attack(
         if attacker_loc: await attacker_loc.broadcast(f"\r\n{miss_msg_room}\r\n", exclude={attacker, target})
         if rt_penalty > 0 and isinstance(attacker, Character): await attacker.send(f"{{yYour armor slightly hinders you (+{rt_penalty:.1f}s).{{x")
         return
+    
+    # --- Step 5b Block Check (Only if the Hit Succeeds) ---
+    can_block = False
+    shield_item: Optional[Item] = None
+    if isinstance(target, Character) and target.stance == "Standing":
+        shield_item = target.get_shield(world) # Use helper
+        if shield_item:
+            can_block = True
+
+    if can_block:
+        block_roll = random.random()
+        if block_roll < effective_block_chance:
+            log.info("%s BLOCKED %s's attack with shield!", target_name, attacker)
+            # Apply roundtime to attacker (treat as miss for RT)
+            base_rt = wpn_speed + bonus_rt_from_ability
+            rt_penalty = 0.0
+            if isinstance(attacker, Character):
+                total_av = attacker.get_total_av(world); rt_penalty = math.floor(total_av / 20) * 1.0
+            final_rt = base_rt + rt_penalty
+            attacker.roundtime = final_rt
+
+            # Send messages
+            # block_msg_attacker = f"{{y{target_name} blocks your {attk_name} with their shield!{x}"
+            # block_msg_target = f"{{gYou block {attacker_name}'s {attk_name} with your shield!{x"
+            # block_msg_room = f"{target_name} blocks {attacker_name}'s {attk_name} with their shield."
+
+            block_msg_attacker = utils.colorize("{y}") + f"{target_name} blocks your {attk_name} with their shield!" + utils.colorize("{x}")
+            block_msg_target = utils.colorize("{g}") + f"You block {attacker_name}'s {attk_name} with your shield!" + utils.colorize("{x}")
+            block_msg_room = f"{target_name} blocks {attacker_name}'s {attk_name} with their shield." # Room message usually uncolored
+
+            if isinstance(attacker, Character): await attacker.send(block_msg_attacker)
+            if isinstance(target, Character): await target.send(block_msg_target)
+            if attacker_loc: await attacker_loc.broadcast(f"\r\n{block_msg_room}\r\n", exclude={attacker, target})
+            # Add armor penalty msg if needed
+            if rt_penalty > 0 and isinstance(attacker, Character): await attacker.send(...)
+
+            return # Attack ends here, no damage dealt
 
     # --- 6. Calculate Damage ---
     rng_roll_result = 0; exploded = False
     if wpn_rng_dmg > 0:
-        if is_crit: rng_roll_result = roll_exploding_dice(wpn_rng_dmg); exploded = rng_roll_result > wpn_rng_dmg
-        else: rng_roll_result = random.randint(1, wpn_rng_dmg) # Min 1 if wpn_rng_dmg >= 1
+        if is_crit:
+            # --- V V V New Crit Damage Logic V V V ---
+            log.debug("Crit! Rolling extra dice...")
+            # Roll the normal damage dice once
+            first_roll = random.randint(1, wpn_rng_dmg)
+            # Roll the "extra" set using exploding dice logic
+            extra_exploding_roll = roll_exploding_dice(wpn_rng_dmg)
+            # Total random damage is the sum
+            rng_roll_result = first_roll + extra_exploding_roll
+            # Mark as exploded only if the *extra* roll actually exploded
+            if extra_exploding_roll > wpn_rng_dmg:
+                exploded = True
+                log.debug("Crit Exploding Dice Result: %d (First: %d, Extra: %d)", rng_roll_result, first_roll, extra_exploding_roll)
+            else:
+                log.debug("Crit Normal Dice Result: %d (First: %d, Extra: %d)", rng_roll_result, first_roll, extra_exploding_roll)
+            # --- ^ ^ ^ End New Crit Damage Logic ^ ^ ^ ---
+        else: # Normal hit
+            rng_roll_result = random.randint(1, wpn_rng_dmg)
+            exploded = False # No explosion on normal hits
 
-    # Determine stat modifier added to damage
+    # Determine stat modifier added to damage (logic remains same)
     stat_modifier_to_add = 0
-    if isinstance(attacker, Character):
-        if weapon is not None: stat_modifier_to_add = attacker.might_mod # Melee weapon
-        elif ability_mods: stat_modifier_to_add = attacker.might_mod # Assume physical ability uses might
-        # else: unarmed, modifier is already in wpn_base_dmg, so add 0 here
-    elif isinstance(attacker, Mob):
-        stat_modifier_to_add = attacker.might_mod # Mob uses might mod
+    # ... (Determine stat_modifier_to_add based on attacker/weapon/ability) ...
 
     pre_mitigation_damage = max(0, wpn_base_dmg + rng_roll_result + stat_modifier_to_add)
 
-    # --- Build Verbose Damage String ---
-    vb_damage_calc = f"{{y(Base:{wpn_base_dmg} + Roll:d{wpn_rng_dmg}={rng_roll_result}{'{r}*{x' if exploded else ''} + Mod:{stat_modifier_to_add} = {pre_mitigation_damage}){{x"
+    # Build Verbose Damage String (Update to show breakdown if crit)
+    if is_crit:
+        vb_damage_calc = f"{{y(Crit Dmg: Base({wpn_base_dmg}) + Roll1(d{wpn_rng_dmg}={first_roll}) + Roll2(d{wpn_rng_dmg}x={extra_exploding_roll}{'{r}*{x' if exploded else ''}) + Mod({stat_modifier_to_add}) = {pre_mitigation_damage}){{x"
+    else: # Normal hit verbose string
+        vb_damage_calc = f"{{y(Dmg: Base({wpn_base_dmg}) + Roll(d{wpn_rng_dmg}={rng_roll_result}) + Mod({stat_modifier_to_add}) = {pre_mitigation_damage}){{x"
 
     # --- 7. Mitigation ---
     # PDS
@@ -405,8 +575,8 @@ async def resolve_physical_attack(
 
     # 9. Send Messages
     hit_desc = "hit"; crit_indicator = ""
-    if is_crit: hit_desc = "{{rCRITICALLY HIT{{x"; crit_indicator = " {{rCRITICAL!{{x"
-    attacker_pronoun_subj, _, attacker_pronoun_poss, _, _ = utils.get_pronouns(getattr(attacker, 'sex', None))
+    if is_crit: hit_desc = "{rCRITICALLY HIT"; crit_indicator = " {rCRITICAL!{x"
+    
 
     # --- Standard Messages ---
     std_dmg_msg_attacker = f"You {hit_desc} {target_name} with your {attk_name} for {{y{final_damage}{{x damage!{crit_indicator}"
@@ -440,12 +610,19 @@ async def resolve_physical_attack(
     if rt_penalty > 0 and isinstance(attacker, Character):
         await attacker.send(f"{{yYour armor slightly hinders your attack (+{rt_penalty:.1f}s).{{x")
 
+    if isinstance(attacker, Mob):
+        log.info("COMBAT SET RT: Mob ID %d (%s) roundtime set to %.2f (wpn_speed=%.1f, bonus_rt=%.1f)",
+                attacker.instance_id, attacker.name, final_rt, wpn_speed, bonus_rt_from_ability)
+    else: # Log for characters too for completeness
+        log.info("COMBAT SET RT: Character %s roundtime set to %.2f (Base: %.1f, AV Pen: %.1f)",
+                attacker.name, final_rt, base_rt, rt_penalty)
+
     # 11. Check Defeat
     if target.hp <= 0:
         await handle_defeat(attacker, target, world)
 
 async def resolve_magical_attack(
-    caster: Character, # Assume caster is always Character for now
+    caster: Union[Character, Mob], 
     target: Union[Character, Mob],
     spell_data: Dict[str, Any], # Data for the specific spell
     world: World
@@ -461,7 +638,14 @@ async def resolve_magical_attack(
     caster_loc = caster.location # Use caster's location for broadcast
 
     # 1. Get Caster Power & Target Defense
-    caster_rating = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr # Use APR or DPR based on school
+
+    if isinstance(caster, Character):
+        caster_rating = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr # Use APR or DPR based on school
+
+    elif isinstance(caster, Mob):
+        # Mobs use APR/DPR based on Int/Aura Mods for now
+        caster_rating = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr
+
     # Calculate target defenses (including potential skill/stance mods if applicable later)
     base_target_dv = target.dv
     dodge_bonus = 0; parry_bonus = 0 # Magic generally not parried, maybe dodged? Add skills later.
@@ -508,22 +692,39 @@ async def resolve_magical_attack(
         # Note: No roundtime applied here; post-cast RT is handled by the resolver in world.py
         return # End resolution
 
-    # 4. Calculate Damage
+    # 4. Calculate Damage (Crit = Roll normal dice + Roll exploding dice)
     base_dmg = effect_details.get("damage_base", 0)
-    rng_dmg = effect_details.get("damage_rng", 0)
-    rng_roll_result = 0; exploded = False
-    if rng_dmg > 0:
-        # Only allow crits/exploding dice if it wasn't an always_hits spell
-        if is_crit and not always_hits:
-            rng_roll_result = roll_exploding_dice(rng_dmg); exploded = rng_roll_result > rng_dmg
-        else: rng_roll_result = random.randint(1, rng_dmg)
+    rng_dmg = effect_details.get("damage_rng", 0) # This is the dX for the spell
 
-    # Add caster's power modifier (APR or DPR)
-    stat_modifier = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr
+    rng_roll_result = 0 # Initialize to 0
+    exploded = False
+    first_roll = 0 # Initialize for crit path
+    extra_exploding_roll = 0 # Initialize for crit path
+
+    if rng_dmg > 0:
+        # Allow crits unless always_hits is true
+        if is_crit and not always_hits:
+            log.debug("Magic Crit! Rolling extra dice...")
+            first_roll = random.randint(1, rng_dmg) # Assign first part
+            extra_exploding_roll = roll_exploding_dice(rng_dmg)
+            rng_roll_result = first_roll + extra_exploding_roll
+            if extra_exploding_roll > rng_dmg: exploded = True
+            # --- ^ ^ ^ End New Crit Damage Logic ^ ^ ^ ---
+        else: # Normal hit or always_hits spell
+            rng_roll_result = random.randint(1, rng_dmg)
+            exploded = False
+
+    # Add caster's power modifier
+    stat_modifier = 0
+    if isinstance(caster, Character): stat_modifier = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr
+    elif isinstance(caster, Mob): stat_modifier = caster.int_mod # Default for mobs
     pre_mitigation_damage = max(0, base_dmg + rng_roll_result + stat_modifier)
 
-    # Build Verbose Damage String
-    vb_damage_calc = f"{{y(Base:{base_dmg} + Roll:d{rng_dmg}={rng_roll_result}{'{r}*{x' if exploded else ''} + Mod:{stat_modifier} = {pre_mitigation_damage}){{x"
+    if is_crit and not always_hits:
+        explode_indicator = '{r}*{x' if exploded else ''
+        vb_damage_calc_magic = f"{{y(Crit Dmg: Base({base_dmg}) + Roll1(d{rng_dmg}={first_roll}) + Roll2(d{rng_dmg}x={extra_exploding_roll}{explode_indicator}) + Mod({stat_modifier}) = {pre_mitigation_damage}){{x"
+    else:
+        vb_damage_calc_magic = f"{{y(Dmg: Base({base_dmg}) + Roll(d{rng_dmg}={rng_roll_result}) + Mod({stat_modifier}) = {pre_mitigation_damage}){{x"
 
     # 5. Mitigation (SDS + BV)
     mit_sds = mit_bv = 0 # Initialize mitigation amounts
@@ -563,13 +764,16 @@ async def resolve_magical_attack(
             else:
                 log.debug(...) # Success log
 
-    # 7. Send Messages
     hit_desc = "hits"; crit_indicator = ""
-    if is_crit: hit_desc = "{{rCRITICALLY HITS{{x"; crit_indicator = " {{rCRITICAL!{{x"
+    # 7. Send Messages
+    if is_crit:
+        hit_desc = "{rCRITICALLY HITS{x"
+        crit_indicator = " {rCRITICAL!{x"
 
     # Standard Messages
+    # Removed Double S here
     std_dmg_msg_caster = f"Your {spell_display_name} {hit_desc} {target_name} for {{y{int(final_damage)}{{x damage!{crit_indicator}" # Show int damage
-    std_dmg_msg_target = f"{{R{caster_name}'s {spell_display_name} {hit_desc.upper()}S you for {{y{int(final_damage)}{{x damage!{crit_indicator}{{x"
+    std_dmg_msg_target = f"{{R{caster_name}'s {spell_display_name} {hit_desc.upper()} you for {{y{int(final_damage)}{{x damage!{crit_indicator}{{x"
     std_dmg_msg_target += f" {{x({int(target.hp)}/{int(target.max_hp)} HP)"
     std_dmg_msg_room = f"{caster_name}'s {spell_display_name} {hit_desc.upper()}S {target_name}!"
     if final_damage > 0: std_dmg_msg_room += f" ({int(final_damage)} dmg)"
@@ -580,13 +784,23 @@ async def resolve_magical_attack(
     # Don't show roll details for always_hits spells like Magic Missile
     if not always_hits:
         verbose_details += f"\n\r   {{cRoll: {vb_hit_check}{{x"
-    verbose_details += f"\n\r   {{yDmg: {vb_damage_calc}{{x" \
-                    f"\n\r   {{bMit: {vb_mitigation}{{x"
+        verbose_details += f"\n\r   {{yDmg: {vb_damage_calc_magic}{{x"
+        verbose_details += f"\n\r   {{bMit: {vb_mitigation}{{x"
 
     # Send Messages (Always Verbose for Participants)
     if isinstance(caster, Character): await caster.send(std_dmg_msg_caster + verbose_details)
     if isinstance(target, Character): await target.send(std_dmg_msg_target + verbose_details)
     if caster_loc: await caster_loc.broadcast(f"\r\n{std_dmg_msg_room}\r\n", exclude={caster, target})
+
+
+    if isinstance(caster, Mob):
+        #Get speed from mob's attack data (passed as spell data)
+        attack_speed = spell_data.get("speed", 3.0)
+        final_rt = attack_speed
+
+        caster.roundtime = final_rt
+        log.info("COMBAT SET RT (Magic): Mob ID %d (%s) roundtime set to %.2f (speed=%.1f)",
+                caster.instance_id, caster.name, final_rt, attack_speed)
 
 
     # 8. Check Defeat
@@ -748,11 +962,11 @@ async def apply_heal(
     target.hp += actual_healed
 
     # Send messages
-    heal_msg_caster = f"You heal {target.name} for {actual_healed} hit points."
-    heal_msg_target = f"{caster.name.capitalize()} heals you for {actual_healed} hit points."
+    heal_msg_caster = f"You heal {target.name} for {int(actual_healed)} hit points."
+    heal_msg_target = f"{caster.name.capitalize()} heals you for {int(actual_healed)} hit points."
     heal_msg_room = f"{caster.name.capitalize()} heals {target.name}."
 
-    if caster == target: heal_msg_caster = f"You heal yourself for {actual_healed} hit points."
+    if caster == target: heal_msg_caster = f"You heal yourself for {int(actual_healed)} hit points."
 
     await caster.send(heal_msg_caster)
     if target != caster and isinstance(target, Character): await target.send(heal_msg_target)

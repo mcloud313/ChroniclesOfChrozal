@@ -82,7 +82,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "sw": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "southwest"),
     "go": movement_cmds.cmd_go, # Map 'go' verb to cmd_go function # Add 'go' using args as direction/exit name
 
-    # --- V V V Add Item Commands V V V ---
+    # ---Add Item Commands---
     "inventory": item_cmds.cmd_inventory,
     "inv": item_cmds.cmd_inventory, # Alias
     "i": item_cmds.cmd_inventory, # Alias
@@ -98,9 +98,9 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "exa": item_cmds.cmd_examine, # Alias
     "drink": item_cmds.cmd_drink,
     "eat": item_cmds.cmd_eat,
-    # --- ^ ^ ^ ---
+    # ------
 
-    # --- V V V Add Skill Spending Command V V V ---
+    # ---Add Skill Spending Command---
     "spend": skill_cmds.cmd_spend,
     "invest": skill_cmds.cmd_spend, # Alias
     "improve": skill_cmds.cmd_improve, # <<< ADD THIS
@@ -109,8 +109,29 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "@teleport": admin_cmds.cmd_teleport,
     "@examine": admin_cmds.cmd_examine,
     "@setstat": admin_cmds.cmd_setstat,
-    "@dig": admin_cmds.cmd_dig_placeholder, # Placeholder
-    "@tunnel": admin_cmds.cmd_tunnel_placeholder, # Placeholder
+    "@roomstat": admin_cmds.cmd_roomstat,
+    "@roomset": admin_cmds.cmd_roomset,
+    "@roomdelete": admin_cmds.cmd_roomdelete,
+    "@roomlist": admin_cmds.cmd_roomlist,
+    "@setdesc": admin_cmds.cmd_setdesc,
+    "@dig": admin_cmds.cmd_dig,
+    "@setexit": admin_cmds.cmd_setexit,
+    "@delexit": admin_cmds.cmd_delexit,
+
+    # --- Admin Commands ---
+    "@areacreate": admin_cmds.cmd_areacreate,
+    "@arealist": admin_cmds.cmd_arealist,
+    "@areaset": admin_cmds.cmd_areaset,
+    "@areainfo": admin_cmds.cmd_areainfo,
+    "@areadelete": admin_cmds.cmd_areadelete,
+
+    # ---Admin Item Commands---
+    "@icreate": admin_cmds.cmd_icreate,
+    "@ilist": admin_cmds.cmd_ilist,
+    "@istat": admin_cmds.cmd_istat,
+    "@iset": admin_cmds.cmd_iset,
+    "@icopy": admin_cmds.cmd_icopy,
+    "@idelete": admin_cmds.cmd_idelete,
 
 }
 

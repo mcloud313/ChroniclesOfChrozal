@@ -10,11 +10,19 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
+
 class Item:
     """
     Represents an item instance, based on an item_template row from the DB.
     For V1, instances primarily hold template data. Unique instance IDs deferred.   
     """
+    @property
+    def block_chance(self) -> float:
+        """Returns the base block chance of the item (e.g. shield)."""
+        return float(self._stats_dict.get("block_chance"))
+
+
+
     def __init__(self, template_data: aiosqlite.Row):
         """
         Initialize Item from a database row (aiosqlite.row or dict)

@@ -31,7 +31,7 @@ async def cmd_inventory(character: 'Character', world: 'World', db_conn: 'aiosql
     """Displays character inventory, equipment, weight, coinage."""
     
     log.debug("--- Starting cmd_inventory for %s ---", character.name)
-    output = "\r\n" + "=" * 20 + " Inventory " + "=" * 20 + "\r\n"
+    output = "\r\n" + "=" * 30 + " Inventory " + "=" * 30 + "\r\n"
 
     # Equipment
     output += "You are wearing:\r\n"

@@ -586,6 +586,20 @@ class Character:
         """Checks if the character knows a specific ability by its internal key."""
         return ability_key.lower() in self.known_abilities
 
+    def get_shield(self, world: 'World') -> Optional[Item]:
+        """Returns the Item object for the equipped shield, or None if no shield."""
+        shield_template_id = self.equipment.get("WIELD_OFF")
+        if not shield_template_id:
+            return None
+        
+        shield_item = self.get_item_instance(world, shield_template_id)
+        if shield_item and shield_item.item_type.upper() == "SHIELD":
+            return shield_item
+        else:
+            # Item in offhand is not of type SHIELD
+            if shield_item: log.warning("Item %d in WIELD_OFF for %s is not type SHIELD.", shield_template_id, self.name)
+            return None
+
     def __repr__(self) -> str:
         return f"<Character {self.dbid}: '{self.first_name} {self.last_name}'>"
 
