@@ -85,44 +85,79 @@ async def cmd_teleport(character: 'Character', world: 'World', db_conn: 'aiosqli
     return True
 
 async def cmd_roomstat(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
-    """Admin command: Shows detailed stats for the current or specified room."""
-
-    target_room_id = None
+    """Admin Command: Shows detailed stats for the current or specified room."""
     room_to_stat = None
+    target_room_id = None
 
-    if not args_str:
+    args = args_str.strip()
+    
+    if not args:
+        # No argument, use current room
         if character.location:
             room_to_stat = character.location
-            target_room_id = character.location.dbid
-        else: await character.send("You aren't in a room."); return True
-    elif args_str.isdigit():
-        target_room_id = int(args_str)
-        room_to_stat = world.get_room(target_room_id)
-        if not room_to_stat: await character.send(f"Room {target_room_id} not found."); return True
+            target_room_id = character.location_id
+        else:
+            await character.send("You are not in a room to check stats for.")
+            return True
+    elif args.isdigit():
+        # Argument is a room ID
+        try:
+            target_room_id = int(args)
+            room_to_stat = world.get_room(target_room_id) # Check cache
+            if not room_to_stat:
+                # Try DB if not in cache (shouldn't usually happen)
+                room_data = await database.get_room_data(db_conn, target_room_id)
+                if room_data:
+                    # Create a temporary Room object just for stat display
+                    # This won't have live characters/mobs/items from cache
+                    room_to_stat = Room(dict(room_data))
+                    log.warning("cmd_roomstat: Displaying data for room %d found in DB but not in world cache.", target_room_id)
+                else:
+                    await character.send(f"Room ID {target_room_id} not found.")
+                    return True
+        except ValueError:
+            await character.send("Invalid Room ID.")
+            return True
     else:
         await character.send("Usage: @roomstat [room_id]")
         return True
 
-    # Fetch detailed data if needed (current object might be slightly out of sync?)
-    # For now, use the in-memory object
-    area_name = world.get_area_name(room_to_stat.area_id)
-    output = [f"\r\n--- Room Stats for [{room_to_stat.dbid}] {room_to_stat.name} ---"]
-    output.append(f" Area       : [{room_to_stat.area_id}] {area_name}")
-    output.append(f" Description: {room_to_stat.description}")
-    output.append(f" Flags      : {sorted(list(room_to_stat.flags))}")
-    output.append(f" Exits      : {json.dumps(room_to_stat.exits)}") # Show raw JSON for exits
-    output.append(f" Spawners   : {json.dumps(room_to_stat.spawners)}") # Show raw JSON for spawners
-    output.append(f" Coinage    : {room_to_stat.coinage}")
-    # Items requires template lookup
+    if not room_to_stat:
+        await character.send("Could not find the specified room.")
+        return True
+    
+    area_name = "Unknown Area" # Default
+    area_data = world.get_area(room_to_stat.area_id) # Use existing get_area
+    if area_data:
+        try:
+            area_name = area_data['name'] # Access like a dictionary key
+        except (KeyError, IndexError): # Handle if 'name' column missing somehow
+            log.warning("Area data for ID %d missing 'name' key.", room_to_stat.area_id)
+            area_name = f"Area {room_to_stat.area_id}" # Fallback
+
+    # --- Format Output ---
+    output = [f"\r\n--- Room Stats [ID: {room_to_stat.dbid}] ---"]
+    output.append(f"Name       : {room_to_stat.name}")
+    # Use the retrieved area_name here
+    output.append(f"Area       : {area_name} [ID: {room_to_stat.area_id}]")
+    output.append(f"Description: {room_to_stat.description}")
+    output.append(f"Flags      : {sorted(list(room_to_stat.flags)) if room_to_stat.flags else 'None'}")
+    output.append(f"Exits      : {json.dumps(room_to_stat.exits) if room_to_stat.exits else '{}'}")
+    output.append(f"Spawners   : {json.dumps(room_to_stat.spawners) if room_to_stat.spawners else '{}'}")
+    # ... (List Objects) ...
+    obj_names = [obj.get('name','?') for obj in room_to_stat.objects]
+    output.append(f"Objects ({len(obj_names)}): {', '.join(obj_names) if obj_names else 'None'}")
+    # ... (List Items/Coins) ...
+    item_counts = {}
+    for item_id in room_to_stat.items: item_counts[item_id] = item_counts.get(item_id, 0) + 1
     item_names = []
-    for item_tid in room_to_stat.items:
-        template = utils.get_item_template_from_world(world, item_tid)
-        item_names.append(template['name'] if template else f"Item#{item_tid}")
-    output.append(f" Items      : {item_names if item_names else 'None'}")
-    # Objects requires name lookup
-    object_names = [obj.get('name', 'Unknown') for obj in room_to_stat.objects]
-    output.append(f" Objects    : {object_names if object_names else 'None'}")
-    output.append("------------------------------------------")
+    for t_id, count in item_counts.items():
+        template = world.get_item_template(t_id)
+        name = template['name'] if template else f"ID {t_id}"
+        item_names.append(f"{name}{f' (x{count})' if count > 1 else ''}")
+    output.append(f"Items ({len(room_to_stat.items)}): {', '.join(item_names) if item_names else 'None'}")
+    output.append(f"Coinage    : {utils.format_coinage(room_to_stat.coinage)}") # Use formatted coins
+    output.append("--------------------------------")
 
     await character.send("\r\n".join(output))
     return True
@@ -787,13 +822,18 @@ async def cmd_areadelete(character: 'Character', world: 'World', db_conn: 'aiosq
 
     # Area exists and is empty, proceed with deletion
     rowcount = await database.delete_area(db_conn, area_id_to_delete)
-    if rowcount == 1:
-        await character.send(f"Area ID {area_id_to_delete} ('{area_data['name']}') deleted.")
-        # TODO: Remove from world.areas cache?
-    elif rowcount == 0: # Should not happen if load_area_data worked
-        await character.send(f"Failed to delete Area ID {area_id_to_delete} (not found during delete).")
-    else: # None or other error
-        await character.send("{rDatabase error deleting area.{x")
+    if rowcount is not None and rowcount > 0: # Check for > 0 instead of == 1
+        # Remove from world cache if it exists there
+        if area_id_to_delete in world.areas:
+            del world.areas[area_id_to_delete]
+            log.info("Removed deleted Area %d from world cache.", area_id_to_delete)
+        await character.send(f"Area ID {area_id_to_delete} ('{area_data['name']}') deleted successfully.")
+    elif rowcount == 0:
+        await character.send(f"Failed to delete Area ID {area_id_to_delete} (not found during delete attempt).")
+    elif rowcount == -1: # Special code from delete_area helper for "contains rooms"
+        await character.send(f"Cannot delete Area ID {area_id_to_delete}. Area is not empty.")
+    else: # Includes None (DB error) or unexpected negative value
+        await character.send("Database error occurred while deleting area.{x")
 
     return True
 
