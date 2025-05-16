@@ -162,13 +162,14 @@ def _parse_input(raw_input: str) -> Tuple[str, str]:
     Returns:
     A tuple containing (command_verb, arguments_string).
     Returns ("", "") if input is empty.
+    The command_verb is lowercased, but arguments_string retains original casing.
     """
-    normalized = raw_input.lower().strip()
-    if not normalized:
+    stripped_input = raw_input.strip() # Strip whitespace first
+    if not stripped_input:
         return "", ""
     
-    parts = normalized.split(" ", 1)
-    command_verb = parts[0]
+    parts = stripped_input.split(" ", 1)
+    command_verb = parts[0].lower() # Lowercase only the command part
     args_str = parts[1] if len(parts) > 1 else ""
 
     return command_verb, args_str

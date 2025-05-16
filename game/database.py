@@ -273,6 +273,7 @@ async def execute_query(
         async with conn.execute(query, params) as cursor:
             last_id = cursor.lastrowid
             row_count = cursor.rowcount
+            log.info(f"DB_CURSOR_INFO: Query='{query}', Params={params}, cursor.rowcount={row_count}, cursor.lastrowid={last_id}")
         await conn.commit() # Commit the transaction
         result = last_id if last_id else row_count
         log.info("execute_query successful: Query=[%s], Params=%r, Result (last_id or rowcount)=%r", query, params, result)
@@ -461,7 +462,7 @@ async def load_all_item_templates(conn: aiosqlite.Connection, search_term: Optio
         log.debug("Loading item templates matching: %s", search_term)
     else:
         # Fetch all templates if no search term
-        query = "SELECT id, name, type FROM item_templates ORDER BY id" # Select specific columns for list
+        query = "SELECT * FROM item_templates ORDER BY id" # Select ALL columns for full data
         params = ()
         log.debug("Loading all item templates.")
 
@@ -526,7 +527,7 @@ async def create_character(
     race_id: int, class_id: int, stats_json: str, skills_json: str, description: str,
     hp: float, max_hp: float, essence: float, max_essence: float,
     known_spells_json: str = '[]', known_abilities_json: str = '[]',
-    location_id: int = 10, # Default Tavern
+    location_id: int = 0, # Default Tavern
     spiritual_tether: int = 1, # Passed or calculated
     # Add params for inventory, equipment, coinage with defaults
     inventory_json: str = '[]',

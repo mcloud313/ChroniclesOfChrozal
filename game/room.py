@@ -46,7 +46,7 @@ class Room:
             self.exits: Dict[str, Any] = json.loads(db_data['exits'] or '{}')
         except json.JSONDecodeError:
             log.warning(f"Room {self.dbid}: Could not decode exits JSON: {db_data['exits']}")
-            self.exits: Dict[str, int] = {}
+            self.exits: Dict[str, Any] = {} # Consistent type hint
 
         # Load flags (JSON string -> set) - store flags as a list/tuple in JSON
         try:

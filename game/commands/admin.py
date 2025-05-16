@@ -452,7 +452,6 @@ async def cmd_setexit(character: 'Character', world: 'World', db_conn: 'aiosqlit
     reverse_dir = utils.get_opposite_direction(direction)
     if reverse_dir:
         try:
-            target_exits = json.loads(target_room.exits_str or '{}') # Reload from DB string maybe? Use memory for now.
             target_exits = target_room.exits.copy()
             # Simple reverse link for now, don't copy skill check back automatically
             target_exits[reverse_dir] = current_room.dbid
@@ -513,10 +512,12 @@ async def cmd_roomset(character: 'Character', world: 'World', db_conn: 'aiosqlit
         @roomset flags <+|-><FLAG_NAME>
     """
     if not character.location:
+        log.warning("cmd_roomset: Character has no location.")
         await character.send("You are not currently in a room.")
         return True
 
     current_room = character.location
+    log.debug(f"cmd_roomset: Initial args_str: '{args_str}'")
     parts = args_str.split(" ", 1) # Split field from value
 
     if len(parts) < 2:
@@ -526,38 +527,39 @@ async def cmd_roomset(character: 'Character', world: 'World', db_conn: 'aiosqlit
 
     field = parts[0].lower()
     value_str = parts[1].strip()
+    log.debug(f"cmd_roomset: Parsed field='{field}', value_str='{value_str}' (casing from input)")
 
     if not value_str:
         await character.send(f"You must provide a value for field '{field}'.")
         return True
 
-    updated = False
-    rowcount = None
+    # current_room is already defined
+    room_id = current_room.dbid
+    param_value = value_str # Default value to pass to DB
+    log.debug(f"cmd_roomset: Initial param_value='{param_value}' (should match value_str)")
+
+    # db_update_needed = True # This variable is not used with the current structure
 
     # --- Handle different fields ---
     if field == "name":
         # TODO: Add validation for name length/characters?
-        current_room.name = value_str # Update memory
-        rowcount = await database.update_room_field(db_conn, current_room.dbid, "name", value_str)
-        if rowcount == 1: updated = True
+        # Value is already in param_value
+        pass
 
     elif field == "description":
-        current_room.description = value_str # Update memory
-        rowcount = await database.update_room_field(db_conn, current_room.dbid, "description", value_str)
-        if rowcount == 1: updated = True
+        # Value is already in param_value
+        pass
 
     elif field == "area_id":
         try:
             new_area_id = int(value_str)
             # Check if target area exists
             target_area_data = world.get_area(new_area_id) # Check cache
-            log.info("Attempting to set room %d area to %d. Target area exists: %s",
-                    current_room.dbid, new_area_id, bool(target_area_data))
+            # log.info("Attempting to set room %d area to %d. Target area exists: %s",
+            #         current_room.dbid, new_area_id, bool(target_area_data)) # Debug log moved/removed
 
             if world.get_area(new_area_id):
-                current_room.area_id = new_area_id # Update memory
-                rowcount = await database.update_room_field(db_conn, current_room.dbid, "area_id", new_area_id)
-                if rowcount == 1: updated = True
+                param_value = new_area_id # Use integer value
             else:
                 await character.send(f"Area ID {new_area_id} does not exist.")
                 return True
@@ -581,34 +583,48 @@ async def cmd_roomset(character: 'Character', world: 'World', db_conn: 'aiosqlit
             if flag_name in current_room.flags:
                 await character.send(f"Room already has flag '{flag_name}'.")
                 return True
-            current_room.flags.add(flag_name) # Update memory
+            current_room.flags.add(flag_name) # Update memory immediately for feedback
             await character.send(f"Flag '{flag_name}' added.")
-            updated = True
+            # db_update_needed remains True
         else: # action == '-'
             if flag_name not in current_room.flags:
                 await character.send(f"Room does not have flag '{flag_name}'.")
                 return True
-            current_room.flags.discard(flag_name) # Update memory
+            current_room.flags.discard(flag_name) # Update memory immediately for feedback
             await character.send(f"Flag '{flag_name}' removed.")
-            updated = True
 
         # If updated, save the new flags set to the DB
-        if updated:
-            flags_json = json.dumps(sorted(list(current_room.flags)))
-            rowcount = await database.update_room_field(db_conn, current_room.dbid, "flags", flags_json)
-            if rowcount != 1: updated = False # DB save failed
+        # Prepare value for DB - JSON string
+        param_value = json.dumps(sorted(list(current_room.flags)))
+        # The DB update happens below the if/elif block
 
     else:
         await character.send(f"Invalid field '{field}'. Valid fields: name, description, area_id, flags.")
         return True
 
-    # --- Send final feedback ---
-    if updated and rowcount is not None and rowcount > 0: # <<< Changed check from == 1
-        await character.send(f"Room {current_room.dbid} field '{field}' updated successfully.")
-    elif updated and rowcount == 0: # Update attempted but didn't find the row? Should be caught earlier.
-        await character.send(f"Failed to update room field '{field}' (Room ID not found during DB update?).")
-    else: # updated is False (JSON error, etc) OR rowcount is None (DB error)
-        await character.send(f"Failed to update room field '{field}' (Check logs for details).")
+    # --- Perform Database Update ---
+    log.debug(f"cmd_roomset: Calling database.update_room_field with room_id={room_id}, field='{field}', param_value='{param_value}'")
+    # Call the DB update function
+    rowcount = await database.update_room_field(db_conn, room_id, field, param_value)
+
+    # --- Send final feedback based on DB result ---
+    if rowcount is not None: # DB operation succeeded (0 or more rows affected)
+        # Update memory for name/description/area_id if DB save succeeded
+        original_name_in_memory = current_room.name # For logging comparison
+        if field == "name": current_room.name = param_value
+        elif field == "description": current_room.description = param_value
+        elif field == "area_id": current_room.area_id = param_value
+        # Flags were already updated in memory
+
+        if rowcount > 0:
+            await character.send(f"Room {room_id} field '{field}' updated successfully.")
+            log.debug(f"cmd_roomset: Room {room_id} field '{field}' updated. In-memory name now: '{current_room.name}' (was '{original_name_in_memory}')")
+        else: # rowcount is 0 - means value was already the same
+            await character.send(f"Room {room_id} field '{field}' was already set to that value.")
+            log.debug(f"cmd_roomset: Room {room_id} field '{field}' value unchanged. In-memory name: '{current_room.name}'")
+    else: # rowcount is None - DB error occurred
+        await character.send(f"{r}Failed to update room field '{field}' due to a database error.{x} Check logs.")
+        # TODO: If flags were changed in memory, need to revert them or reload room state?
 
     return True
 
@@ -928,22 +944,37 @@ async def cmd_istat(character: 'Character', world: 'World', db_conn: 'aiosqlite.
         return True
     template_id = int(args_str.strip())
 
-    template = world.get_item_template(template_id) # Check cache first
-    if not template:
-        template_row = await database.load_item_template(db_conn, template_id) # Try DB
-        if template_row: template = dict(template_row) # Convert row
+    template_data = world.get_item_template(template_id) # Check cache first
 
-    if not template:
+    if not template_data: # Not in cache, try DB
+        template_data = await database.load_item_template(db_conn, template_id) # Returns Row or None
+
+    if not template_data: # Still not found
         await character.send(f"Item Template ID {template_id} not found.")
         return True
 
-    output = [f"\r\n--- Item Template [ID: {template['id']}] ---"]
-    output.append(f"Name       : {template.get('name', 'N/A')}")
-    output.append(f"Type       : {template.get('type', 'N/A')}")
-    output.append(f"Damage Type: {template.get('damage_type', 'N/A')}")
-    output.append(f"Description: {template.get('description', '')}")
-    output.append(f"Stats JSON : {template.get('stats', '{}')}")
-    output.append(f"Flags JSON : {template.get('flags', '[]')}")
+    # Ensure template_data is a dictionary for consistent access
+    # aiosqlite.Row supports dict-like access (e.g., template_data['name'])
+    # but not .get() method.
+    final_template_dict: dict
+    if isinstance(template_data, dict):
+        final_template_dict = template_data
+    else:
+        # Assume it's an aiosqlite.Row or similar that can be converted to dict
+        try:
+            final_template_dict = dict(template_data)
+        except TypeError:
+            log.error(f"Item template {template_id} (type: {type(template_data)}) could not be converted to dict.")
+            await character.send(f"Error processing data for item template {template_id}.")
+            return True
+
+    output = [f"\r\n--- Item Template [ID: {final_template_dict['id']}] ---"]
+    output.append(f"Name       : {final_template_dict.get('name', 'N/A')}")
+    output.append(f"Type       : {final_template_dict.get('type', 'N/A')}")
+    output.append(f"Damage Type: {final_template_dict.get('damage_type', 'N/A')}")
+    output.append(f"Description: {final_template_dict.get('description', '')}")
+    output.append(f"Stats JSON : {final_template_dict.get('stats', '{}')}")
+    output.append(f"Flags JSON : {final_template_dict.get('flags', '[]')}")
     output.append("-------------------------------")
     await character.send("\r\n".join(output))
     return True
@@ -970,28 +1001,38 @@ async def cmd_iset(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
 
     field = parts[1].lower()
     value = parts[2].strip() # Keep value as string for now
+    processed_value = value # This will hold the potentially unwrapped value for JSON fields
 
     valid_fields = ["name", "description", "type", "stats", "flags", "damage_type"]
     if field not in valid_fields:
         await character.send(f"Invalid field '{field}'. Valid: {', '.join(valid_fields)}")
         return True
-    if not value and field not in ['damage_type']: # Allow empty damage_type to clear it
-        await character.send(f"Cannot set {field} to an empty value.")
-        return True
-    if field == 'damage_type' and not value:
-        value = None # Set damage type to NULL
 
     # Special validation for JSON fields
     if field in ["stats", "flags"]:
+        # If the player wrapped the JSON in single quotes for the command line, remove them
+        if value.startswith("'") and value.endswith("'"):
+            processed_value = value[1:-1]
+        else:
+            processed_value = value # Use as is if not wrapped
+
         try:
-            json.loads(value) # Validate JSON structure
-            if field == "stats" and not isinstance(json.loads(value), dict): raise TypeError("Stats must be a JSON object {{}}")
-            if field == "flags" and not isinstance(json.loads(value), list): raise TypeError("Flags must be a JSON list []")
+            # Validate JSON structure using the (potentially) unwrapped value
+            parsed_json = json.loads(processed_value)
+            if field == "stats" and not isinstance(parsed_json, dict):
+                raise TypeError("Stats must be a JSON object {}")
+            if field == "flags" and not isinstance(parsed_json, list):
+                raise TypeError("Flags must be a JSON list []")
         except (json.JSONDecodeError, TypeError) as e:
             await character.send(f"Invalid JSON format for {field}: {e}")
             return True
+    elif field == 'damage_type' and not value: # Allow empty damage_type to clear it
+        processed_value = None
+    elif not value: # For other non-JSON fields, don't allow empty
+        await character.send(f"Cannot set {field} to an empty value.")
+        return True
 
-    updated_row = await database.update_item_template_field(db_conn, template_id, field, value)
+    updated_row = await database.update_item_template_field(db_conn, template_id, field, processed_value)
 
     if updated_row:
         world.item_templates[template_id] = dict(updated_row) # Update cache
@@ -1619,4 +1660,3 @@ async def cmd_odelete(character: 'Character', world: 'World', db_conn: 'aiosqlit
         await character.send(f"Failed to delete Room Object {object_id} (DB error or already gone?).")
 
     return True
-
