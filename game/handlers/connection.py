@@ -10,21 +10,16 @@ import logging
 import aiosqlite
 from enum import Enum, auto
 from typing import Optional, Dict, Any
-# Import necessary game components using relative paths
+
 from game import database
 from game.player import Player
 from game.character import Character
 from game.world import World
 from game import utils
 from game.commands import handler as command_handler
-from game.handlers.creation import CreationHandler, CreationState
+from game.handlers.creation import CreationHandler
 from game.definitions import skills as skill_defs
-from game.definitions import races as race_defs
 from game.definitions import classes as class_defs
-
-
-# Assume command handler will exist later
-# from ..comands import handler as command_handler
 
 log = logging.getLogger(__name__)
 
@@ -46,26 +41,6 @@ ___  _  _  ____   __   __ _  __  ___  __    ____  ____
 {W--------------------------------------------------{x
 """
 
-# # Simple Message of the Day
-# MOTD = """
-# \r\n--- {CWelcome to Chronicles of Chrozal (Alpha 0.50) ---{x
-# \r\n  
-# \r\n  ___  _  _  ____   __   __ _  __  ___  __    ____  ____       
-# \r\n / __)/ )( \(  _ \ /  \ (  ( \(  )/ __)(  )  (  __)/ ___)      
-# \r\n( (__ ) __ ( )   /(  O )/    / )(( (__ / (_/\ ) _) \___ \      
-# \r\n \___)\_)(_/(__\_) \__/ \_)__)(__)\___)\____/(____)(____/      
-# \r\n                      __  ____                                 
-# \r\n                     /  \(  __)                                
-# \r\n                    (  O )) _)                                 
-# \r\n                     \__/(__)                                  
-# \r\n                        ___  _  _  ____   __  ____   __   __   
-# \r\n                       / __)/ )( \(  _ \ /  \(__  ) / _\ (  )  
-# \r\n                      ( (__ ) __ ( )   /(  O )/ _/ /    \/ (_/\
-# \r\n                      \___)\_)(_/(__\_) \__/(____)\_/\_/\____/
-# \r\n{W--------------------------------------------------{x
-# \r\n"""
-
-# Define connection states
 class ConnectionState(Enum):
     GETTING_USERNAME = auto()
     GETTING_PASSWORD = auto()
@@ -79,7 +54,7 @@ class ConnectionState(Enum):
     DISCONNECTED = auto()
 
 class ConnectionHandler:
-    """Handles a single client connection and its state transitions"""
+    """Handles a single client connection and its state transitions."""
 
     MAX_PASSWORD_ATTEMPTS = 3
 
@@ -87,122 +62,76 @@ class ConnectionHandler:
         self.reader = reader
         self.writer = writer
         self.world = world
-        self.db_conn = db_conn # Keep connection if needed for transactions later
+        self.db_conn = db_conn
         self.state = ConnectionState.GETTING_USERNAME
         self.addr = writer.get_extra_info('peername', 'Unknown Address')
 
-        self.player_account: Optional[Player] = None # Holds loaded player account
-        self.active_character: Optional[Character] = None # Holds loaded character object
+        self.player_account: Optional[Player] = None
+        self.active_character: Optional[Character] = None
         self.password_attempts: int = 0
         self.new_account_data: Dict[str, Any] = {}
 
         log.info("ConnectionHandler initialized for %s", self.addr)
 
     async def _prompt(self, message: str, hide_input: bool = False):
-        """Sends a prompt to the client. Adds newline if needed."""
-        # In Telnet, hiding input requires specific negotiation (IAC WILL ECHO / WON'T ECHO)
-        # For simplicity now, we don't hide password input, just indicate it.
+        """Sends a prompt to the client."""
         if not message.endswith("\n\r") and not message.endswith("\r\n"):
-            message += ": " # Simple prompt indicator
-        # Add newline for prompt display separation if desired, or keep it on same line
-        # message = "\r\n" + message
-
+            message += ": "
         self.writer.write(message.encode('utf-8'))
         await self.writer.drain()
 
     async def _read_line(self) -> str | None:
-        """
-        Reads a line of input from the client, handles errors,
-        and attempts basic filtering of initial Telnet IAC commands.
-        """
+        """Reads a line of input from the client."""
         try:
-            # Read until newline character, common for Telnet clients
-            # Add a timeout to prevent hanging if client sends IAC but no newline? Optional
-            # data = await asyncio.wait_for(self.reader.readuntil(b'\n'), timeout=60.0)
             data = await self.reader.readuntil(b'\n')
-
-            # --- Basic Telnet IAC Filtering
-            # Check if data starts with IAC (Interpret as Command) byte 0xff
             if data.startswith(b'\xff'):
                 log.debug("Received Telnet IAC sequence from %s: %r", self.addr, data)
-                # This is very basic - proper handling involves parsing options.
-                # For now, we just ignore this line and prompt again.
-                # We could try reading more bytes here if needed to consume full command.
-                return
-
-            # --- Attempt to decode as UTF-8
-            try:
-                decoded_data = data.decode('utf-8').strip() # Decode and remove whitespace/newlines
-                log.debug("Received from %s: %r", self.addr, decoded_data)
-                # Allow 'quit' during creation/login too
-                if decoded_data.lower() == 'quit':
-                    log.info("Quit command received from %s during login/creation.", self.addr)
-                    self.state = ConnectionState.DISCONNECTED
-                    return None
-                return decoded_data
-            except UnicodeDecodeError as ude:
-                # If it's not IAC but still fails decoding, log it and treat as error
-                log.error("UnicodeDecodeError reading from %s: %s. Data: %r", self.addr, ude, data)
-                await self._send("There was an error interpreting your input. Please try simple text.")
-                # Depending on severity, could disconnect or just return empty to re-prompt
-                # Let's return empty for now.
                 return ""
-
+            decoded_data = data.decode('utf-8').strip()
+            log.debug("Received from %s: %r", self.addr, decoded_data)
+            if decoded_data.lower() == 'quit':
+                self.state = ConnectionState.DISCONNECTED
+                return None
+            return decoded_data
         except (ConnectionResetError, asyncio.IncompleteReadError, BrokenPipeError) as e:
             log.warning("Connection lost from %s during read: %s", self.addr, e)
             self.state = ConnectionState.DISCONNECTED
             return None
-        except Exception as e:
-            log.exception("Unexpected error reading from %s:", self.addr, exc_info=True)
+        except Exception:
+            log.exception("Unexpected error reading from %s:", self.addr)
             self.state = ConnectionState.DISCONNECTED
             return None
-        
-    async def _send(self, message: str, add_newline: bool = True): # add_newline was in prev example, add if needed
+
+    async def _send(self, message: str, add_newline: bool = True):
         """Safely sends a message to the client, applying color codes."""
         if self.writer.is_closing():
-            log.debug("Attempted to send to closing writer for %s.", self.addr) # Added debug
             return
-
-        original_message = message # Keep original for logging if desired
-
-        # --- V V V Apply Colorization V V V ---
-        try:
-            message_to_send = utils.colorize(message)
-        except Exception as color_e:
-            log.error("Error applying color codes: %s", color_e)
-            message_to_send = message # Send uncolored on error
-        # --- ^ ^ ^ ---
-
-        # Ensure proper newline for telnet
-        if add_newline and not message_to_send.endswith(('\r\n', '\n')):
+        message_to_send = utils.colorize(message)
+        if add_newline and not message_to_send.endswith('\r\n'):
             message_to_send += '\r\n'
-
         try:
-            log.debug("Sending to %s: %r", self.addr, original_message) # Log original message for clarity
-            self.writer.write(message_to_send.encode(config.ENCODING)) # Send the colorized version
+            log.debug("Sending to %s: %r", self.addr, message)
+            self.writer.write(message_to_send.encode(config.ENCODING))
             await self.writer.drain()
         except (ConnectionResetError, BrokenPipeError) as e:
             log.warning("Connection lost from %s during write: %s", self.addr, e)
             self.state = ConnectionState.DISCONNECTED
-        except Exception as e:
-            log.exception("Unexpected error writing to %s:", self.addr, exc_info=True)
+        except Exception:
+            log.exception("Unexpected error writing to %s:", self.addr)
             self.state = ConnectionState.DISCONNECTED
 
     async def _handle_get_username(self):
         """Handles prompting for and receiving the username."""
         await self._prompt("Enter your account name")
         username = await self._read_line()
-        if username is None: return # Connection lost
+        if username is None: return
 
-        if not username or not username.isalnum() or len(username) < 3 or len(username) > 20: #Empty input
+        if not username or not username.isalnum() or len(username) < 3 or len(username) > 20:
             await self._send("Invalid username. Must be 3-20 letters/numbers only.")
-            return # Stay in current state, prompt again
-        
-        # Try to load account
-        player_data = await database.load_player_account(self.db_conn, username)
+            return
 
+        player_data = await database.load_player_account(self.db_conn, username)
         if player_data:
-            # Instantiate player object (only holds account data)
             self.player_account = Player(
                 dbid=player_data['id'],
                 username=player_data['username'],
@@ -214,59 +143,49 @@ class ConnectionHandler:
             self.password_attempts = 0
             self.state = ConnectionState.GETTING_PASSWORD
         else:
-            # Account not found - ask to create
             log.info("Player account '%s' not found for %s.", username, self.addr)
-            # store potential username
             self.new_account_data = {"username": username}
-            self.state = ConnectionState.ASK_CREATE_ACCOUNT # Go to confirmation
+            self.state = ConnectionState.ASK_CREATE_ACCOUNT
 
     async def _handle_ask_create_account(self):
         """Asks the user if they want to create a new account."""
         username = self.new_account_data.get("username", "Unknown")
         await self._prompt(f"Account '{username}' not found. Create it? (yes/no)")
         choice = await self._read_line()
-        if choice is None: return # Quit or connection lost
+        if choice is None: return
 
-        if choice.lower() == 'yes' or choice.lower() == 'y':
-            log.info("User %s chose to create new account '%s'.", self.addr, username)
+        if choice.lower() in ['yes', 'y']:
             self.state = ConnectionState.GETTING_NEW_ACCOUNT_EMAIL
-        elif choice.lower() == 'no' or choice.lower() == 'n':
-            log.info("User %s declined account creation.", self.addr)
-            await self._send("Okay, please enter a different account name.")
-            self.new_account_data = {} # Clear stored username
-            self.state = ConnectionState.GETTING_USERNAME # Go back to username prompt
+        elif choice.lower() in ['no', 'n']:
+            self.new_account_data = {}
+            self.state = ConnectionState.GETTING_USERNAME
         else:
             await self._send("Please enter 'yes' or 'no'.")
-            # Stay in ASK_CREATE_ACCOUNT state
 
     async def _handle_get_new_account_email(self):
-        """Prompts for and validates new account email"""
+        """Prompts for and validates new account email."""
         await self._prompt("Enter your email address")
         email = await self._read_line()
         if email is None: return
 
-        # Basic validation - more robust validation recommended for production
         if not email or '@' not in email or '.' not in email.split('@')[-1]:
             await self._send("Invalid email format. Please try again.")
-            return # Stay in state
-        
+            return
+
         self.new_account_data['email'] = email
-        log.debug("Got email '%s' for new account %s", email, self.new_account_data['username'])
         self.state = ConnectionState.GETTING_NEW_PASSWORD
 
     async def _handle_get_new_password(self):
-        """Prompts for new accoutn password."""
+        """Prompts for new account password."""
         await self._prompt("Choose a password (min 6 characters)")
         password = await self._read_line()
         if password is None: return
 
-        # Basic validation
         if not password or len(password) < 6:
             await self._send("Password too short. Must be at least 6 characters.")
-            return # Stay in state
-        
-        self.new_account_data['password'] = password # Store plaintext temporarily
-        log.debug("Got password for new account %s", self.new_account_data['username'])
+            return
+
+        self.new_account_data['password'] = password
         self.state = ConnectionState.CONFIRM_NEW_PASSWORD
 
     async def _handle_confirm_new_password(self):
@@ -277,60 +196,69 @@ class ConnectionHandler:
 
         if confirm_password != self.new_account_data.get('password'):
             await self._send("Passwords do not match. Please try setting password again.")
-            self.new_account_data.pop('password', None) # Clear stored password
-            self.state = ConnectionState.GETTING_NEW_PASSWORD # Go back to set password
+            self.new_account_data.pop('password', None)
+            self.state = ConnectionState.GETTING_NEW_PASSWORD
             return
 
-        # Passwords match - Hash and create account
         username = self.new_account_data['username']
         email = self.new_account_data['email']
         password = self.new_account_data['password']
         hashed = utils.hash_password(password)
 
-        log.info("Attempting to create account '%s' in database...", username)
         new_player_id = await database.create_player_account(self.db_conn, username, hashed, email)
-
-        # Clear temporary data regardless of success/failure now
         self.new_account_data = {}
 
         if new_player_id:
-            log.info("Account '%s' (ID: %s) created successfully.", username, new_player_id)
             await self._send(f"Account '{username}' created successfully!")
-            # Now load the new account into self.player_account
             player_data = await database.load_player_account(self.db_conn, username)
             if player_data:
                 self.player_account = Player(
-                    dbid=player_data['id'], username=player_data['username'],
-                    email=player_data['email'], hashed_password=player_data['hashed_password'],
+                    dbid=player_data['id'],
+                    username=player_data['username'],
+                    email=player_data['email'],
+                    hashed_password=player_data['hashed_password'],
                     is_admin=player_data['is_admin']
                 )
-                # New accounts always go to character creation
                 self.state = ConnectionState.CREATING_CHARACTER
             else:
-                # Should not happen if create succeeded, but handle DB inconsistency
-                log.error("Failed to load newly created player account '%s'!", username)
                 await self._send("Error loading your new account data. Disconnecting.")
                 self.state = ConnectionState.DISCONNECTED
         else:
-            # DB error during creation (e.g., email UNIQUE constraint?)
-            log.error("Database failed to create account '%s'.", username)
             await self._send("Failed to create account (possibly email already in use?). Please try again.")
-            self.state = ConnectionState.GETTING_USERNAME # Go back to start
+            self.state = ConnectionState.GETTING_USERNAME
 
     async def _handle_get_password(self):
-        """Handles prompting for and verifying the password."""
+        """Handles prompting for and verifying the password, with migration logic."""
         if not self.player_account:
             log.error("Reached GETTING_PASSWORD state without a loaded player account for %s.", self.addr)
             self.state = ConnectionState.DISCONNECTED
             return
-        
-        await self._prompt(f"Password for {self.player_account.username}") # Don't hide input yet
-        password = await self._read_line()
-        if password is None: return # Connection lost
 
-        if self.player_account.check_password(password):
-            log.info("Password correct for player %s (%s). Admin: %s",
-                self.player_account.username, self.addr, self.player_account.is_admin) # Log admin status
+        await self._prompt(f"Password for {self.player_account.username}")
+        password = await self._read_line()
+        if password is None: return
+
+        is_match, needs_rehash = self.player_account.check_password(password)
+
+        if is_match:
+            log.info("Password correct for player %s (%s).", self.player_account.username, self.addr)
+            
+            # This is the core of the seamless upgrade.
+            if needs_rehash:
+                log.info("Password for %s needs rehash. Upgrading now.", self.player_account.username)
+                try:
+                    # 1. Generate the new Argon2 hash for the correct password.
+                    new_hash = utils.hash_password(password)
+                    # 2. Update the hash in the database.
+                    await database.update_player_password(self.db_conn, self.player_account.dbid, new_hash)
+                    # 3. Update the hash on the in-memory player object.
+                    self.player_account.hashed_password = new_hash
+                    log.info("Password for %s successfully upgraded to Argon2.", self.player_account.username)
+                except Exception:
+                    log.exception("Failed to rehash and save new password for %s.", self.player_account.username)
+                    # Don't lock the user out if this fails; they can still play this session.
+                    await self._send("{rNote: Could not update your password to the new secure format. Please report this.{x")
+
             await self._send("\r\nPassword accepted.")
             self.state = ConnectionState.SELECTING_CHARACTER
         else:
@@ -342,164 +270,126 @@ class ConnectionHandler:
                 self.state = ConnectionState.DISCONNECTED
             else:
                 await self._send(f"\r\nIncorrect password. ({self.MAX_PASSWORD_ATTEMPTS - self.password_attempts} attempts remaining)")
-                # Stay in GETTING_PASSWORD state
 
     async def _handle_select_character(self):
         """Handles listing characters and processing selection."""
         if not self.player_account:
-            log.error("Reached SELECTING_CHARACTER state without player account for %s.", self.addr)
             self.state = ConnectionState.DISCONNECTED
             return
-        
-        player_id_to_query = self.player_account.dbid
-        log.debug("Querying characters for player_id: %s", player_id_to_query)
+
         char_list_data = await database.load_characters_for_account(self.db_conn, self.player_account.dbid)
-        log.debug("Result from load_characters_for_account: %s", char_list_data)
 
         if not char_list_data:
-            log.info("No characters found for player %s (%s). Proceeding to creation.",
-                    self.player_account.username, self.addr)
             await self._send("\r\nYou have no characters on this account.")
-            self.state = ConnectionState.CREATING_CHARACTER # Trigger creation
+            self.state = ConnectionState.CREATING_CHARACTER
             return
 
-        # Format Character List
         output = "\r\n --- Your Characters ---\r\n"
-        char_map: Dict[int, int] = {} # Map selection number to character dbid
+        char_map: Dict[int, int] = {}
         for i, char_row in enumerate(char_list_data):
             selection_num = i + 1
             char_map[selection_num] = char_row['id']
-            
             race_name = self.world.get_race_name(char_row['race_id'])
             class_name = self.world.get_class_name(char_row['class_id'])
-            level = char_row['level']
-            first_name = char_row['first_name']
-            last_name = char_row['last_name']
-
-
-            output += f" {selection_num}. {first_name} {last_name} ({race_name} {class_name} {level})\r\n"
+            output += f" {selection_num}. {char_row['first_name']} {char_row['last_name']} ({race_name} {class_name} {char_row['level']})\r\n"
         output += "----------------------------------\r\n"
-        # TODO: Add playtime display here later?
-        output += "Enter the number of the character to play:"
+        output += "Enter the number of the character to play, or type 'new' to create another:"
 
         await self._send(output)
         selection = await self._read_line()
-        if selection is None: return # Connection lost
+        if selection is None: return
 
+        if selection.lower() == 'new':
+            self.state = ConnectionState.CREATING_CHARACTER
+            return
+            
         try:
             selection_num = int(selection)
             selected_char_id = char_map.get(selection_num)
 
             if not selected_char_id:
                 await self._send("Invalid selection.")
-                # Stay in SELECTING_CHARACTER state
                 return
-            
-            # Load the full character data
+
             char_data = await database.load_character_data(self.db_conn, selected_char_id)
             if not char_data:
-                # Should be rare if listed, but handle DB inconsistency
-                log.error("Failed to load character data for selected ID %s for player %s.", selected_char_id, self.player_account.username)
                 await self._send("Error loading selected character. Please try again.")
-                return # Stay in SELECTING_CHARACTER state
+                return
             
-            # Instantiate the Character object
             self.active_character = Character(
                 writer=self.writer,
-                #world=self.world,
                 db_data=char_data,
-                player_is_admin=self.player_account.is_admin)
-            log.info("Character '%s' loaded for player %s (%s). Admin: %s",
-                    self.active_character.name, self.player_account.username, self.addr, self.active_character.is_admin)
-
-            # Proceed to place character in world (Post-Load steps)
+                player_is_admin=self.player_account.is_admin
+            )
             await self._handle_post_load()
 
         except ValueError:
-            await self._send("Invalid input. Please enter a number.")
-            # Stay in SELECTING_CHARACTER state
+            await self._send("Invalid input. Please enter a number or 'new'.")
             return
         except Exception:
-            log.exception("Error during character selection/loading for %s:", self.addr, exc_info=True)
+            log.exception("Error during character selection/loading for %s:", self.addr)
             await self._send("An internal error occurred. Disconnecting.")
             self.state = ConnectionState.DISCONNECTED
 
     async def _handle_post_load(self):
-
         """Actions performed immediately after a character is loaded and active."""
         if not self.active_character:
-            log.error("Reached _handle_post_load without active character for %s.", self.addr)
             self.state = ConnectionState.DISCONNECTED
             return
-        
-        # 1 Add to World Tracking
-        self.world.add_active_character(self.active_character)
 
-        # 2. Set Location
+        self.world.add_active_character(self.active_character)
         room = self.world.get_room(self.active_character.location_id)
         if not room:
-            log.warning("Charcter %s loaded into non-existent room %d! Moving to room 1.",
+            log.warning("Character %s loaded into non-existent room %d! Moving to room 1.",
                 self.active_character.name, self.active_character.location_id)
-            room = self.world.get_room(1) # Fallback to default room
-            if not room: #Should absolutely exist, but safety check
+            room = self.world.get_room(1)
+            if not room:
                 log.critical("!!! Default room 1 not found! Cannot place character %s.", self.active_character.name)
                 await self._send("Critical error: Starting room not found. Disconnecting.")
                 self.state = ConnectionState.DISCONNECTED
-                # Also remove from active list if added
                 self.world.remove_active_character(self.active_character.dbid)
                 return
-            self.active_character.location_id = 1 # Update DB ID to match
+            self.active_character.location_id = 1
+        
         self.active_character.update_location(room)
-
-        # 3. Add Character to Room Occupants
         room.add_character(self.active_character)
-
-        # 4. Send MOTD
         await self.active_character.send(MOTD)
-
-        # 5. Send Initial Look
         look_string = room.get_look_string(self.active_character, self.world)
         await self.active_character.send(look_string)
-
-        #6 Announce Arrival to Room
         arrival_msg = f"\r\n{self.active_character.name} slowly approaches.\r\n"
         await room.broadcast(arrival_msg, exclude={self.active_character})
-
-        self.active_character.login_timestamp = time.monotonic()
-        log.debug("Set login timestamp for %s", self.active_character.name)
-
-        # 7. Change State to Playing
+        
         self.state = ConnectionState.PLAYING
         log.info("Character %s entered game world in room %d.", self.active_character.name, room.dbid)
 
     async def _handle_playing(self):
         """Handles input when the player is fully in the game."""
-        if not self.active_character: # Should not happen in this state
-            log.error("Reached PLAYING state without active character for %s.", self.addr)
+        if not self.active_character:
             self.state = ConnectionState.DISCONNECTED
             return
-        
-        # Main command loop -- keep reading until told to disconnect!
-        while self.state == ConnectionState.PLAYING:
-            await self._send("\r\n> ") # Send initial prompt
-            line = await self._read_line()
-            if line is None: return # Connection lost
 
-            # Process the command using the handler
-            # Pass necessary objects to the command processor
+        while self.state == ConnectionState.PLAYING:
+            # We will send a prompt that includes HP, Essence, and Stance
+            hp = int(self.active_character.hp)
+            max_hp = int(self.active_character.max_hp)
+            essence = int(self.active_character.essence)
+            max_essence = int(self.active_character.max_essence)
+            stance = self.active_character.stance
+            
+            prompt = f"<{hp}/{max_hp}hp {essence}/{max_essence}e|{stance}> "
+            await self._send(prompt, add_newline=False)
+            
+            line = await self._read_line()
+            if line is None: return
+
             should_continue = await command_handler.process_command(
                 self.active_character, self.world, self.db_conn, line
             )
-
             if not should_continue:
-                #Process_command returned false (e.g., from 'quit')
-                # Set state, the main handle() loop will see this and call cleanup
                 self.state = ConnectionState.DISCONNECTED
-                # No need to call cleanup directly here.
 
     async def handle(self):
         """Main handling loop driven by state machine."""
-        log.debug("Handler starting for %s", self.addr)
         try:
             while self.state != ConnectionState.DISCONNECTED:
                 current_state = self.state
@@ -520,126 +410,90 @@ class ConnectionHandler:
                 elif current_state == ConnectionState.SELECTING_CHARACTER:
                     await self._handle_select_character()
                 elif current_state == ConnectionState.CREATING_CHARACTER:
-                    if not self.player_account: # Should have player account by now
-                        log.error("Reached CREATING_CHARACTER without player account! Disconnecting %s.", self.addr)
-                        self.state = ConnectionState.DISCONNECTED
-                        continue
-
-                    log.info("Starting character creation process for player %s (%s)", self.player_account.username, self.addr)
-                    # Pass necessary objects to CreationHandler
-                    creation_handler = CreationHandler(
-                        self.reader, self.writer, self.player_account, self.world, self.db_conn
-                    )
-                    new_character_id = await creation_handler.handle() # Run the creation sub-handler
-                    if new_character_id:
-                        # Creation successful, load the new character
-                        log.info("Creation successful (new char ID: %s). Loading character...", new_character_id)
-                        char_data = await database.load_character_data(self.db_conn, new_character_id)
-                        if char_data:
-                            self.active_character = Character(
-                            writer=self.writer, 
-                            #world=self.world,
-                            db_data=char_data,
-                            player_is_admin=self.player_account.is_admin
-                            )
-
-                            for skill_name in skill_defs.INITIAL_SKILLS:
-                                if skill_name not in self.active_character.skills:
-                                    self.active_character.skills[skill_name] = 0
-
-                            # Calculate initial skill points: 5 + Int Modifier
-                            int_mod = self.active_character.int_mod # Use the property
-                            initial_sp = 5 + int_mod
-
-                            # Add Racial Bonus for Chrozalin/Human
-                            race_name = self.world.get_race_name(self.active_character.race_id)
-                            if race_name.lower() == "chrozalin": # Check against your race name
-                                racial_bonus_sp = 5
-                                initial_sp += racial_bonus_sp
-                                log.info("Applying +%d racial skill point bonus for %s.",
-                                        racial_bonus_sp, race_name)
-                                
-                            # Ensure class_defs is imported: from game.definitions import classes as class_defs
-                            class_name = self.world.get_class_name(self.active_character.class_id)
-                            skill_bonuses = class_defs.get_starting_skill_bonuses(class_name)
-                            if skill_bonuses:
-                                log.debug("Applying starting skill bonuses for %s (%s)", class_name, self.active_character.name)
-                                for skill_name, bonus in skill_bonuses.items():
-                                    current_rank = self.active_character.skills.get(skill_name, 0)
-                                    self.active_character.skills[skill_name] = current_rank + bonus
-                                    log.debug(" -> %s: +%d (New Rank: %d)", skill_name, bonus, self.active_character.skills[skill_name])
-                                await self.active_character.send("Your chosen class grants you initial proficiency in certain skills!")
-
-                            self.active_character.unspent_skill_points = initial_sp
-                            log.info("Awarded %d initial skill points to %s.",
-                            initial_sp, self.active_character.name)
-                            await self.active_character.send(f"You gain {initial_sp} skill points to begin your journey!")
-                            log.info("Newly created character '%s' loaded.", self.active_character.name)
-                            await self._handle_post_load() # Place in world, transitions state to PLAYING
-                        else:
-                            log.error("Failed to load newly created character ID %s! Disconnecting %s.", new_character_id, self.addr)
-                            await self._send("Critical error loading your new character. Disconnecting.")
-                            self.state = ConnectionState.DISCONNECTED
-                    else:
-                        # Creation failed or user quit
-                        log.info("Character creation cancelled or failed for player %s (%s). Disconnecting.", self.player_account.username, self.addr)
-                        # CreationHandler likely sent cancellation message already
-                        self.state = ConnectionState.DISCONNECTED
-                        await self._send("\r\nDisconnecting.")
-                        self.state = ConnectionState.DISCONNECTED
-
+                    await self._handle_character_creation()
                 elif self.state == ConnectionState.PLAYING:
-                    await self._handle_playing() # Will loop internally until state changes
+                    await self._handle_playing()
                 else:
                     log.error("Unhandled connection state %s for %s. Disconnecting.", self.state, self.addr)
                     self.state = ConnectionState.DISCONNECTED
-
-                # Small sleep to prevent tight loop on error/staying in same state without read
-                if self.state != ConnectionState.DISCONNECTED and self.state != ConnectionState.PLAYING:
-                    await asyncio.sleep(0.1)
         except Exception:
-            #Catch-all for unexpected errors in the handler logic
-            log.exception("Unexpected error in Connectionhandler for %s:", self.addr, exc_info=True)
+            log.exception("Unexpected error in ConnectionHandler for %s:", self.addr)
         finally:
             await self.cleanup()
+
+    async def _handle_character_creation(self):
+        """Orchestrates the character creation process."""
+        if not self.player_account:
+            log.error("Reached CREATING_CHARACTER without player account! Disconnecting %s.", self.addr)
+            self.state = ConnectionState.DISCONNECTED
+            return
+
+        creation_handler = CreationHandler(
+            self.reader, self.writer, self.player_account, self.world, self.db_conn
+        )
+        new_character_id = await creation_handler.handle()
+
+        if new_character_id:
+            char_data = await database.load_character_data(self.db_conn, new_character_id)
+            if char_data:
+                self.active_character = Character(
+                    writer=self.writer,
+                    db_data=char_data,
+                    player_is_admin=self.player_account.is_admin
+                )
+                
+                # Grant initial skills and points
+                for skill_name in skill_defs.INITIAL_SKILLS:
+                    if skill_name not in self.active_character.skills:
+                        self.active_character.skills[skill_name] = 0
+
+                int_mod = self.active_character.int_mod
+                initial_sp = 5 + int_mod
+                race_name = self.world.get_race_name(self.active_character.race_id)
+                if race_name.lower() == "chrozalin":
+                    initial_sp += 5
+
+                class_name = self.world.get_class_name(self.active_character.class_id)
+                skill_bonuses = class_defs.get_starting_skill_bonuses(class_name)
+                for skill, bonus in skill_bonuses.items():
+                    self.active_character.skills[skill] = self.active_character.skills.get(skill, 0) + bonus
+                
+                self.active_character.unspent_skill_points = initial_sp
+                
+                await self.active_character.send(f"\r\nYour class grants you proficiency in several skills.")
+                await self.active_character.send(f"You have {initial_sp} skill points to begin your journey!")
+                
+                await self._handle_post_load()
+            else:
+                await self._send("Critical error loading your new character. Disconnecting.")
+                self.state = ConnectionState.DISCONNECTED
+        else:
+            await self._send("\r\nReturning to character selection.")
+            self.state = ConnectionState.SELECTING_CHARACTER
 
     async def cleanup(self):
         """Perform cleanup when connection ends."""
         log.info("Cleaning up connection for %s.", self.addr)
-        # Ensure state reflects disconnect
         self.state = ConnectionState.DISCONNECTED
 
-        #Save character if one was active
         if self.active_character:
             char_to_clean = self.active_character
-            char_name = char_to_clean.name # Get name before clearing reference
-            char_id = char_to_clean.dbid
-
-            log.debug("Cleanup: removing active character %s (%s)", char_name, char_id)
-            # Remove from world tracking FIRST
-            self.world.remove_active_character(char_id)
-            self.active_character = None # Clear reference on handler
-            # Remove from room and announce
+            self.world.remove_active_character(char_to_clean.dbid)
+            self.active_character = None
             if char_to_clean.location:
-                #Announce departure
-                departure_msg = f"\r\n{char_name} slowly departs.\r\n"
+                departure_msg = f"\r\n{char_to_clean.name} slowly departs.\r\n"
                 try:
-                    # Use try block as broadcast could fail if room/other players have issues
                     await char_to_clean.location.broadcast(departure_msg, exclude={char_to_clean})
                 except Exception as e:
-                    log.error("Error broadcasting departure for %s: %s", char_name, e)
+                    log.error("Error broadcasting departure for %s: %s", char_to_clean.name, e)
                 char_to_clean.location.remove_character(char_to_clean)
-
-            log.info("Attempting final save for character %s (%s).", char_name, char_id)
-            # pass the database connection stored in the handler
+            
             await char_to_clean.save(self.db_conn)
 
-        # Close network connection
         if self.writer and not self.writer.is_closing():
             try:
                 self.writer.close()
                 await self.writer.wait_closed()
-                log.debug("Writer closed for %s", self.addr)
             except Exception as e:
                 log.warning("Error closing writer for %s: %s", self.addr, e)
         log.info("Connection handler finished for %s.", self.addr)

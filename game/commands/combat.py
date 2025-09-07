@@ -1,6 +1,6 @@
-#game/commands/combat.py
+# game/commands/combat.py
 """
-Combat related commands like attack
+Combat related commands like attack.
 """
 import logging
 from typing import TYPE_CHECKING
@@ -12,13 +12,10 @@ if TYPE_CHECKING:
 
 # Import combat logic handler
 from .. import combat as combat_logic
-#Import Item class if needed for weapon check
-from ..item import Item
 from ..mob import Mob
-from ..character import Character
-
 
 log = logging.getLogger(__name__)
+
 
 async def cmd_attack(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Handles the 'attack <target>' command."""
@@ -33,52 +30,38 @@ async def cmd_attack(character: 'Character', world: 'World', db_conn: 'aiosqlite
         await character.send("You cannot attack from the void.")
         return True
     
-    if character.roundtime > 0:
-        # this checkis redundant if handler checks first, but good safety
-        await character.send(f"You are still recovering for {character.roundtime:.1f} seconds.")
-        return True
-    
-    if character.status == "DYING" or character.status == "DEAD":
-        await character.send("You cannot attack in your current state.")
-        return True
-    
-
     target_name = args_str.strip().lower()
-
-    # Find target (Mobs first, then other Players)
     target = None
-    # Check mobs in room
-    for mob in character.location.mobs:
-        # Basic name check - allow targeting "rat" for "a giant rat" etc.
-        # Need more robust target parsing later (e.g., 2.rat)
-        mob_name_parts = mob.name.lower().split()
-        if target_name in mob_name_parts and mob.is_alive():
-            target = mob
-            break
 
-    # Check players in room if no mob found
-    if target is None:
-        target_char = character.location.get_character_by_name(target_name) # Uses first name check
-        if target_char and target_char != character and target_char.is_alive():
-            # PVP Check? For now, allow attacking players. Add flags later.
-            log.warning("PVP initiated: %s attacking %s", character.name, target_char.name)
+    # --- Find Target ---
+    # Find the first living mob in the room that matches the partial name.
+    target = character.location.get_mob_by_name(target_name)
+
+    # If no mob was found, check for other players.
+    if not target:
+        target_char = character.location.get_character_by_name(target_name)
+        if target_char and target_char != character:
+            if not target_char.is_alive():
+                await character.send(f"{target_char.name} is already defeated.")
+                return True
+            # TODO: Add PVP flag checks here in the future.
             target = target_char
         elif target_char == character:
             await character.send("You contemplate attacking yourself, but decide against it.")
             return True
         
-    if target is None:
-        await character.send(f"You don't see {target_name}' here to attack.")
+    if not target:
+        await character.send(f"You don't see '{target_name}' here to attack.")
         return True
     
-    if not target.is_alive():
-        await character.send(f"{target.name.capitalize()} is already defeated.")
-        return True
-    
-    # Set target and flag
+    # --- Initiate Combat ---
+    log.info("%s (HP: %.1f) is initiating combat with %s (HP: %.1f).",
+            character.name, character.hp, target.name, target.hp)
+
     character.target = target
     character.is_fighting = True
-    # If target is a Mob that wasn't fighting, make it retaliate
+
+    # If the target is a mob and isn't fighting back, make it retaliate.
     if isinstance(target, Mob) and not target.is_fighting:
         target.target = character
         target.is_fighting = True
@@ -86,16 +69,16 @@ async def cmd_attack(character: 'Character', world: 'World', db_conn: 'aiosqlite
 
     await character.send(f"You attack {target.name}!")
 
-    # Get weapon
+    # Get the character's wielded weapon.
     weapon = None
-    weapon_template_id = character.equipment.get("WIELD_MAIN") # Assumes slot name
+    weapon_template_id = character.equipment.get("WIELD_MAIN")
     if weapon_template_id:
-        # Pass world to get instance
         weapon = character.get_item_instance(world, weapon_template_id)
         if weapon and weapon.item_type != "WEAPON":
-            weapon = None # Can't attack with non-weapon
-    
-    # Resolve the attack
+            log.debug("%s is trying to attack with a non-weapon: %s", character.name, weapon.name)
+            weapon = None # Can't attack with a non-weapon.
+
+    # Hand off to the core combat logic to resolve the attack.
     await combat_logic.resolve_physical_attack(character, target, weapon, world)
 
-    return True # Keep connction active
+    return True

@@ -2,15 +2,14 @@
 """
 Handles parsing player input and dispatching commands.
 """
-
 import logging
-from typing import Dict, Callable, Awaitable, Tuple, Optional
+from typing import Dict, Callable, Awaitable, Tuple
+from functools import partial
 
-# Import necessary game objects (adjust paths if needed based on final structure)
-# Use TYPE_CHECKING for circular dependencies if they arise later
 from ..character import Character
 from ..world import World
-import aiosqlite # Needed for db_conn type hint
+import aiosqlite
+
 from . import general as general_cmds
 from . import movement as movement_cmds
 from . import admin as admin_cmds
@@ -22,218 +21,114 @@ from . import abilities as ability_cmds
 
 log = logging.getLogger(__name__)
 
-# Type alias for async command functions
-# Takes Character, World, db_conn, and the arguments string
-# Returns True if connection should continue, False if quit/disconnect
 CommandHandlerFunc = Callable[[Character, World, aiosqlite.Connection, str], Awaitable[bool]]
 
 # --- Command Map ---
-# Maps command strings (and aliases) to their handler functions.
-# We will populate this dictionary AFTER defining the command functions below
-# and in other command modules
 COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     # General Commands
-    "look": general_cmds.cmd_look,
-    "l": general_cmds.cmd_look, # Alias
-    "say": general_cmds.cmd_say,
-    "'": general_cmds.cmd_say, # Alias
+    "look": general_cmds.cmd_look, "l": general_cmds.cmd_look,
+    "say": general_cmds.cmd_say, "'": general_cmds.cmd_say,
     "quit": general_cmds.cmd_quit,
     "who": general_cmds.cmd_who,
     "help": general_cmds.cmd_help,
-    "score": general_cmds.cmd_score,
-    "stats": general_cmds.cmd_score, # Alias
+    "score": general_cmds.cmd_score, "stats": general_cmds.cmd_score,
     "skills": general_cmds.cmd_skills,
-    "attack": combat_cmds.cmd_attack,
-    "a": combat_cmds.cmd_attack, # Alias
-    "kill": combat_cmds.cmd_attack, # Alias
-    "advance": general_cmds.cmd_advance, # <<< ADD THIS
-    "level": general_cmds.cmd_advance,   # <<< Optional alias
-    "meditate": general_cmds.cmd_meditate, # Begins meditation
-    "cast": magic_cmds.cmd_cast, # <<< ENSURE THIS LINE EXISTS
-    "use": ability_cmds.cmd_use, # <<< ENSURE THIS LINE EXISTS
-    "emote": general_cmds.cmd_emote,
-    ":": general_cmds.cmd_emote, # Common alias
+    "advance": general_cmds.cmd_advance, "level": general_cmds.cmd_advance,
+    "meditate": general_cmds.cmd_meditate,
+    "emote": general_cmds.cmd_emote, ":": general_cmds.cmd_emote,
     "tell": general_cmds.cmd_tell,
     "sit": general_cmds.cmd_sit,
     "stand": general_cmds.cmd_stand,
     "lie": general_cmds.cmd_lie,
 
+    # Combat & Ability Commands
+    "attack": combat_cmds.cmd_attack, "a": combat_cmds.cmd_attack, "kill": combat_cmds.cmd_attack,
+    "cast": magic_cmds.cmd_cast,
+    "use": ability_cmds.cmd_use,
 
-    # Movement Commands (Pass direction directly to the handler)
-    "north": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "north"),
-    "n": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "north"),
-    "south": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "south"),
-    "s": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "south"),
-    "east": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "east"),
-    "e": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "east"),
-    "west": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "west"),
-    "w": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "west"),
-    "up": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "up"),
-    "u": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "up"),
-    "down": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "down"),
-    "d": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "down"),
-    "northwest": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "northwest"),
-    "nw": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "northwest"),
-    "northeast": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "northeast"),
-    "ne": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "northeast"),
-    "southeast": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "southeast"),
-    "se": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "southeast"),
-    "southwest": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "southwest"),
-    "sw": lambda char, world, db_conn, args: movement_cmds.cmd_move(char, world, db_conn, "southwest"),
-    "go": movement_cmds.cmd_go, # Map 'go' verb to cmd_go function # Add 'go' using args as direction/exit name
-
-    # ---Add Item Commands---
-    "inventory": item_cmds.cmd_inventory,
-    "inv": item_cmds.cmd_inventory, # Alias
-    "i": item_cmds.cmd_inventory, # Alias
+    # Item Commands
+    "inventory": item_cmds.cmd_inventory, "inv": item_cmds.cmd_inventory, "i": item_cmds.cmd_inventory,
     "wield": item_cmds.cmd_wield,
     "wear": item_cmds.cmd_wear,
-    "remove": item_cmds.cmd_remove,
-    "rem": item_cmds.cmd_remove, # Alias
-    "get": item_cmds.cmd_get,
-    "g": item_cmds.cmd_get, # Alias
-    "take": item_cmds.cmd_get, # Alias
+    "remove": item_cmds.cmd_remove, "rem": item_cmds.cmd_remove,
+    "get": item_cmds.cmd_get, "g": item_cmds.cmd_get, "take": item_cmds.cmd_get,
     "drop": item_cmds.cmd_drop,
-    "examine": item_cmds.cmd_examine,
-    "exa": item_cmds.cmd_examine, # Alias
+    "examine": item_cmds.cmd_examine, "exa": item_cmds.cmd_examine,
     "drink": item_cmds.cmd_drink,
     "eat": item_cmds.cmd_eat,
-    # ------
 
-    # ---Add Skill Spending Command---
-    "spend": skill_cmds.cmd_spend,
-    "invest": skill_cmds.cmd_spend, # Alias
-    "improve": skill_cmds.cmd_improve, # <<< ADD THIS
-    # --- ^ ^ ^ ---
+    # Skill/Progression Commands
+    "spend": skill_cmds.cmd_spend, "invest": skill_cmds.cmd_spend,
+    "improve": skill_cmds.cmd_improve,
 
+    # Movement Command
+    "go": movement_cmds.cmd_go,
+
+    # --- Admin Commands (Reduced Set for In-Game Use) ---
     "@teleport": admin_cmds.cmd_teleport,
     "@examine": admin_cmds.cmd_examine,
     "@setstat": admin_cmds.cmd_setstat,
     "@roomstat": admin_cmds.cmd_roomstat,
-    "@roomset": admin_cmds.cmd_roomset,
-    "@roomdelete": admin_cmds.cmd_roomdelete,
-    "@roomlist": admin_cmds.cmd_roomlist,
-    "@setdesc": admin_cmds.cmd_setdesc,
-    "@dig": admin_cmds.cmd_dig,
-    "@setexit": admin_cmds.cmd_setexit,
-    "@delexit": admin_cmds.cmd_delexit,
-
-    # --- Admin Commands ---
-    "@areacreate": admin_cmds.cmd_areacreate,
-    "@arealist": admin_cmds.cmd_arealist,
-    "@areaset": admin_cmds.cmd_areaset,
-    "@areainfo": admin_cmds.cmd_areainfo,
-    "@areadelete": admin_cmds.cmd_areadelete,
-
-    # ---Admin Item Commands---
-    "@icreate": admin_cmds.cmd_icreate,
-    "@ilist": admin_cmds.cmd_ilist,
-    "@istat": admin_cmds.cmd_istat,
-    "@iset": admin_cmds.cmd_iset,
-    "@icopy": admin_cmds.cmd_icopy,
-    "@idelete": admin_cmds.cmd_idelete,
-
-    "@mcreate": admin_cmds.cmd_mcreate,
-    "@mlist": admin_cmds.cmd_mlist,
-    "@mstat": admin_cmds.cmd_mstat,
-    "@mset": admin_cmds.cmd_mset,
-    "@mcopy": admin_cmds.cmd_mcopy,
-    "@mdelete": admin_cmds.cmd_mdelete,
-
-    "@listspawns": admin_cmds.cmd_listspawns,
-    "@setspawn": admin_cmds.cmd_setspawn,
-    "@delspawn": admin_cmds.cmd_delspawn,
-
-    "@ocreate": admin_cmds.cmd_ocreate,
-    "@olist": admin_cmds.cmd_olist,
-    "@ostat": admin_cmds.cmd_ostat,
-    "@oset": admin_cmds.cmd_oset,
-    "@odelete": admin_cmds.cmd_odelete,
-
 }
 
+# Use a loop to add directional commands cleanly
+DIRECTIONAL_ALIASES = {
+    "north": "north", "n": "north", "south": "south", "s": "south",
+    "east": "east", "e": "east", "west": "west", "w": "west",
+    "up": "up", "u": "up", "down": "down", "d": "down",
+    "northeast": "northeast", "ne": "northeast", "northwest": "northwest", "nw": "northwest",
+    "southeast": "southeast", "se": "southeast", "southwest": "southwest", "sw": "southwest",
+}
+
+for alias, direction in DIRECTIONAL_ALIASES.items():
+    COMMAND_MAP[alias] = partial(movement_cmds.cmd_move, direction=direction)
+
 def _parse_input(raw_input: str) -> Tuple[str, str]:
-    """
-    Normalizes input and splits it into command verb and arguments string.
-
-    Args:
-    raw_input: The raw string from the player
-
-    Returns:
-    A tuple containing (command_verb, arguments_string).
-    Returns ("", "") if input is empty.
-    The command_verb is lowercased, but arguments_string retains original casing.
-    """
-    stripped_input = raw_input.strip() # Strip whitespace first
+    """Splits raw input into a command verb and arguments string."""
+    stripped_input = raw_input.strip()
     if not stripped_input:
         return "", ""
-    
     parts = stripped_input.split(" ", 1)
-    command_verb = parts[0].lower() # Lowercase only the command part
-    args_str = parts[1] if len(parts) > 1 else ""
-
-    return command_verb, args_str
+    return parts[0].lower(), parts[1] if len(parts) > 1 else ""
 
 async def process_command(character: Character, world: World, db_conn: aiosqlite.Connection, raw_input: str) -> bool:
-    """
-    Parses raw player input and executes the corresponding command function.
-
-    Args:
-        character: The Character executing the command.
-        world: The game World object.
-        db_conn: The active database connection.
-        raw_input: The raw string typed by the player
-
-    Returns:
-        True if the player's connection should remain active, False if they should disconnect (e.g., quit).
-    """
+    """Parses raw player input and executes the corresponding command function."""
     command_verb, args_str = _parse_input(raw_input)
-
     if not command_verb:
-        return True # Ignore empty input, keep connection active
-    
-    if character.status == "DYING":
+        return True
+
+    # Pre-command State Checks
+    if character.status == "DYING" and command_verb != "quit":
         await character.send("You are dying and cannot act!")
         return True
-    elif character.status == "DEAD":
-        # Allow specific commands later? Like 'PRAY' RESPAWN?
-        if command_verb not in ["quit"]:
-            await character.send("You are dead and cannot do that.")
-            return True
+    if character.status == "DEAD" and command_verb != "quit":
+        await character.send("You are dead and cannot do that.")
+        return True
         
-    MEDITATION_ALLOWED_CMDS = {"look", "l", "score", "stats", "skills", "quit", "help"}
+    MEDITATION_ALLOWED_CMDS = {"look", "l", "score", "stats", "skills", "quit", "help", "who", "tell"}
     if character.status == "MEDITATING" and command_verb not in MEDITATION_ALLOWED_CMDS:
-        log.debug("Character %s stopped meditating due to command: %s", character.name, command_verb)
+        log.debug("Character %s broke meditation with command: %s", character.name, command_verb)
         character.status = "ALIVE"
         await character.send("You stop meditating as you act.")
 
     if character.roundtime > 0:
-        # Provide feedback with remaining time, formatted to one decimal place
         await character.send(f"You are still recovering for {character.roundtime:.1f} seconds.")
         return True
 
-    # Find the command function in our map
+    # Find and Execute Command
     command_func = COMMAND_MAP.get(command_verb)
-
-    if command_func:
-        is_admin_cmd = command_verb.startswith('@')
-        if is_admin_cmd and not character.is_admin:
-            log.warning("Non-admin %s tried to use admin command: %s", character.name, command_verb)
-            await character.send("Huh? (Unknown command).")
-            return True
-        log.info("Executing command '%s' for %s (args: '%s')", command_verb, character.name, args_str)
-        
-        try:
-            # Execute the command function
-            should_continue = await command_func(character, world, db_conn, args_str)
-            return should_continue
-        except Exception:
-            # Catch errors within command execution
-            log.exception("Error executing command '%s' for %s:", command_verb, character.name, exc_info=True)
-            await character.send("Ope! Something went wrong with your command.")
-            return True # Keep connection active after internal command error
-    else:
-        # Unknown command
-        log.debug("Unknown command '%s' entered by %s", command_verb, character.name, exc_info=True)
+    if not command_func:
         await character.send("Huh? (Type 'help' for available commands).")
-        return True # Keep connection alive
+        return True
+
+    if command_verb.startswith('@') and not character.is_admin:
+        await character.send("Huh? (Unknown command).")
+        return True
+
+    try:
+        log.info("Executing command '%s' for %s (args: '%s')", command_verb, character.name, args_str)
+        return await command_func(character, world, db_conn, args_str)
+    except Exception:
+        log.exception("Error executing command '%s' for %s:", command_verb, character.name)
+        await character.send("Ope! Something went wrong with your command.")
+        return True

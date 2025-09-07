@@ -19,276 +19,198 @@ from .definitions import skills as skill_defs
 from .definitions import abilities as ability_defs
 from .definitions import classes as class_defs
 
-
-# Use TYPE_CHECKING block for Room to avoid circular import errors
-# This makes the type checker happy but doesn't cause runtime import issues.
 if TYPE_CHECKING:
     from .room import Room
     from .world import World
+    from .mob import Mob
 
 log = logging.getLogger(__name__)
+
 class Character:
     """
     Represents an individual character within the game world.
     """
-    # hint network connection type
-    writer: asyncio.StreamWriter
-
     @property
     def might_mod(self) -> int: return utils.calculate_modifier(self.stats.get("might", 10))
-
     @property
     def vit_mod(self) -> int: return utils.calculate_modifier(self.stats.get("vitality", 10))
-
     @property
     def agi_mod(self) -> int: return utils.calculate_modifier(self.stats.get("agility", 10))
-
     @property
     def int_mod(self) -> int: return utils.calculate_modifier(self.stats.get("intelligence", 10))
-
     @property
     def aura_mod(self) -> int: return utils.calculate_modifier(self.stats.get("aura", 10))
-
     @property
     def pers_mod(self) -> int: return utils.calculate_modifier(self.stats.get("persona", 10))
 
     # Derived Combat Stats
     @property
-    def mar(self) -> int: # Melee Attack Rating
-        # Might Modifier + 1/2 of Agility Modifier (floor division)
-        return self.might_mod + (self.agi_mod // 2)
+    def mar(self) -> int: return self.might_mod + (self.agi_mod // 2)
     @property
-    def rar(self) -> int: # Ranged Attack Rating
-        # Agility Modifier + 1/2 of Might Modifier
-        return self.agi_mod + (self.might_mod // 2)
+    def rar(self) -> int: return self.agi_mod + (self.might_mod // 2)
     @property
-    def apr(self) -> int: # Arcane Power Rating
-        # Intellect Modifier + 1/2 Aura Modifier
-        return self.int_mod + (self.aura_mod // 2)
+    def apr(self) -> int: return self.int_mod + (self.aura_mod // 2)
     @property
-    def dpr(self) -> int: # Divine Power Rating
-        # Aura Modifier + 1/2 Persona Modifier
-        return self.aura_mod + (self.pers_mod // 2)
+    def dpr(self) -> int: return self.aura_mod + (self.pers_mod // 2)
     @property
-    def pds(self) -> int: # Physical Defense Score
-        # Vitality Modifier * 2
-        return self.vit_mod
+    def pds(self) -> int: return self.vit_mod
     @property
-    def sds(self) -> int: # Spiritual Defense Score
-        # Aura Modifier * 2
-        return self.aura_mod
+    def sds(self) -> int: return self.aura_mod
     @property
-    def dv(self) -> int: # Dodge Value
-        # Agility Modifier * 2
-        return self.agi_mod * 2
+    def dv(self) -> int: return self.agi_mod * 2
     
     @property
     def barrier_value(self) -> int:
         """Calculates total Barrier Value (BV) from active effects."""
         total_bv = 0
         current_time = time.monotonic()
-        # Check effects that modify STAT_BARRIER_VALUE
-        for effect_name, effect_data in list(self.effects.items()): # Iterate copy
-            if effect_data.get("stat") == ability_defs.STAT_BARRIER_VALUE: # Use constant if defined
+        for effect_data in self.effects.values():
+            if effect_data.get("stat") == ability_defs.STAT_BARRIER_VALUE:
                 if effect_data.get("ends_at", 0) > current_time:
                     total_bv += effect_data.get("amount", 0)
-                # Optionally remove expired effect here? Or rely on ticker update_effects
-        # log.debug("Character %s calculated Barrier Value: %d", self.name, total_bv) # Optional
         return total_bv
 
     def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any], player_is_admin: bool = False):
-        """
-        Initializes a Character object from database data and network writer.
-
-        Args:
-            writer: the asyncio streamwriter associated with the player's connection.
-            db_data: a dictionary-like object (e.g., aiosqlite.Row) containing character
-            data from the 'characters' table.
-        """
-        self.writer: asyncio.StreamWriter = writer # Network connection
-
-        # --- Data loaded from DB ---
+        """Initializes a Character object from database data and a network writer."""
         self.writer: asyncio.StreamWriter = writer
         self.is_admin: bool = player_is_admin
+
+        # --- Data loaded from DB ---
         self.dbid: int = db_data['id']
-        self.player_id: int = db_data['player_id'] # Link to Player account
+        self.player_id: int = db_data['player_id']
         self.first_name: str = db_data['first_name']
         self.last_name: str = db_data['last_name']
         self.sex: str = db_data['sex']
-        self.race_id: Optional[int] = db_data['race_id'] # Store ID
-        self.class_id: Optional[int] = db_data['class_id'] # Store ID
+        self.race_id: Optional[int] = db_data['race_id']
+        self.class_id: Optional[int] = db_data['class_id']
         self.level: int = db_data['level']
         self.hp: float = float(db_data['hp'])
         self.max_hp: float = float(db_data['max_hp'])
         self.essence: float = float(db_data['essence'])
         self.max_essence: float = float(db_data['max_essence'])
-        self.xp_pool: float = db_data['xp_pool'] # Unabsorbed XP
-        self.xp_total: float = db_data['xp_total'] # Current level progress
+        self.xp_pool: float = db_data['xp_pool']
+        self.xp_total: float = db_data['xp_total']
         self.unspent_skill_points: int = db_data['unspent_skill_points']
         self.unspent_attribute_points: int = db_data['unspent_attribute_points']
-        self.status: str = db_data['status'] if 'status' in db_data.keys() else 'ALIVE'
         self.spiritual_tether: int = db_data['spiritual_tether']
-        self.status: str = "ALIVE" # Start alive when loaded/created
-        self.death_timer_ends_at: Optional[float] = None # Timer not active initially
         self.description: str = db_data['description']
-        self.status: str = 'ALIVE' # Possible values: ALIVE, DYING, DEAD
-        self.stance: str = db_data['stance'] if 'stance' in db_data.keys() else 'Standing'
-        self.target: Optional[Union['Character', 'Mob']] = None # Who are we fighting? Needs Mob import below
-        self.is_fighting: bool = False # Add fighting flag
+        self.coinage: int = db_data['coinage']
+        self.location_id: int = db_data['location_id']
+
+        # --- Runtime State ---
+        self.name: str = f"{self.first_name} {self.last_name}"
+        self.location: Optional['Room'] = None
+        self.target: Optional[Union['Character', 'Mob']] = None
+        self.is_fighting: bool = False
         self.casting_info: Optional[Dict[str, Any]] = None
         self.effects: Dict[str, Dict[str, Any]] = {}
+        self.roundtime: float = 0.0
+        self.death_timer_ends_at: Optional[float] = None
+        
+        # --- Cleaned up Status and Stance Initialization ---
+        self.status: str = db_data.get('status', 'ALIVE')
+        self.stance: str = db_data.get('stance', 'Standing')
+        if self.status not in ["ALIVE", "DYING", "DEAD", "MEDITATING"]:
+            log.warning("Character %s loaded with invalid status '%s', resetting to ALIVE.", self.name, self.status)
+            self.status = "ALIVE"
 
-        # Load stats (JSON string -> dict)
+        # Load JSON fields with improved logging
         try:
-            self.stats: Dict[str, int] = json.loads(db_data['stats'] or '{}')
+            self.stats: Dict[str, int] = json.loads(db_data.get('stats') or '{}')
         except json.JSONDecodeError:
-            log.warning("Character %s (%s): Could not decode stats JSON: %s",
-                        self.dbid, self.first_name, db_data['stats'])
-            self.stats: Dict[str, int] = {} # Default to empty if invalid
-
-        # Load spells/abilities
+            log.warning("Character %s (%d): Could not decode stats JSON. Using empty.", self.name, self.dbid)
+            self.stats: Dict[str, int] = {}
+        
         try:
-            spells_str = db_data['known_spells'] if 'known_spells' in db_data.keys() else '[]'
-            self.known_spells: List[str] = json.loads(spells_str or '[]') # Pass the string variable
-            if not isinstance(self.known_spells, list): self.known_spells = []
-        except (json.JSONDecodeError, TypeError, KeyError):
-            log.warning("Character %s: Could not decode/load known_spells JSON.", self.dbid)
+            self.known_spells: List[str] = json.loads(db_data.get('known_spells') or '[]')
+        except json.JSONDecodeError:
+            log.warning("Character %s (%d): Could not decode known_spells JSON. Using empty list.", self.name, self.dbid)
             self.known_spells = []
 
-        # Load known_abilities (list of ability names/IDs)
         try:
-            abilities_str = db_data['known_abilities'] if 'known_abilities' in db_data.keys() else '[]'
-            self.known_abilities: List[str] = json.loads(abilities_str or '[]') # Pass the string variable
-            if not isinstance(self.known_abilities, list): self.known_abilities = []
-        except (json.JSONDecodeError, TypeError, KeyError):
-            log.warning("Character %s: Could not decode/load known_abilities JSON.", self.dbid)
+            self.known_abilities: List[str] = json.loads(db_data.get('known_abilities') or '[]')
+        except json.JSONDecodeError:
+            log.warning("Character %s (%d): Could not decode known_abilities JSON. Using empty list.", self.name, self.dbid)
             self.known_abilities = []
 
-        # Load skills (JSON string -> dict)
         try:
-            self.skills: Dict[str, int] = json.loads(db_data['skills'] or '{}')
+            self.skills: Dict[str, int] = json.loads(db_data.get('skills') or '{}')
         except json.JSONDecodeError:
-            log.warning("Character %s (%s): Could not decode skills JSON: %s",
-                        self.dbid, self.first_name, db_data['skills'])
-            self.skills: Dict[str, int] = {} # Default to empty if invalid
+            log.warning("Character %s (%d): Could not decode skills JSON. Using empty.", self.name, self.dbid)
+            self.skills: Dict[str, int] = {}
 
-        self.location_id: int = db_data['location_id'] # Store DB location ID
-        self.location: Optional['Room'] = None
-
-        self.coinage: int = db_data['coinage'] # Load coinage
-
-        # Load inventory (List of template IDs)
         try:
-            inv_str = db_data['inventory'] or '[]'
-            self.inventory: List[int] = json.loads(inv_str)
-            if not isinstance(self.inventory, list): #Ensure it's a list
-                log.warning("Character %s inventory loaded non-list, resetting: %r", self.dbid, inv_str)
-                self.inventory = []
-        except (json.JSONDecodeError, TypeError):
-            log.warning("Character %s: Could not decode inventory JSON: %r", self.dbid, db_data.get('inventory','[]'))
+            self.inventory: List[int] = json.loads(db_data.get('inventory') or '[]')
+        except json.JSONDecodeError:
+            log.warning("Character %s (%d): Could not decode inventory JSON. Using empty list.", self.name, self.dbid)
             self.inventory: List[int] = []
 
-        # Load equipment (dict mapping slot name to template ID)
         try:
-            eq_str = db_data['equipment'] or '{}'
-            self.equipment: Dict[str, int] = json.loads(eq_str)
-            if not isinstance(self.equipment, dict): # Ensure its a dict
-                log.warning("Character %s equipment loaded non-dict, resetting: %r", self.dbid, eq_str)
-                self.equipment = {}
+            self.equipment: Dict[str, int] = json.loads(db_data.get('equipment') or '{}')
         except (json.JSONDecodeError, TypeError):
-            log.warning("Character %s: Could not decode equipment JSON: %r", self.dbid, db_data.get('equipment','{}'))
+            log.warning("Character %s (%d): Could not decode equipment JSON. Using empty dict.", self.name, self.dbid)
             self.equipment: Dict[str, int] = {}
 
-        # Roundtime attribute
-        self.roundtime: float = 0.0 # Time until next action possible
-
-        # Add basic derived name property
-        self.name = f"{self.first_name} {self.last_name}"
-        # self.calculate_derived_max_attributes()
-
-        # --- Clamp loaded HP/Essence and handle loaded DYING/DEAD status ---
-        self.hp = min(self.hp, self.max_hp) # Ensure current isn't > max
+        # Clamp loaded HP/Essence and handle loaded DYING/DEAD status
+        self.hp = min(self.hp, self.max_hp)
         self.essence = min(self.essence, self.max_essence)
         if self.status in ["DYING", "DEAD"]:
-            self.hp = 0.0 # Ensure HP is 0 if loaded in these states
-            # If loaded DEAD, should probably trigger respawn immediately?
-            # Or let ticker handle DYING timer / DEAD state respawn trigger? Let ticker handle.
-        elif self.status != "ALIVE":
-            log.warning("Character %s loaded with unexpected status '%s'. Resetting to ALIVE.", self.name, self.status)
-            self.status = "ALIVE" # Fallback for safety
+            self.hp = 0.0
 
         log.debug("Character object initialized for %s (ID: %s, Status: %s, HP: %.1f/%.1f)",
                 self.name, self.dbid, self.status, self.hp, self.max_hp)
 
     def get_max_weight(self) -> int:
         """Calculates maximum carrying weight based on Might."""
-        might = self.stats.get("might", 10) # Default 10 might if missing
+        might = self.stats.get("might", 10)
         return might * 10
 
     def get_current_weight(self, world: 'World') -> int:
         """Calculates current weight carried from inventory and equipment."""
         current_weight = 0
-        # Weight from inventory (loose items)
-        for item_template_id in self.inventory:
-            template = world.get_item_template(item_template_id)
-            if template:
-                try:
-                    # Need to parse stats JSON from the template Row
-                    stats_dict = json.loads(template['stats'] or '{}')
-                    current_weight += stats_dict.get("weight", 1) # Add item weight
-                except (json.JSONDecodeError, TypeError):
-                    log.warning("Could not parse stats for inventory item template %d for weight calc.", item_template_id)
-                    current_weight += 1 # Assume default weight 1 on error
-            else:
-                log.warning("Could not find item template %d in inventory for weight calc.", item_template_id)
-                # Decide: count as 0 weight, default 1, or raise error? Default 1 seems safest.
-                current_weight += 1
-
-        # Weight from equipment
-        for item_template_id in self.equipment.values():
+        all_item_ids = self.inventory + list(self.equipment.values())
+        
+        for item_template_id in all_item_ids:
             template = world.get_item_template(item_template_id)
             if template:
                 try:
                     stats_dict = json.loads(template['stats'] or '{}')
                     current_weight += stats_dict.get("weight", 1)
                 except (json.JSONDecodeError, TypeError):
-                    log.warning("Could not parse stats for equipment item template %d for weight calc.", item_template_id)
+                    log.warning("Could not parse stats for item template %d for weight calc.", item_template_id)
                     current_weight += 1
             else:
-                log.warning("Could not find item template %d in equipment for weight calc.", item_template_id)
+                log.warning("Could not find item template %d for weight calc.", item_template_id)
                 current_weight += 1
-
-        # TODO: Add weight of coinage later if desired? Typically negligible.
         return current_weight
 
     def find_item_in_inventory_by_name(self, world: 'World', item_name: str) -> Optional[int]:
-        """Finds the first template ID in inventory matching some (case-insensitive)"""
+        """Finds the first template ID in inventory matching a partial name (case-insensitive)."""
         name_lower = item_name.lower()
         for template_id in self.inventory:
             template = world.get_item_template(template_id)
             if template and name_lower in template['name'].lower():
                 return template_id
+        return None
 
     def find_item_in_equipment_by_name(self, world: 'World', item_name: str) -> Optional[Tuple[str, int]]:
-        """Finds the first equipped template ID matching name (case-insensitive)."""
+        """Finds the first equipped template ID matching a name (case-insensitive)."""
         name_lower = item_name.lower()
         for slot, template_id in self.equipment.items():
             template = world.get_item_template(template_id)
             if template and name_lower in template['name'].lower():
-                return slot, template_id # Return slot name and template ID
+                return slot, template_id
         return None
 
     def find_item_anywhere_by_name(self, world: 'World', item_name: str) -> Optional[Tuple[str, int]]:
         """Finds item by name in equipment then inventory. Returns (location, template_id)."""
-        # Check equipment first
         equipped = self.find_item_in_equipment_by_name(world, item_name)
         if equipped:
-            return equipped[0], equipped[1] # Return slot, template_id
+            return equipped[0], equipped[1]
 
-        # Check inventory next
         inv_tid = self.find_item_in_inventory_by_name(world, item_name)
         if inv_tid:
-            return "inventory", inv_tid # Return "inventory", template_id
+            return "inventory", inv_tid
 
         return None
 
@@ -302,93 +224,51 @@ class Character:
                 log.exception("Failed to instantiate Item from template %d", template_id)
         return None
 
-    async def send(self, message: str, add_newline: bool = True): # <<< Added add_newline parameter back
+    async def send(self, message: str, add_newline: bool = True):
         """Safely sends a message to this character's client, applying color codes."""
-        if not hasattr(self, 'writer') or self.writer.is_closing():
-            return # Cannot send
+        if self.writer.is_closing():
+            return
 
-        original_message = message # For logging clarity
-        try:
-            message_to_send = utils.colorize(message)
-        except Exception as color_e:
-            log.error("Error applying color codes for char %s: %s", self.name, color_e)
-            message_to_send = message # Fallback to uncolored on error
-
-        # Ensure proper newline (using message_to_send and add_newline)
-        if add_newline and not message_to_send.endswith(('\r\n', '\n')):
+        message_to_send = utils.colorize(message)
+        if add_newline and not message_to_send.endswith('\r\n'):
             message_to_send += '\r\n'
 
-        # Encode and send
         try:
-            log.debug("Sent to %s: %r", self.name, original_message) # Log original
-            # Write the processed message_to_send
+            log.debug("Sent to %s: %r", self.name, message)
             self.writer.write(message_to_send.encode(config.ENCODING))
             await self.writer.drain()
         except (ConnectionResetError, BrokenPipeError) as e:
             log.warning("Connection lost for %s during write: %s", self.name, e)
-            # Consider how to handle state if write fails - maybe disconnect needed from handler?
-        except Exception as e:
-            log.exception("Unexpected error writing to %s:", self.name, exc_info=True)
+        except Exception:
+            log.exception("Unexpected error writing to %s:", self.name)
 
     async def save(self, db_conn: aiosqlite.Connection):
         """Gathers essential character data and saves it to the database."""
-        # Define V1 data to save
         data_to_save = {
-            "location_id": self.location_id,
-            "hp": self.hp,
-            "essence": self.essence,
-            "xp_pool": self.xp_pool,
-            "xp_total": self.xp_total,
-            "level": self.level,
+            "location_id": self.location_id, "hp": self.hp, "essence": self.essence,
+            "xp_pool": self.xp_pool, "xp_total": self.xp_total, "level": self.level,
             "unspent_skill_points": self.unspent_skill_points,
             "unspent_attribute_points": self.unspent_attribute_points,
-            "spiritual_tether": self.spiritual_tether,
-            "status": self.status,
-            "stance": self.stance,
-            "stats": json.dumps(self.stats), # Save current stats
-            "skills": json.dumps(self.skills), # Save current skills
-            "known_spells": json.dumps(self.known_spells),
+            "spiritual_tether": self.spiritual_tether, "status": self.status,
+            "stance": self.stance, "stats": json.dumps(self.stats),
+            "skills": json.dumps(self.skills), "known_spells": json.dumps(self.known_spells),
             "known_abilities": json.dumps(self.known_abilities),
-            "inventory": json.dumps(self.inventory), # Save list of template IDs
-            "equipment": json.dumps(self.equipment), # Save dict of {slot: template_id}
-            "coinage": self.coinage,
-            "max_hp": self.max_hp,
-            "max_essence": self.max_essence,
+            "inventory": json.dumps(self.inventory), "equipment": json.dumps(self.equipment),
+            "coinage": self.coinage, "max_hp": self.max_hp, "max_essence": self.max_essence,
         }
 
-        # Only proceed if there's actually data to save
-        if not data_to_save:
-            log.warning("Character %s: No data generated to save.", self.name)
-            return
-
-        log.debug("Attempting save for character %s (ID: %s)... Data: %s", self.name, self.dbid, data_to_save)
         try:
-            # Call the database function (which should now be the dynamic one)
             rowcount = await database.save_character_data(db_conn, self.dbid, data_to_save)
-
-            # Log the outcome based on rowcount
-            if rowcount is None:
-                # This indicates an error occurred within execute_query/save_character_data
-                log.error("Save FAILED for character %s (ID: %s), DB function returned None.", self.name, self.dbid)
-            elif rowcount == 1:
-                # This is the ideal, expected outcome
-                log.info("Successfully saved character %s (ID: %s). 1 row affected.", self.name, self.dbid)
-            elif rowcount == 0:
-                # This means the WHERE id = ? clause didn't match any rows
-                log.warning("Attempted to save character %s (ID: %s), but no rows were updated (ID not found in DB?).", self.name, self.dbid)
+            if rowcount == 1:
+                log.info("Successfully saved character %s (ID: %s).", self.name, self.dbid)
             else:
-                # Handles the unexpected rowcount=2 (or other non-zero values)
-                # Log as info for now, not warning, due to the unresolved issue
-                log.info("Save attempt for character %s (ID: %s) completed. DB rowcount reported: %s.",
-                        self.name, self.dbid, rowcount)
-
-        except Exception as e:
-            # Catch any other unexpected errors during the save process
-            # Log the actual exception object 'e'
-            log.exception("Unexpected error saving character %s (ID: %s): %s", self.name, self.dbid, e, exc_info=True)
+                log.warning("Save for character %s (ID: %s) reported %s rows affected.",
+                            self.name, self.dbid, rowcount)
+        except Exception:
+            log.exception("Unexpected error saving character %s (ID: %s):", self.name, self.dbid)
 
     def respawn(self):
-        """Resets character state after death"""
+        """Resets character state after death."""
         log.info("RESPAWN: Character %s (ID %s) is respawning.", self.name, self.dbid)
         self.hp = self.max_hp
         self.essence = self.max_essence
@@ -397,185 +277,120 @@ class Character:
         self.is_fighting = False
         self.death_timer_ends_at = None
         self.roundtime = 0.0
-        # Optionally add a short respawn sickness roundtime?
 
     def update_regen(self, dt: float, is_in_node: bool):
-        """Applies HP and essence regeneration based on stats, status, and location."""
-        # No regeneration if not in a normal 'living' or 'meditating' state
+        """Applies HP and essence regeneration."""
         if self.status not in ["ALIVE", "MEDITATING"]:
             return
 
-        # --- HP Regeneration ---
+        # HP Regeneration
         if self.hp < self.max_hp:
-            base_hp_regen_sec = getattr(config, 'HP_REGEN_BASE_PER_SEC', 0.1)
-            vit_bonus_sec = self.vit_mod * getattr(config, 'HP_REGEN_VIT_MULTIPLIER', 0.05)
-            hp_regen_rate = base_hp_regen_sec + vit_bonus_sec
-
+            base_hp_regen = self.vit_mod * config.HP_REGEN_VIT_MULTIPLIER
+            hp_regen_rate = config.HP_REGEN_BASE_PER_SEC + base_hp_regen
             if is_in_node:
-                hp_regen_rate *= getattr(config, 'NODE_REGEN_MULTIPLIER', 2.0)
+                hp_regen_rate *= config.NODE_REGEN_MULTIPLIER
+            self.hp = min(self.max_hp, self.hp + (hp_regen_rate * dt))
 
-            hp_to_regen = hp_regen_rate * dt
-            old_hp = self.hp
-            self.hp = min(self.max_hp, self.hp + hp_to_regen)
-            # if int(old_hp) < int(self.hp): log.debug(...) # Optional: log hp regen amount
-
-        # --- Essence Regeneration ---
+        # Essence Regeneration
         if self.essence < self.max_essence:
-            base_ess_regen_sec = getattr(config, 'ESSENCE_REGEN_BASE_PER_SEC', 0.08)
-            aura_bonus_sec = self.aura_mod * getattr(config, 'ESSENCE_REGEN_AURA_MULTIPLIER', 0.04)
-            # Add PersMod bonus? Maybe not for base regen.
-            ess_regen_rate = base_ess_regen_sec + aura_bonus_sec
-
-            # Apply multipliers
+            base_ess_regen = self.aura_mod * config.ESSENCE_REGEN_AURA_MULTIPLIER
+            ess_regen_rate = config.ESSENCE_REGEN_BASE_PER_SEC + base_ess_regen
             if self.status == "MEDITATING":
-                ess_regen_rate *= getattr(config, 'MEDITATE_REGEN_MULTIPLIER', 3.0)
+                ess_regen_rate *= config.MEDITATE_REGEN_MULTIPLIER
             if is_in_node:
-                ess_regen_rate *= getattr(config, 'NODE_REGEN_MULTIPLIER', 2.0) # Stack with meditate? Yes.
-
-            ess_to_regen = ess_regen_rate * dt
-            old_ess = self.essence
-            self.essence = min(self.max_essence, self.essence + ess_to_regen)
-            # if int(old_ess) < int(self.essence): log.debug(...) # Optional: log ess regen amount
+                ess_regen_rate *= config.NODE_REGEN_MULTIPLIER
+            self.essence = min(self.max_essence, self.essence + (ess_regen_rate * dt))
 
     def update_location(self, new_location: Optional['Room']):
-        """
-        Updates the character's current location reference.
-
-        Args:
-            new_location: The room object the character is now in, or None.
-        """
-        old_loc_id = getattr(self.location, 'dbid', None)
-        new_loc_id = getattr(new_location, 'dbid', None)
+        """Updates the character's current location reference."""
         self.location = new_location
         if new_location:
-            self.location_id = new_location.dbid # Keep db id in sync
-        log.debug("Character %s location updated from room %s to room %s",
-                self.name, old_loc_id, new_loc_id)
+            self.location_id = new_location.dbid
 
-    def calculate_derived_max_attributes(self):
+    def recalculate_max_vitals(self):
         """
-        Sets initial Max HP/Essence based on stats AND max possible class die roll.
-        Called from __init__ and potentially other recalculations.
-        Also restores current HP/Essence to max.
+        Recalculates Max HP and Max Essence based on current level and stats.
+        This does NOT restore current HP/Essence, it only adjusts the maximums.
+        Used at creation, on level up, or when base stats change.
         """
-        vitality = self.stats.get("vitality", 10)
-        aura = self.stats.get("aura", 10)
-        persona = self.stats.get("persona", 10)
+        # Base value is determined by level * average die roll + initial roll
+        hp_die = class_defs.CLASS_HP_DIE.get(self.class_id, class_defs.DEFAULT_HP_DIE)
+        ess_die = class_defs.CLASS_ESSENCE_DIE.get(self.class_id, class_defs.DEFAULT_ESSENCE_DIE)
+        
+        # A simple formula: a base amount + (level-1) * average roll per level + stat mods per level
+        base_hp = hp_die + ((self.level - 1) * (hp_die / 2 + 0.5))
+        base_essence = ess_die + ((self.level - 1) * (ess_die / 2 + 0.5))
 
-        vit_mod = utils.calculate_modifier(vitality)
-        aura_mod = utils.calculate_modifier(aura)
-        pers_mod = utils.calculate_modifier(persona)
+        self.max_hp = float(max(1, base_hp + (self.level * self.vit_mod)))
+        self.max_essence = float(max(0, base_essence + (self.level * (self.aura_mod + self.pers_mod))))
+        
+        log.debug("Recalculated max vitals for %s (Lvl %d): MaxHP=%.1f, MaxEss=%.1f",
+                  self.name, self.level, self.max_hp, self.max_essence)
 
-        # Get MAX die roll values for initial calculation
-        initial_hp_base = class_defs.CLASS_HP_DIE.get(self.class_id, class_defs.DEFAULT_HP_DIE)
-        initial_essence_base = class_defs.CLASS_ESSENCE_DIE.get(self.class_id, class_defs.DEFAULT_ESSENCE_DIE)
-
-        # SET Max HP/Essence (Base is max die roll + modifier)
-        self.max_hp = initial_hp_base + vit_mod
-        self.max_essence = initial_essence_base + aura_mod + pers_mod # Add base essence roll too
-
-        # Clamp minimums? Should Max HP/Essence always be at least 1?
-        self.max_hp = max(1, self.max_hp)
-        self.max_essence = max(0, self.max_essence) # Essence can be 0
-
-        # log.debug("Character %s: Derived attributes calculated/updated: MaxHP=%d, MaxEssence=%d",
-        #         self.name, self.max_hp, self.max_essence)
-
-    def apply_level_up_gains(self) -> Tuple[int, int]:
+    def apply_level_up_gains(self) -> Tuple[float, float]:
         """
-        Calculates HP/Essence gains based on class dice rolls and current modifiers,
-        updates max values, and restores current HP/Essence to new max.
-        Should be called AFTER level has been incremented.
-
-        Returns:
-            A tuple containing (hp_increase, essence_increase).
+        Calculates and applies HP/Essence gains from a level up, then refills vitals.
+        This should be called AFTER level has been incremented.
         """
-        current_vit_mod = self.vit_mod
-        current_aura_mod = self.aura_mod
-        current_pers_mod = self.pers_mod
-
-        # Get die sizes for the character's class
         hp_die_size = class_defs.CLASS_HP_DIE.get(self.class_id, class_defs.DEFAULT_HP_DIE)
         essence_die_size = class_defs.CLASS_ESSENCE_DIE.get(self.class_id, class_defs.DEFAULT_ESSENCE_DIE)
 
-        # Roll the dice
         hp_roll = random.randint(1, hp_die_size)
         essence_roll = random.randint(1, essence_die_size)
 
-        # Calculate increase (ensure minimums)
-        hp_increase = float(max(1, hp_roll + current_vit_mod))
-        essence_increase = float(max(0, essence_roll + current_aura_mod + current_pers_mod))
-        # --- ^ ^ ^ ---
+        hp_increase = float(max(1, hp_roll + self.vit_mod))
+        essence_increase = float(max(0, essence_roll + self.aura_mod + self.pers_mod))
 
-        # Apply increase to max values
         self.max_hp += hp_increase
         self.max_essence += essence_increase
 
-        # Restore current HP/Essence to new max
         self.hp = self.max_hp
         self.essence = self.max_essence
 
-        log.debug("Character %s Level Up Gains: HP Roll(d%d)=%d, Mod=%d -> +%d (New Max: %d); Essence Roll(d%d)=%d, Mod=%d -> +%d (New Max: %d)",
-                self.name, hp_die_size, hp_roll, current_vit_mod, hp_increase, self.max_hp,
-                essence_die_size, essence_roll, current_aura_mod + current_pers_mod, essence_increase, self.max_essence)
+        log.debug("%s Level Up: HP Roll(d%d)=%d, Mod=%d -> +%.1f; Ess Roll(d%d)=%d, Mod=%d -> +%.1f",
+                self.name, hp_die_size, hp_roll, self.vit_mod, hp_increase,
+                essence_die_size, essence_roll, self.aura_mod + self.pers_mod, essence_increase)
 
         return hp_increase, essence_increase
 
-    def is_alive(self) -> bool: # Add helper consistent with Mob
-        return self.hp > 0 and self.status != "DEAD" # DYING counts as alive for some checks
+    def is_alive(self) -> bool:
+        return self.hp > 0 and self.status != "DEAD"
 
     def get_total_av(self, world: 'World') -> int:
         """Calculates total armor value (AV) from worn equipment."""
-        #log.debug("Calculating Total AV for %s", self.name) # Log entry
         total_av = 0
-        if not self.equipment: # No equipment worn
+        if not self.equipment:
             return 0
         
         for slot, template_id in self.equipment.items():
-            # skip non-armor/shield items if any happen to be equipped? Or assume only armor/shields provide AV
             template = world.get_item_template(template_id)
-            if template:
-                template_dict = dict(template) # Easier to work with dict
-                # Check if items type should contribute to AV (ARMOR or SHIELD typically)
-                item_type = template['type'].upper() # Get type from template row
-                if item_type in ["ARMOR", "SHIELD"]: # ONly count these types for now.
-                    try:
-                        stats_str = template_dict.get('stats', '{}')
-                        stats_dict = json.loads(template['stats'] or '{}')
-                        item_av = stats_dict.get("armor", 0)
-                        log.debug(" -> Found armor value: %d in stats: %s", item_av, stats_dict) # See extracted AV
-                        total_av += item_av
-                    except (json.JSONDecodeError, TypeError):
-                        log.warning("Could not parse stats for equipped item template %d (Slot: %s) for AV calc.", template_id, slot)
-                # Else: Log non-armor items in slot if needed
-            else:
-                log.warning("Could not find item template %d in equipment slot %s for AV calc.", template_id, slot)
-
-            log.debug("Character %s final calculated Total AV: %d", self.name, total_av) # Log final value
+            if template and template['type'].upper() in ["ARMOR", "SHIELD"]:
+                try:
+                    stats_dict = json.loads(template['stats'] or '{}')
+                    item_av = stats_dict.get("armor", 0)
+                    total_av += item_av
+                except (json.JSONDecodeError, TypeError):
+                    log.warning("Could not parse stats for equipped item %d (Slot: %s) for AV calc.", template_id, slot)
+        
+        # BUG FIX: Moved log outside the loop.
+        log.debug("Character %s final calculated Total AV: %d", self.name, total_av)
         return total_av
 
     def get_skill_rank(self, skill_name: str) -> int:
-        """Gets the character's rank in a specific skill"""
-        return self.skills.get(skill_name.lower(), 0) # Return 0 if skill unknown
+        """Gets the character's rank in a specific skill."""
+        return self.skills.get(skill_name.lower(), 0)
 
     def get_skill_modifier(self, skill_name: str) -> int:
-        """
-        Calculates the total modifier for a skill check.
-        (skill rank + attribute modifier)
-        """
+        """Calculates the total modifier for a skill check (rank + attribute modifier)."""
         skill_name_lower = skill_name.lower()
         rank = self.get_skill_rank(skill_name_lower)
-
-        # Find the governing attribute
         attr_name = skill_defs.get_attribute_for_skill(skill_name_lower)
-        if not attr_name:
-            log.warning("No attribute mapping found for skill '%s'", skill_name_lower)
-            return rank # return just the rank if no attribute defined.
         
-        # Get the attribute value and calculate its modifier
-        attr_value = self.stats.get(attr_name, 10) # Default 10 if stat missing
+        if not attr_name:
+            return rank
+        
+        attr_value = self.stats.get(attr_name, 10)
         attr_mod = utils.calculate_modifier(attr_value)
-
         return rank + attr_mod
 
     def knows_spell(self, spell_key: str) -> bool:
@@ -587,7 +402,7 @@ class Character:
         return ability_key.lower() in self.known_abilities
 
     def get_shield(self, world: 'World') -> Optional[Item]:
-        """Returns the Item object for the equipped shield, or None if no shield."""
+        """Returns the Item object for the equipped shield, or None."""
         shield_template_id = self.equipment.get("WIELD_OFF")
         if not shield_template_id:
             return None
@@ -595,14 +410,11 @@ class Character:
         shield_item = self.get_item_instance(world, shield_template_id)
         if shield_item and shield_item.item_type.upper() == "SHIELD":
             return shield_item
-        else:
-            # Item in offhand is not of type SHIELD
-            if shield_item: log.warning("Item %d in WIELD_OFF for %s is not type SHIELD.", shield_template_id, self.name)
-            return None
+        return None
 
     def __repr__(self) -> str:
-        return f"<Character {self.dbid}: '{self.first_name} {self.last_name}'>"
+        return f"<Character {self.dbid}: '{self.name}'>"
 
     def __str__(self) -> str:
-        loc_id = getattr(self.location, 'dbid', self.location_id) # Show current or last known dbid
-        return f"Character(id={self.dbid}, name='{self.first_name} {self.last_name}', loc={loc_id})"
+        loc_id = getattr(self.location, 'dbid', self.location_id)
+        return f"Character(id={self.dbid}, name='{self.name}', loc={loc_id})"

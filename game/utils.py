@@ -7,18 +7,21 @@ import hashlib
 import logging
 import math
 import config
+import argon2 # <-- Import Argon2
 from typing import Optional, TYPE_CHECKING, List, Dict, Any
 from .definitions import colors as color_defs
+
 if TYPE_CHECKING:
     from game.character import Character # Use relative path if needed '.character'
-
-# You might want other utilities here later (e.g. logging setup, decorators)
+    from game.world import World # Added World for get_item_template_from_world
 
 log = logging.getLogger(__name__)
 
+# --- Argon2 Setup ---
+# This creates a PasswordHasher instance with default secure settings.
+ph = argon2.PasswordHasher()
+
 # --- Password Hashing ---
-# IMPORTANT: These are basic SHA256 hashes for initial development.
-# Plan to replace with bcrypt for production.
 
 VALID_DIRECTIONS: set[str] = {
     "north", "n",
@@ -31,7 +34,6 @@ VALID_DIRECTIONS: set[str] = {
     "southeast", "se",
     "southwest", "sw",
     "northwest", "nw",
-    # Add any other custom directions like "in", "out", "portal" if desired later
 }
 
 OPPOSITE_DIRECTIONS: Dict[str, str] = {
@@ -45,8 +47,25 @@ OPPOSITE_DIRECTIONS: Dict[str, str] = {
     "southeast": "northwest", "se": "nw",
     "southwest": "northeast", "sw": "ne",
     "northwest": "southeast", "nw": "se",
-    # Add opposites for custom directions if needed
 }
+
+CANONICAL_DIRECTIONS_MAP = {
+    "north": "n", "n": "n",
+    "south": "s", "s": "s",
+    "east": "e", "e": "e",
+    "west": "w", "w": "w",
+    "up": "u", "u": "u",
+    "down": "d", "d": "d",
+    "northeast": "ne", "ne": "ne",
+    "northwest": "nw", "nw": "nw",
+    "southeast": "se", "se": "se",
+    "southwest": "sw", "sw": "sw",
+}
+
+def get_canonical_direction(direction: str) -> Optional[str]:
+    """Returns the canonical (short) form of a direction string (lowercase)."""
+    return CANONICAL_DIRECTIONS_MAP.get(direction.lower())
+
 
 def get_opposite_direction(direction: str) -> Optional[str]:
     """Returns the opposite direction for a given direction string (lowercase)."""
@@ -62,26 +81,25 @@ def get_item_template_from_world(world: 'World', template_id: int) -> Optional[d
 
 def hash_password(password: str) -> str:
     """
-    Hashes a password using SHA256
+    Hashes a password using the secure Argon2 algorithm.
 
     Args:
-        password: the plaintext password.
+        password: The plaintext password.
 
-    returns: 
-        A string containing the hexadecimal SHA256 hash.
-
-    TODO: Replace with bcrypt later for proper salting and adaptive hashing.
+    Returns:
+        A string containing the Argon2 hash.
     """
     if not password:
         log.warning("Attempted to hash an empty password.")
-        # Decide on handling: raise error or return specific non-matching hash?
-        # Returning a known non-matching hash might be slightly safer than erroring.
+        # Argon2 will raise an error on empty password, so we handle it.
+        # We can return a known non-matching hash.
         return "invalid_empty_password_hash"
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+    # The ph.hash method handles salting automatically.
+    return ph.hash(password)
 
 def verify_password(stored_hash: str, provided_password: str) -> bool:
     """
-    Verifies a provided password against a stored SHA256 hash.
+    Verifies a provided password against a stored Argon2 hash.
 
     Args:
         stored_hash: The hash retrieved from the database.
@@ -89,12 +107,40 @@ def verify_password(stored_hash: str, provided_password: str) -> bool:
 
     Returns:
         True if the passwords match, False otherwise.
-    TODO: Replace with bcrypt checkpw later.
     """
     if not provided_password or not stored_hash:
-        return False # Cannot verify empty or missing components
-    # Compare the hash of the provided password with the stored hash
-    return stored_hash == hash_password(provided_password)
+        return False
+    try:
+        # ph.verify will check the password and the hash format.
+        # It raises an exception on mismatch.
+        ph.verify(stored_hash, provided_password)
+        return True
+    except argon2.exceptions.VerifyMismatchError:
+        # This is the expected exception for a wrong password.
+        return False
+    except argon2.exceptions.InvalidHash:
+        # This occurs if the stored_hash is not a valid Argon2 hash (e.g., our old SHA256).
+        # We'll handle this case in the Player class, not here.
+        log.debug("verify_password encountered an invalid Argon2 hash. Legacy check required.")
+        return False
+    except Exception:
+        # Catch any other unexpected Argon2 verification errors.
+        log.exception("An unexpected error occurred during Argon2 verification.")
+        return False
+
+def check_needs_rehash(stored_hash: str) -> bool:
+    """
+    Checks if an Argon2 hash uses outdated parameters and should be updated.
+    """
+    try:
+        return ph.check_needs_rehash(stored_hash)
+    except argon2.exceptions.InvalidHash:
+        # If it's not an Argon2 hash at all, it definitely needs to be "rehashed".
+        return True
+
+def _legacy_hash_password_sha256(password: str) -> str:
+    """The old SHA256 hashing function, kept for migration purposes."""
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
 
 def _roll_4d6() -> int:
     """Rolls 4 six-sided dice and returns the sum."""
@@ -218,7 +264,6 @@ def format_coinage(total_talons: int) -> str:
     if total_talons == 0: return "0 Talons" # Use full name for zero
 
     # --- Define conversion rates ---
-    # Adjust these if your currency system is different (e.g., 100 copper = 1 silver)
     talons_per_shard = 10
     shards_per_orb = 10
     orbs_per_crown = 10 # Assuming 1 Crown = 10 Orbs = 100 Shards = 1000 Talons
@@ -242,7 +287,6 @@ def format_coinage(total_talons: int) -> str:
     if talons > 0:
         parts.append(f"{talons} {'Talon' if talons == 1 else 'Talons'}")
 
-    # Join the parts with commas and spaces for readability, handle empty case
     return ", ".join(parts) if parts else "0 Talons"
 
 def colorize(text: str) -> str:
@@ -254,10 +298,8 @@ def colorize(text: str) -> str:
         output = output.replace(code, ansi_sequence)
     return output
 
-# Add this helper function to game/utils.py or keep it local in admin.py if not reused
 def parse_quoted_args(args_str: str, min_args: int, max_args: int) -> Optional[List[str]]:
     """Parses args respecting quotes. Limited version for create commands."""
-    # This is a simple parser - shlex is more robust but adds dependency
     args = []
     current_arg = ""
     in_quotes = False
@@ -273,10 +315,10 @@ def parse_quoted_args(args_str: str, min_args: int, max_args: int) -> Optional[L
         else:
             current_arg += char
         i += 1
-    if current_arg: # Add last argument
+    if current_arg:
         args.append(current_arg)
 
-    if in_quotes: # Mismatched quotes
+    if in_quotes:
         log.debug("Parse error: Mismatched quotes in input '%s'", args_str)
         return None
     if not (min_args <= len(args) <= max_args):
