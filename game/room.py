@@ -23,10 +23,18 @@ class Room:
         self.name: str = db_data['name']
         self.description: str = db_data['description']
         
-        # asyncpg automatically decodes JSONB columns into Python objects.
-        self.exits: Dict[str, Any] = db_data.get('exits') or {}
-        self.flags: Set[str] = set(db_data.get('flags') or [])
-        self.spawners: Dict[int, Dict[str, Any]] = {int(k): v for k, v in (db_data.get('spawners') or {}).items()}
+        # --- FIX: Robustly load JSONB data ---
+        # This logic handles data that may be a string or already a Python object.
+        
+        exits_data = db_data.get('exits') or {}
+        self.exits: Dict[str, Any] = json.loads(exits_data) if isinstance(exits_data, str) else exits_data
+        
+        flags_data = db_data.get('flags') or []
+        self.flags: Set[str] = set(json.loads(flags_data) if isinstance(flags_data, str) else flags_data)
+        
+        spawners_data = db_data.get('spawners') or {}
+        spawners_dict = json.loads(spawners_data) if isinstance(spawners_data, str) else spawners_data
+        self.spawners: Dict[int, Dict[str, Any]] = {int(k): v for k, v in spawners_dict.items()}
         
         # Runtime attributes, populated by World.build()
         self.characters: Set['Character'] = set()
@@ -85,7 +93,7 @@ class Room:
             await asyncio.gather(*tasks, return_exceptions=True)
 
     def get_character_by_name(self, name: str) -> Optional['Character']:
-        """Finds the first character in the room matching the given name (case-insensitive)."""
+        """Finds the first character in the room matching their first name (case-insensitive)."""
         name_lower = name.lower()
         for character in self.characters:
             if name_lower == character.first_name.lower():
@@ -126,8 +134,7 @@ class Room:
 
     async def add_item(self, item_template_id: int, world: 'World') -> bool:
         """Adds an item to the room's cache and the database."""
-        query = "INSERT INTO room_items (room_id, item_template_id) VALUES ($1, $2)"
-        status = await world.db_manager.execute_query(query, self.dbid, item_template_id)
+        status = await world.db_manager.execute_query("INSERT INTO room_items (room_id, item_template_id) VALUES ($1, $2)", self.dbid, item_template_id)
         if "INSERT 0 1" in status:
             self.items.append(item_template_id)
             return True
@@ -138,13 +145,12 @@ class Room:
         if item_template_id not in self.items:
             return False
         
-        query = "DELETE FROM room_items WHERE id = (SELECT id FROM room_items WHERE room_id = $1 AND item_template_id = $2 LIMIT 1)"
-        status = await world.db_manager.execute_query(query, self.dbid, item_template_id)
+        status = await world.db_manager.execute_query("DELETE FROM room_items WHERE id = (SELECT id FROM room_items WHERE room_id = $1 AND item_template_id = $2 LIMIT 1)", self.dbid, item_template_id)
         if "DELETE 1" in status:
             try:
                 self.items.remove(item_template_id)
                 return True
-            except ValueError: # Should not happen if the initial check passes
+            except ValueError:
                 return False
         return False
         
@@ -152,8 +158,7 @@ class Room:
         """Adds or removes coinage from the room's cache and the database."""
         if amount == 0: return True
         
-        query = "UPDATE rooms SET coinage = GREATEST(0, coinage + $1) WHERE id = $2"
-        status = await world.db_manager.execute_query(query, amount, self.dbid)
+        status = await world.db_manager.execute_query("UPDATE rooms SET coinage = GREATEST(0, coinage + $1) WHERE id = $2", amount, self.dbid)
         if "UPDATE 1" in status:
             self.coinage = max(0, self.coinage + amount)
             return True
