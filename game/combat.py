@@ -144,6 +144,12 @@ async def resolve_physical_attack(
     if attacker_loc:
         await attacker_loc.broadcast(f"\r\n{attacker_name} {hit_desc}s {target_name}!\r\n", exclude={attacker, target})
 
+    if isinstance(target, Character) and target.status == "MEDITATING" and final_damage > 0:
+        target.status = "ALIVE"
+        await target.send("{RThe force of the blow shatters your concentration!{x")
+        if attacker_loc:
+            await attacker_loc.broadcast(f"\r\n{target_name} is snapped out of their meditative trance by the attack!\r\n", exclude={target})
+
     # --- 10. Apply Roundtime ---
     attacker.roundtime = wpn_speed
     
@@ -201,6 +207,12 @@ async def resolve_magical_attack(
         await target.send(f"{{R{caster_name}'s {spell_data['name']} {hit_desc} you for {{y{int(final_damage)}{{x damage!{{x ({int(target.hp)}/{int(target.max_hp)} HP)")
     if caster.location:
         await caster.location.broadcast(f"\r\n{caster_name}'s {spell_data['name']} {hit_desc} {target_name}!\r\n", exclude={caster, target})
+
+    if isinstance(target, Character) and target.status == "MEDITATING" and final_damage > 0:
+        target.status = "ALIVE"
+        await target.send("{RThe magical assault disrupts your meditation!{x")
+        if caster.location:
+            await caster.location.broadcast(f"\r\n{target_name} is snapped out of their meditative trance by the attack!\r\n", exclude={target})
 
     # --- 7. Check for Defeat ---
     if target.hp <= 0:
