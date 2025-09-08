@@ -14,12 +14,11 @@ from . import utils
 
 log = logging.getLogger(__name__)
 
-# --- Database Connection Details ---
 DB_CONFIG = {
     "user": "chrozal",
-    "password": "timcp313", # Your Docker Compose password
+    "password": "timcp313", # IMPORTANT: Use the password from your docker-compose.yml
     "database": "chrozaldb",
-    "host": "db"
+    "host": "localhost"
 }
 
 class DatabaseManager:
@@ -44,26 +43,20 @@ class DatabaseManager:
             log.info("PostgreSQL connection pool closed.")
 
     async def execute_query(self, query: str, *params) -> str:
-        """Executes a data-modifying query (INSERT, UPDATE, DELETE). Returns the status string."""
-        if not self.pool:
-            raise ConnectionError("Database pool is not initialized.")
-        
+        """Executes a data-modifying query. Returns the status string."""
+        if not self.pool: raise ConnectionError("Database pool not initialized.")
         async with self.pool.acquire() as conn:
             return await conn.execute(query, *params)
     
     async def fetch_one(self, query: str, *params) -> Optional[asyncpg.Record]:
         """Executes a SELECT query and fetches the first result."""
-        if not self.pool:
-            raise ConnectionError("Database pool is not initialized.")
-        
+        if not self.pool: raise ConnectionError("Database pool not initialized.")
         async with self.pool.acquire() as conn:
             return await conn.fetchrow(query, *params)
     
     async def fetch_all(self, query: str, *params) -> List[asyncpg.Record]:
         """Executes a SELECT query and fetches all results."""
-        if not self.pool:
-            raise ConnectionError("Database pool is not initialized.")
-            
+        if not self.pool: raise ConnectionError("Database pool not initialized.")
         async with self.pool.acquire() as conn:
             return await conn.fetch(query, *params)
             
@@ -214,8 +207,39 @@ class DatabaseManager:
                         UNIQUE (room_id, name)
                     )
                 """)
+
+        # --- Seed Essential Data ---
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                # Races
+                await conn.executemany("INSERT INTO races (id, name, description) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING", 
+                                     [(1, "Chrozalin", "Versatile humans..."), (2, "Dwarf", "Stout mountain folk..."), (3, "Elf", "Graceful forest dwellers..."), (4, "Yan-tar", "Ancient turtle-like people..."), (5, "Grak", "Towering humanoids...")])
+                # Classes
+                await conn.executemany("INSERT INTO classes (id, name, description) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING",
+                                     [(1, "Warrior", "..."), (2, "Mage", "..."), (3, "Cleric", "..."), (4, "Rogue", "...")])
+                # Areas & Rooms
+                await conn.execute("INSERT INTO areas (id, name, description) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING", 1, "The Void", "...")
+                await conn.execute("INSERT INTO rooms (id, area_id, name, description, flags) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING", 1, 1, "The Void", "...", json.dumps(["NODE", "RESPAWN"]))
+                # Test Players
+                await conn.execute("INSERT INTO players (username, hashed_password, email, is_admin) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING", "tester", utils.hash_password("password"), "tester@example.com", False)
+                await conn.execute("INSERT INTO players (username, hashed_password, email, is_admin) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING", "admin", utils.hash_password("password"), "admin@example.com", True)
                 
         log.info("--- PostgreSQL schema check complete ---")
+
+    # --- Creator Functions (for seeding and building) ---
+    async def create_item_template(self, name: str, item_type: str, description: str, stats: dict, flags: list, damage_type: Optional[str]) -> Optional[int]:
+        query = "INSERT INTO item_templates (name, type, description, stats, flags, damage_type) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
+        record = await self.fetch_one(query, name, item_type, description, json.dumps(stats), json.dumps(flags), damage_type)
+        return record['id'] if record else None
+
+    async def create_mob_template(self, name: str, level: int, description: str, stats: dict, attacks: list, loot: dict, flags: list) -> Optional[int]:
+        query = "INSERT INTO mob_templates (name, level, description, stats, attacks, loot, flags) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id"
+        record = await self.fetch_one(query, name, level, description, json.dumps(stats), json.dumps(attacks), json.dumps(loot), json.dumps(flags))
+        return record['id'] if record else None
+
+    async def update_room_exits(self, room_id: int, exits: dict) -> str:
+        query = "UPDATE rooms SET exits = $1 WHERE id = $2"
+        return await self.execute_query(query, json.dumps(exits), room_id)
 
     # --- Player Functions ---
     async def load_player_account(self, username: str) -> Optional[asyncpg.Record]:
