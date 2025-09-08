@@ -1,8 +1,9 @@
 {
-	"name": "Chronicles of Chrozal CDE",
-	"dockerComposeFile": "${containerWorkspaceFolder}/docker-compose.yml",
-	"service": "app",
-	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+	"name": "Chronicles of Chrozal CDE (Single Container)",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"context": ".."
+	},
 	"customizations": {
 		"vscode": {
 			"extensions": [
