@@ -21,7 +21,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
     environment:
       - POSTGRES_USER=chrozal
-      - POSTGRES_PASSWORD=a_very_secure_password # Use the password you chose before
+      - POSTGRES_PASSWORD=timcp313 # Use the password you chose before
       - POSTGRES_DB=chrozaldb
 
 volumes:
