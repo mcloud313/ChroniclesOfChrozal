@@ -6,10 +6,11 @@ import logging
 from typing import Dict, Callable, Awaitable, Tuple
 from functools import partial
 
+# Import necessary game objects
 from ..character import Character
 from ..world import World
-import aiosqlite
 
+# Import command modules
 from . import general as general_cmds
 from . import movement as movement_cmds
 from . import admin as admin_cmds
@@ -21,7 +22,8 @@ from . import abilities as ability_cmds
 
 log = logging.getLogger(__name__)
 
-CommandHandlerFunc = Callable[[Character, World, aiosqlite.Connection, str], Awaitable[bool]]
+# REFACTOR: Removed the database connection from the function signature type
+CommandHandlerFunc = Callable[[Character, World, str], Awaitable[bool]]
 
 # --- Command Map ---
 COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
@@ -64,7 +66,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     # Movement Command
     "go": movement_cmds.cmd_go,
 
-    # --- Admin Commands (Reduced Set for In-Game Use) ---
+    # Admin Commands (Reduced Set for In-Game Use)
     "@teleport": admin_cmds.cmd_teleport,
     "@examine": admin_cmds.cmd_examine,
     "@setstat": admin_cmds.cmd_setstat,
@@ -91,13 +93,13 @@ def _parse_input(raw_input: str) -> Tuple[str, str]:
     parts = stripped_input.split(" ", 1)
     return parts[0].lower(), parts[1] if len(parts) > 1 else ""
 
-async def process_command(character: Character, world: World, db_conn: aiosqlite.Connection, raw_input: str) -> bool:
+async def process_command(character: Character, world: World, raw_input: str) -> bool:
     """Parses raw player input and executes the corresponding command function."""
     command_verb, args_str = _parse_input(raw_input)
     if not command_verb:
         return True
 
-    # Pre-command State Checks
+    # --- Pre-command State Checks ---
     if character.status == "DYING" and command_verb != "quit":
         await character.send("You are dying and cannot act!")
         return True
@@ -115,7 +117,7 @@ async def process_command(character: Character, world: World, db_conn: aiosqlite
         await character.send(f"You are still recovering for {character.roundtime:.1f} seconds.")
         return True
 
-    # Find and Execute Command
+    # --- Find and Execute Command ---
     command_func = COMMAND_MAP.get(command_verb)
     if not command_func:
         await character.send("Huh? (Type 'help' for available commands).")
@@ -127,7 +129,8 @@ async def process_command(character: Character, world: World, db_conn: aiosqlite
 
     try:
         log.info("Executing command '%s' for %s (args: '%s')", command_verb, character.name, args_str)
-        return await command_func(character, world, db_conn, args_str)
+        # REFACTOR: Call the command function with the new, shorter signature
+        return await command_func(character, world, args_str)
     except Exception:
         log.exception("Error executing command '%s' for %s:", command_verb, character.name)
         await character.send("Ope! Something went wrong with your command.")

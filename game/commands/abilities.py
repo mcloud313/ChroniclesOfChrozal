@@ -1,10 +1,9 @@
 # game/commands/abilities.py
 """
-Commands related to using instant abilities.
+Commands related to using character abilities.
 """
 import logging
 from typing import TYPE_CHECKING, Optional, Union
-import aiosqlite  # <-- FIX: Added missing import
 
 from ..definitions import abilities as ability_defs
 from ..mob import Mob
@@ -14,11 +13,12 @@ from .. import utils
 
 if TYPE_CHECKING:
     from ..world import World
+    import aiosqlite
 
 log = logging.getLogger(__name__)
 
 
-async def cmd_use(character: Character, world: 'World', db_conn: aiosqlite.Connection, args_str: str) -> bool:
+async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
     """Handles the 'use <ability_name> [target_name]' command."""
     if character.stance != "Standing":
         await character.send("You must be standing to use abilities.")

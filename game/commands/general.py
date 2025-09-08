@@ -2,7 +2,6 @@
 """
 General player commands like look, say, quit, who, help, and score.
 """
-import aiosqlite
 import math
 import logging
 import config
@@ -16,7 +15,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-async def cmd_look(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+async def cmd_look(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles looking at the room, characters, mobs, or other objects."""
     if not character.location:
         await character.send("You are floating in an endless void... somehow.")
@@ -48,9 +47,6 @@ async def cmd_look(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
         return True
 
     # Case 2: Look at a specific target
-    # Search order: Characters -> Mobs -> Room Objects -> Ground Items -> Inventory
-    
-    # Look at Character
     target_char = character.location.get_character_by_name(target_name)
     if target_char:
         pronoun_subj, _, _, verb_is, _ = utils.get_pronouns(target_char.sex)
@@ -72,19 +68,16 @@ async def cmd_look(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
         await character.send("\r\n".join(output))
         return True
 
-    # Look at Mob
     target_mob = character.location.get_mob_by_name(target_name)
     if target_mob:
         await character.send(f"\r\n{target_mob.description}")
         return True
 
-    # Look at Room Object
     target_obj_data = character.location.get_object_by_keyword(target_name)
     if target_obj_data:
         await character.send(f"\r\n{target_obj_data.get('description', 'It looks unremarkable.')}")
         return True
 
-    # Look at Item on Ground
     for t_id in character.location.items:
         template = world.get_item_template(t_id)
         if template and target_name in template['name'].lower():
@@ -92,7 +85,6 @@ async def cmd_look(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
             await character.send(f"\r\n{item.description}" if item else "You see it, but cannot make out details.")
             return True
 
-    # Look at Item in Inventory
     item_id_in_inv = character.find_item_in_inventory_by_name(world, target_name)
     if item_id_in_inv:
         item = character.get_item_instance(world, item_id_in_inv)
@@ -103,7 +95,7 @@ async def cmd_look(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
     return True
 
 
-async def cmd_say(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+async def cmd_say(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'say' command."""
     if not args_str:
         await character.send("Say what?")
@@ -119,15 +111,16 @@ async def cmd_say(character: 'Character', world: 'World', db_conn: 'aiosqlite.Co
     return True
 
 
-async def cmd_quit(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+async def cmd_quit(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'quit' command."""
     await character.send("Farewell!")
     log.info("Character %s is quitting.", character.name)
-    await character.save(db_conn)
-    return False # Signal to the connection handler to close the connection
+    # REFACTOR: Call the character's own save method.
+    await character.save()
+    return False
 
 
-async def cmd_who(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+async def cmd_who(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'who' command, listing online characters."""
     active_chars = sorted(world.get_active_characters_list(), key=lambda char: char.name)
     
@@ -141,7 +134,7 @@ async def cmd_who(character: 'Character', world: 'World', db_conn: 'aiosqlite.Co
     for char in active_chars:
         race_name = world.get_race_name(char.race_id)
         class_name = world.get_class_name(char.class_id)
-        title = "" # Placeholder for title
+        title = ""
         output.append(f"[{char.level: >2}] {char.name:<25} {title:<15} ({race_name} {class_name})")
 
     output.append(f"{{C{'-' * len(header)}{{x")
@@ -149,25 +142,25 @@ async def cmd_who(character: 'Character', world: 'World', db_conn: 'aiosqlite.Co
     return True
 
 
-async def cmd_help(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+async def cmd_help(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'help' command."""
     output = ("\r\n--- Basic Commands ---\r\n"
-            " look              - Look around the room.\r\n"
-            " north, south, etc - Move in a direction.\r\n"
-            " say <message>     - Speak to others in the room.\r\n"
-            " who               - List players currently online.\r\n"
-            " score             - Display your character sheet.\r\n"
-            " inventory         - Display your inventory and equipment.\r\n"
-            " get, drop <item>  - Interact with items.\r\n"
-            " attack <target>   - Initiate combat.\r\n"
-            " help              - Show this help message.\r\n"
-            " quit              - Leave the game.\r\n"
-            "----------------------")
+              " look              - Look around the room.\r\n"
+              " north, south, etc - Move in a direction.\r\n"
+              " say <message>     - Speak to others in the room.\r\n"
+              " who               - List players currently online.\r\n"
+              " score             - Display your character sheet.\r\n"
+              " inventory         - Display your inventory and equipment.\r\n"
+              " get, drop <item>  - Interact with items.\r\n"
+              " attack <target>   - Initiate combat.\r\n"
+              " help              - Show this help message.\r\n"
+              " quit              - Leave the game.\r\n"
+              "----------------------")
     await character.send(output)
     return True
 
 
-async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'score' or 'stats' command."""
     xp_needed = utils.xp_needed_for_level(character.level)
     
@@ -176,14 +169,11 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     for stat_name in stat_order:
         value = character.stats.get(stat_name, 10)
         modifier = utils.calculate_modifier(value)
-        mod_sign = "+" if modifier >= 0 else ""
-        attributes_display.append(f" {stat_name.capitalize():<10}: {value:>2} [{mod_sign}{modifier}]")
+        attributes_display.append(f" {stat_name.capitalize():<10}: {value:>2} [{modifier:+}]")
 
     total_av = character.get_total_av(world)
-    barrier_val = character.barrier_value
     armor_training_rank = character.get_skill_rank("armor training")
-    av_multiplier = 0.20 + (armor_training_rank * 0.01)
-    effective_av = math.floor(total_av * av_multiplier)
+    effective_av = math.floor(total_av * (0.20 + (armor_training_rank * 0.01)))
     
     output = (
         f"\r\n=================================================="
@@ -193,7 +183,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
         f"\r\n=================================================="
         f"\r\n HP   : {int(character.hp):>4}/{int(character.max_hp):<28} Carry: {character.get_current_weight(world):>2}/{character.get_max_weight():<3} stones"
         f"\r\n Armor: {effective_av:>4}/{total_av:<28} (Effective/Total)"
-        f"\r\n Barrier: {barrier_val:<28} "
+        f"\r\n Barrier: {character.barrier_value:<28} "
         f"\r\n Essn : {int(character.essence):>4}/{int(character.max_essence):<31}"
         f"\r\n XP   : {int(character.xp_total):>4}/{xp_needed:<28} Pool: {int(character.xp_pool)}"
         f"\r\n Tether: {character.spiritual_tether:<30}"
@@ -209,7 +199,7 @@ async def cmd_score(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     return True
 
 
-async def cmd_advance(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+async def cmd_advance(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'advance' command for leveling up."""
     if not character.location or "NODE" not in character.location.flags:
         await character.send("You must be in a Node to consolidate your experience and advance.")
@@ -230,11 +220,10 @@ async def cmd_advance(character: 'Character', world: 'World', db_conn: 'aiosqlit
     ap_gain = 1 if character.level % 4 == 0 else 0
     character.unspent_attribute_points += ap_gain
 
-    # BUG FIX: Use the returned values directly instead of recalculating.
     hp_gain, essence_gain = character.apply_level_up_gains()
 
     log.info("Character %s advanced to level %d! Gains: HP+%.1f, Ess+%.1f, SP+%d, AP+%d",
-            character.name, character.level, hp_gain, essence_gain, sp_gain, ap_gain)
+             character.name, character.level, hp_gain, essence_gain, sp_gain, ap_gain)
 
     level_msg = [
         "\r\n{G*** CONGRATULATIONS! ***{x",
@@ -248,11 +237,12 @@ async def cmd_advance(character: 'Character', world: 'World', db_conn: 'aiosqlit
         level_msg.append(f"You gain {ap_gain} attribute point (Total unspent: {character.unspent_attribute_points}).")
     
     await character.send("\r\n".join(level_msg))
-    await character.save(db_conn)
+    # REFACTOR: Call the character's own save method.
+    await character.save()
     return True
 
 
-async def cmd_skills(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+async def cmd_skills(character: 'Character', world: 'World', args_str: str) -> bool:
     """Displays the character's known skills and ranks."""
     output = [
         "\r\n================== Skills ==================",
@@ -271,7 +261,7 @@ async def cmd_skills(character: 'Character', world: 'World', db_conn: 'aiosqlite
     return True
 
 
-async def cmd_meditate(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+async def cmd_meditate(character: 'Character', world: 'World', args_str: str) -> bool:
     """Begins meditation to restore essence faster."""
     if character.status != "ALIVE":
         await character.send("You cannot meditate right now.")
@@ -286,12 +276,11 @@ async def cmd_meditate(character: 'Character', world: 'World', db_conn: 'aiosqli
         character.roundtime = 1.0
         await character.send("You sit down and begin to meditate, focusing your inner energy.")
         if character.location:
-            # IMPROVEMENT: Add the missing broadcast message.
             await character.location.broadcast(f"\r\n{character.name} sits down and begins meditating.", exclude={character})
     return True
 
 
-async def cmd_emote(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+async def cmd_emote(character: 'Character', world: 'World', args_str: str) -> bool:
     """Performs an action visible to the room."""
     if not args_str:
         await character.send("Emote what?")
@@ -304,7 +293,7 @@ async def cmd_emote(character: 'Character', world: 'World', db_conn: 'aiosqlite.
     return True
 
 
-async def cmd_tell(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+async def cmd_tell(character: 'Character', world: 'World', args_str: str) -> bool:
     """Sends a private message to another player online."""
     try:
         target_name, message = args_str.split(" ", 1)
@@ -332,7 +321,7 @@ async def cmd_tell(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
     return True
 
 
-async def cmd_sit(character: 'Character', world: 'World', db_conn: aiosqlite.Connection, args_str: str) -> bool:
+async def cmd_sit(character: 'Character', world: 'World', args_str: str) -> bool:
     """Makes the character sit down."""
     if character.stance == "Sitting":
         await character.send("You are already sitting.")
@@ -347,7 +336,7 @@ async def cmd_sit(character: 'Character', world: 'World', db_conn: aiosqlite.Con
     return True
 
 
-async def cmd_stand(character: 'Character', world: 'World', db_conn: aiosqlite.Connection, args_str: str) -> bool:
+async def cmd_stand(character: 'Character', world: 'World', args_str: str) -> bool:
     """Makes the character stand up."""
     if character.stance == "Standing":
         await character.send("You are already standing.")
@@ -367,7 +356,7 @@ async def cmd_stand(character: 'Character', world: 'World', db_conn: aiosqlite.C
     return True
 
 
-async def cmd_lie(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+async def cmd_lie(character: 'Character', world: 'World', args_str: str) -> bool:
     """Makes the character lie down."""
     if character.stance == "Lying":
         await character.send("You are already lying down.")

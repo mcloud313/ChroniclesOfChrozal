@@ -318,7 +318,8 @@ class ConnectionHandler:
             
             self.active_character = Character(
                 writer=self.writer,
-                db_data=char_data,
+                db_data=dict(char_data),
+                world=self.world,
                 player_is_admin=self.player_account.is_admin
             )
             await self._handle_post_load()
@@ -358,6 +359,9 @@ class ConnectionHandler:
         await self.active_character.send(look_string)
         arrival_msg = f"\r\n{self.active_character.name} slowly approaches.\r\n"
         await room.broadcast(arrival_msg, exclude={self.active_character})
+
+        # NEW: Set the login timestamp to begin tracking playtime for this session.
+        self.active_character.login_timestamp = time.monotonic()
         
         self.state = ConnectionState.PLAYING
         log.info("Character %s entered game world in room %d.", self.active_character.name, room.dbid)
@@ -383,7 +387,7 @@ class ConnectionHandler:
             if line is None: return
 
             should_continue = await command_handler.process_command(
-                self.active_character, self.world, self.db_conn, line
+                self.active_character, self.world, line
             )
             if not should_continue:
                 self.state = ConnectionState.DISCONNECTED
@@ -438,7 +442,8 @@ class ConnectionHandler:
             if char_data:
                 self.active_character = Character(
                     writer=self.writer,
-                    db_data=char_data,
+                    db_data=dict(char_data),
+                    world=self.world,
                     player_is_admin=self.player_account.is_admin
                 )
                 
