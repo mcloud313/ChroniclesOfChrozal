@@ -55,16 +55,30 @@ class ConnectionHandler:
         log.info("ConnectionHandler initialized for %s", self.addr)
 
     async def _prompt(self, message: str):
-        # ... (method unchanged)
-        pass
+        if not message.endswith(("\n\r", "\r\n")):
+            message += ": "
+        self.writer.write(message.encode(config.ENCODING))
+        await self.writer.drain()
 
     async def _read_line(self) -> Optional[str]:
-        # ... (method unchanged)
-        pass
+        try:
+            data = await self.reader.readuntil(b'\n')
+            decoded_data = data.decode(config.ENCODING).strip()
+            if decoded_data.lower() == 'quit':
+                self.state = ConnectionState.DISCONNECTED
+                return None
+            return decoded_data
+        except (ConnectionResetError, asyncio.IncompleteReadError, BrokenPipeError):
+            self.state = ConnectionState.DISCONNECTED
+            return None
 
     async def _send(self, message: str, add_newline: bool = True):
-        # ... (method unchanged)
-        pass
+        if self.writer.is_closing(): return
+        message_to_send = utils.colorize(message)
+        if add_newline and not message_to_send.endswith('\r\n'):
+            message_to_send += '\r\n'
+        self.writer.write(message_to_send.encode(config.ENCODING))
+        await self.writer.drain()
 
     async def _handle_get_username(self):
         await self._prompt("Enter your account name")
@@ -209,7 +223,6 @@ class ConnectionHandler:
 
     async def handle(self):
         """Main connection state machine loop."""
-        # REFACTOR: Use a dictionary to map states to methods for robustness.
         handler_map = {
             ConnectionState.GETTING_USERNAME: self._handle_get_username,
             ConnectionState.GETTING_PASSWORD: self._handle_get_password,
@@ -223,12 +236,18 @@ class ConnectionHandler:
         }
         try:
             while self.state != ConnectionState.DISCONNECTED:
-                handler_method = handler_map.get(self.state)
+                current_state = self.state
+                handler_method = handler_map.get(current_state)
                 if handler_method:
                     await handler_method()
                 else:
-                    log.error("Unhandled connection state: %s", self.state)
+                    log.error("Unhandled connection state: %s", self.state.name)
                     self.state = ConnectionState.DISCONNECTED
+                
+                # FIX: Add a small sleep to prevent a tight loop if a state handler
+                # is waiting for input but doesn't change the state itself.
+                if self.state == current_state and self.state != ConnectionState.PLAYING:
+                    await asyncio.sleep(0.1)
         except Exception:
             log.exception("Unexpected error in ConnectionHandler for %s:", self.addr)
         finally:
