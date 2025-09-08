@@ -58,7 +58,6 @@ async def cmd_inventory(character: 'Character', world: 'World', db_conn: 'aiosql
     output.append(f" Coins: {utils.format_coinage(character.coinage)}")
     output.append(f" Weight: {character.get_current_weight(world)}/{character.get_max_weight()} stones")
     
-    # BUG FIX: Corrected newline typo from "r\n" to "\r\n"
     output.append("=========================================================")
     await character.send("\r\n".join(output))
     return True
@@ -66,6 +65,11 @@ async def cmd_inventory(character: 'Character', world: 'World', db_conn: 'aiosql
 
 async def cmd_get(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Gets an item or coinage from the room."""
+    # Stance Check
+    if character.stance != "Standing":
+        await character.send("You must be standing to get things.")
+        return True
+        
     if not args_str:
         await character.send("Get what?")
         return True
@@ -113,7 +117,7 @@ async def cmd_get(character: 'Character', world: 'World', db_conn: 'aiosqlite.Co
     # Weight Check
     max_w = character.get_max_weight()
     curr_w = character.get_current_weight(world)
-    # The '2' is a hardcoded encumbrance limit (can carry up to 2x max weight before being unable to pick things up)
+    # Encumbrance limit: can't pick up items if it would put you over 2x max weight
     if curr_w + item_weight > max_w * 2:
         log.debug("GET failed for %s: item_weight=%d, curr_w=%d, max_w*2=%d",
                   character.name, item_weight, curr_w, max_w * 2)
@@ -134,6 +138,7 @@ async def cmd_get(character: 'Character', world: 'World', db_conn: 'aiosqlite.Co
 
 async def cmd_drop(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Drops an item from inventory onto the ground."""
+    # Note: We allow dropping from any stance.
     if not args_str:
         await character.send("Drop what?")
         return True
@@ -157,6 +162,11 @@ async def cmd_drop(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
 
 async def cmd_wear(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Wears an item from inventory."""
+    # Stance Check
+    if character.stance != "Standing":
+        await character.send("You must be standing to wear equipment.")
+        return True
+        
     if not args_str:
         await character.send("Wear what?")
         return True
@@ -196,6 +206,11 @@ async def cmd_wear(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
 
 async def cmd_wield(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Wields a weapon from inventory."""
+    # Stance Check
+    if character.stance != "Standing":
+        await character.send("You must be standing to wield a weapon.")
+        return True
+        
     if not args_str:
         await character.send("Wield what?")
         return True
@@ -225,6 +240,11 @@ async def cmd_wield(character: 'Character', world: 'World', db_conn: 'aiosqlite.
 
 async def cmd_remove(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
     """Removes a worn/wielded item, placing it in inventory."""
+    # Stance Check
+    if character.stance != "Standing":
+        await character.send("You must be standing to remove equipment.")
+        return True
+        
     if not args_str:
         await character.send("Remove what?")
         return True
@@ -258,7 +278,7 @@ async def cmd_examine(character: 'Character', world: 'World', db_conn: 'aiosqlit
 
     item_location, template_id = character.find_item_anywhere_by_name(world, args_str) or (None, None)
 
-    if not template_id:
+    if not template_id and character.location:
         # Check ground as a last resort
         for t_id in character.location.items:
             template = world.get_item_template(t_id)

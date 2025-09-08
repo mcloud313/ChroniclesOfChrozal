@@ -1,0 +1,12 @@
+# Use a standard, slim Python image as our base
+FROM python:3.11-slim
+
+# Install system dependencies, including git and the PostgreSQL client
+RUN apt-get update && apt-get install -y \
+    git \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for security
+RUN useradd -m -s /bin/bash vscode
+USER vscode

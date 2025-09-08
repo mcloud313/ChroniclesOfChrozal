@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  # This is our main development environment
+  app:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      # This links your project code into the environment
+      - ..:/workspaces/${localWorkspaceFolderBasename}:cached
+    command: sleep infinity
+    depends_on:
+      - db
+
+  # This is our PostgreSQL database service
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=chrozal
+      - POSTGRES_PASSWORD=timcp313 # Change this!
+      - POSTGRES_DB=chrozaldb
+
+volumes:
+  postgres-data:
