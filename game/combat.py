@@ -138,7 +138,8 @@ async def resolve_physical_attack(
     target.hp = max(0.0, target.hp - final_damage)
     
     hit_desc = "{rCRITICALLY HIT{x" if is_crit else "hit"
-    await attacker.send(f"You {hit_desc} {target_name} for {{y{int(final_damage)}{{x damage!")
+    if isinstance(attacker, Character):
+        await attacker.send(f"You {hit_desc} {target_name} for {{y{int(final_damage)}{{x damage!")
     if isinstance(target, Character):
         await target.send(f"{{R{attacker_name} {hit_desc.upper()}S you for {{y{int(final_damage)}{{x damage!{{x ({int(target.hp)}/{int(target.max_hp)} HP)")
     if attacker_loc:
@@ -202,7 +203,8 @@ async def resolve_magical_attack(
     target.hp = max(0.0, target.hp - final_damage)
     
     hit_desc = "{rCRITICALLY HITS{x" if is_crit else "hits"
-    await caster.send(f"Your {spell_data['name']} {hit_desc} {target_name} for {{y{int(final_damage)}{{x damage!")
+    if isinstance(caster, Character):
+        await caster.send(f"Your {spell_data['name']} {hit_desc} {target_name} for {{y{int(final_damage)}{{x damage!")
     if isinstance(target, Character):
         await target.send(f"{{R{caster_name}'s {spell_data['name']} {hit_desc} you for {{y{int(final_damage)}{{x damage!{{x ({int(target.hp)}/{int(target.max_hp)} HP)")
     if caster.location:

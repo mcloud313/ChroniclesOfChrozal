@@ -126,6 +126,19 @@ class Character:
         self.essence = min(self.essence, self.max_essence)
         if self.status in ["DYING", "DEAD"]:
             self.hp = 0.0
+    
+    async def send(self, message: str, add_newline: bool = True):
+        """Safely sends a message to this character's client."""
+        if self.writer.is_closing(): return
+        message_to_send = utils.colorize(message)
+        if add_newline and not message_to_send.endswith('\r\n'):
+            message_to_send += '\r\n'
+        try:
+            self.writer.write(message_to_send.encode(config.ENCODING))
+            await self.writer.drain()
+        except (ConnectionResetError, BrokenPipeError):
+            log.warning("Connection lost for %s during write.", self.name)
+            # The main handler will catch this and clean up the connection.
 
     # REFACTOR: The save method now uses the world.db_manager and updates playtime.
     async def save(self):
@@ -289,6 +302,19 @@ class Character:
         attr_value = self.stats.get(attr_name, 10)
         attr_mod = utils.calculate_modifier(attr_value)
         return rank + attr_mod
+    
+    def get_item_instance(self, world: 'World', template_id: int) -> Optional[Item]:
+        template_data = world.get_item_template(template_id)
+        return Item(template_data) if template_data else None
+    
+    def find_item_in_inventory_by_name(self, world: 'World', item_name: str) -> Optional[int]:
+        name_lower = item_name.lower()
+        for template_id in self.inventory:
+            template = world.get_item_template(template_id)
+            if template and name_lower in template['name'].lower():
+                return template_id
+        return None
+
 
     def knows_spell(self, spell_key: str) -> bool:
         """Checks if the character knows a specific spell by its internal key."""
