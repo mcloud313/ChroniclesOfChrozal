@@ -50,7 +50,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
 
     # Item Commands
     "inventory": item_cmds.cmd_inventory, "inv": item_cmds.cmd_inventory, "i": item_cmds.cmd_inventory,
-    "wield": item_cmds.cmd_wield,
+    "wield": item_cmds.cmd_wear,
     "wear": item_cmds.cmd_wear,
     "remove": item_cmds.cmd_remove, "rem": item_cmds.cmd_remove,
     "get": item_cmds.cmd_get, "g": item_cmds.cmd_get, "take": item_cmds.cmd_get,
