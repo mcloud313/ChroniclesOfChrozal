@@ -116,24 +116,6 @@ class DatabaseManager:
                     )
                 """)
                 await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS item_instances (
-                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                        template_id INTEGER NOT NULL REFERENCES item_templates(id) ON DELETE CASCADE,
-                        owner_char_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,
-                        room_id INTEGER REFERENCES rooms(id) ON DELETE SET NULL,
-                        container_id UUID REFERENCES item_instances(id) ON DELETE SET NULL,
-                        condition INTEGER NOT NULL DEFAULT 100,
-                        instance_stats JSONB DEFAULT '{}'::jsonb,
-                        
-                        CONSTRAINT single_location_check CHECK (
-                             (owner_char_id IS NOT NULL AND room_id IS NULL AND container_id IS NULL) OR -- In top-level inventory/equipped
-                             (owner_char_id IS NULL AND room_id IS NOT NULL AND container_id IS NULL) OR -- On the ground
-                             (owner_char_id IS NULL AND room_id IS NULL AND container_id IS NOT NULL)    -- Inside another container
-                        )
-                    )
-                """)
-                await conn.execute("DROP TABLE IF EXISTS room_items;")
-                await conn.execute("""
                     CREATE TABLE IF NOT EXISTS mob_templates (
                         id SERIAL PRIMARY KEY,
                         name TEXT UNIQUE NOT NULL,
@@ -204,7 +186,23 @@ class DatabaseManager:
                         UNIQUE (player_id, first_name, last_name)
                     )
                 """)
-
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS item_instances (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        template_id INTEGER NOT NULL REFERENCES item_templates(id) ON DELETE CASCADE,
+                        owner_char_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,
+                        room_id INTEGER REFERENCES rooms(id) ON DELETE SET NULL,
+                        container_id UUID REFERENCES item_instances(id) ON DELETE SET NULL,
+                        condition INTEGER NOT NULL DEFAULT 100,
+                        instance_stats JSONB DEFAULT '{}'::jsonb,
+                        
+                        CONSTRAINT single_location_check CHECK (
+                             (owner_char_id IS NOT NULL AND room_id IS NULL AND container_id IS NULL) OR -- In top-level inventory/equipped
+                             (owner_char_id IS NULL AND room_id IS NOT NULL AND container_id IS NULL) OR -- On the ground
+                             (owner_char_id IS NULL AND room_id IS NULL AND container_id IS NOT NULL)    -- Inside another container
+                        )
+                    )
+                """)
                 # --- Junction/Instance Tables ---
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS room_objects (
