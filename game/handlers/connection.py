@@ -92,17 +92,19 @@ class ConnectionHandler:
         await self.writer.drain()
 
     async def _handle_get_username(self):
+        log.info("Now prompting for username...")
         await self._prompt("Enter your account name")
+        
+        log.info("Waiting for username input from client...")
         username = await self._read_line()
+        
+        # If the log below does not appear, the hang is in _read_line()
+        log.info(f"Username received: '{username}'.")
         if username is None: return
 
-        # --- Start of new logging ---
-        log.info(f"Received username: '{username}'. Querying database...")
-        
+        log.info(f"Querying database for '{username}'...")
         player_data = await self.db_manager.load_player_account(username)
-        
-        log.info(f"Database query for '{username}' complete. Found data: {'Yes' if player_data else 'No'}")
-        # --- End of new logging ---
+        log.info("Database query complete.")
 
         if player_data:
             self.player_account = Player(**dict(player_data))
