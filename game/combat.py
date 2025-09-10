@@ -129,7 +129,7 @@ async def resolve_physical_attack(
     
     # --- 8. Mitigate Damage ---
     mit_pds = target.pds
-    mit_av = target.get_total_av(world) if isinstance(target, Character) else target.get_total_av()
+    mit_av = target.get_total_av()
     mit_bv = math.floor(target.barrier_value / 2)
     
     final_damage = max(0, pre_mitigation_damage - mit_pds - mit_av - mit_bv)

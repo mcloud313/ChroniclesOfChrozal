@@ -45,6 +45,9 @@ class TestCombatMechanics(unittest.IsolatedAsyncioTestCase):
 
     def test_armor_value_calculation(self):
         """Tests that get_total_av correctly sums armor from equipment."""
+        # --- This test now correctly uses the Item Instance system ---
+        from game.item import Item
+
         char_data = {
             "id": 1, "player_id": 1, "first_name": "Armor", "last_name": "Test", "sex": "Male",
             "race_id": 1, "class_id": 1, "level": 1, "hp": 50.0, "max_hp": 50.0,
@@ -55,16 +58,31 @@ class TestCombatMechanics(unittest.IsolatedAsyncioTestCase):
             "inventory": [], "equipment": {}, "known_spells": [], "known_abilities": []
         }
         character = Character(self.mock_writer, char_data, self.mock_world)
+
+        # Create mock Item instances based on the templates
+        cap_template = {'id': 10, 'name': 'a leather cap', 'stats': '{"armor": 2}'}
+        tunic_template = {'id': 11, 'name': 'a leather tunic', 'stats': '{"armor": 5}'}
         
+        cap_instance = Item({'id': 'cap-uuid-1', 'template_id': 10}, cap_template)
+        tunic_instance = Item({'id': 'tunic-uuid-1', 'template_id': 11}, tunic_template)
+
+        # Start with no equipment
         self.assertEqual(character.get_total_av(), 0)
-        character.equipment['HEAD'] = 10
+
+        # Equip the cap
+        character._equipped_items['HEAD'] = cap_instance
         self.assertEqual(character.get_total_av(), 2)
-        character.equipment['TORSO'] = 11
+        
+        # Equip the tunic
+        character._equipped_items['TORSO'] = tunic_instance
         self.assertEqual(character.get_total_av(), 7)
 
     @patch('random.randint')
     async def test_damage_mitigation(self, mock_randint):
         """Tests that PDS and AV correctly reduce incoming physical damage."""
+        # --- This test now correctly uses the Item Instance system ---
+        from game.item import Item
+
         mock_attacker = Mock(spec=Character)
         mock_attacker.name = "Attacker"
         mock_attacker.is_alive.return_value = True
@@ -72,6 +90,7 @@ class TestCombatMechanics(unittest.IsolatedAsyncioTestCase):
         mock_attacker.might_mod = 5
         mock_attacker.get_skill_rank.return_value = 0
         
+        # side_effect[0] is hit roll, side_effect[1] is damage roll
         mock_randint.side_effect = [15, 10]
         
         char_data = {
@@ -81,11 +100,18 @@ class TestCombatMechanics(unittest.IsolatedAsyncioTestCase):
             "unspent_skill_points": 0, "unspent_attribute_points": 0, "spiritual_tether": 1,
             "description": "", "coinage": 0, "location_id": 1, "total_playtime_seconds": 0,
             "status": "ALIVE", "stance": "Standing", "stats": {"vitality": 12}, "skills": {},
-            "inventory": [], "equipment": {'HEAD': 10, 'TORSO': 11}, 
-            "known_spells": [], "known_abilities": []
+            "inventory": [], "equipment": {}, "known_spells": [], "known_abilities": []
         }
         target_character = Character(self.mock_writer, char_data, self.mock_world)
         
+        # Create mock armor Item instances and equip them
+        cap_template = {'id': 10, 'name': 'a leather cap', 'stats': '{"armor": 2}'}
+        tunic_template = {'id': 11, 'name': 'a leather tunic', 'stats': '{"armor": 5}'}
+        cap_instance = Item({'id': 'cap-uuid-2', 'template_id': 10}, cap_template)
+        tunic_instance = Item({'id': 'tunic-uuid-2', 'template_id': 11}, tunic_template)
+        target_character._equipped_items['HEAD'] = cap_instance
+        target_character._equipped_items['TORSO'] = tunic_instance
+
         mock_room = Mock()
         mock_room.broadcast = AsyncMock()
         target_character.location = mock_room
@@ -93,8 +119,7 @@ class TestCombatMechanics(unittest.IsolatedAsyncioTestCase):
         
         initial_hp = target_character.hp
         
-        # FIX: The expected damage is corrected to 5 to match the game's true formula.
-        # pre-mitigation damage is 16.
+        # pre-mitigation damage is 16. (1 base + 10 roll + 5 mod)
         # mitigation is 4 (PDS) + 7 (AV) = 11.
         # final damage = 16 - 11 = 5.
         expected_damage = 5

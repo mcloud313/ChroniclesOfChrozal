@@ -127,18 +127,6 @@ class Room:
             if not mob.is_alive() and mob.time_of_death and (current_time - mob.time_of_death) >= mob.respawn_delay:
                 mob.respawn()
                 await self.broadcast(f"\r\nA {mob.name} suddenly appears!\r\n")
-
-    def get_item_instance_by_name(self, item_name: str, world: 'World') -> Optional['Item']:
-        """Finds the first item instance on the ground matching a name."""
-        name_lower = item_name.lower()
-        for instance_id in self.items:
-            # We need to load the full item object to check its name
-            instance_data = world.db_manager.get_item_instance_sync(instance_id) # (Assuming a sync helper, let's adapt)
-            # This reveals a need for a way to get item objects from the world cache. Let's add it to World.
-            item_object = world.get_item_object(instance_id)
-            if item_object and name_lower in item_object.name.lower():
-                return item_object
-        return None
     
     async def mob_ai_tick(self, dt: float, world: 'World'):
         """Calls the AI tick method for all living mobs in the room."""
