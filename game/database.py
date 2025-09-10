@@ -351,4 +351,13 @@ class DatabaseManager:
         query = "UPDATE characters SET total_playtime_seconds = total_playtime_seconds + $1 WHERE id = $2"
         return await self.execute_query(query, session_seconds, character_id)
     
+    async def update_shop_stock(self, shop_inventory_id: int, quantity_change: int):
+        """Updates the stock for an item in a shop's inventory"""
+        query = """
+            UPDATE shop_inventories
+            SET stock_quantity = stock_quantity + $1
+            WHERE id = $2 AND stock_quantity != -1
+            """
+        return await self.execute_query(query, quantity_change, shop_inventory_id)
+    
 db_manager = DatabaseManager()

@@ -7,6 +7,7 @@ from .. import utils
 if TYPE_CHECKING:
     from ..character import Character
     from ..world import World
+    from ..item import Item
 
 log = logging.getLogger(__name__)
 
@@ -49,4 +50,151 @@ async def cmd_list(character: 'Character', world: 'World', args_str: str) -> boo
 
     output.append("{c----------------------{x")
     await character.send("\n\r".join(output))
+    return True
+
+async def cmd_buy(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Buys an item from a shop."""
+    if not args_str:
+        await character.send("Buy what?")
+        return True
+    
+    # 1. Check if the room is a shop and has inventory
+    if "SHOP" not in character.location.flags:
+        await character.send("This is not a shop.")
+        return True
+    
+    shop_inventory = world.get_shop_inventory(character.location.dbid)
+    if not shop_inventory:
+        await character.send("This shop has nothing for sale.")
+        return True
+    
+    # 2. Find the requested item in the shop's inventory
+    item_to_buy = None
+    item_template = None
+    for stock_item in shop_inventory:
+        template = world.get_item_template(stock_item['item_template_id'])
+        if template and args_str.lower() in template['name'].lower():
+            item_to_buy = stock_item
+            item_template = template
+            break
+
+    if not item_to_buy or not item_template:
+        await character.send("That item is not for sale here.")
+        return True
+    
+    # 3. Check stock
+    if item_to_buy['stock_quantity'] == 0:
+        await character.send("That item is out of stock.")
+        return True
+    
+    # 4. Calculate price and check if the player can afford it.
+    try:
+        stats = json.loads(item_template.get('stats', '{}') or '{}')
+        base_value = stats.get('value', 0)
+    except (json.JSONDecodeError, TypeError):
+        base_value = 0
+
+    price = int(base_value * item_to_buy['buy_price_modifier'])
+
+    if character.coinage < price:
+        await character.send("You can't afford that.")
+        return True
+    
+    # 5. Check the two hand inventory limit
+    if len(character._inventory_items) >= 2:
+        await character.send("Your hands are full. You must put something away to buy that.")
+        return True
+
+    # 6. Perform the transaction
+    character.coinage -= price
+
+    # Create a new unique instance of the item for the player
+    new_instance_data = await world.db_manager.create_item_instance(
+        template_id=item_template['id'],
+        owner_char_id=character.dbid
+    )
+
+    # This should always succeed, but it's good practice to check
+    if not new_instance_data:
+        log.error(f"Failed to create item instance for template {item_template['id']} during purchase.")
+        character.coinage += price # Refund player
+        await character.send("An error occured with your purchase. You have been refunded.")
+        return True
+    
+    # Add the new item to the character's in memory inventory
+    new_item_obj = Item(new_instance_data, item_template)
+    character._inventory_items[new_item_obj.id] = new_item_obj
+    world._all_item_instances[new_item_obj.id] = new_item_obj
+
+    # 7. Update shop stock if it's not infinite
+    if item_to_buy['stock_quantity'] != -1:
+        item_to_buy['stock_quantity'] -= 1
+        # Here we would also update the stock in the database
+        # We'll add this helper function in the next section
+        await world.db_manager.update_shop_stock(item_to_buy['id'], -1)
+    
+    await character.send(f"You buy {item_template['name']} for {utils.format_coinage(price)}.")
+    return True
+
+async def cmd_sell(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Sells an item from inventory to a shop."""
+    if not args_str:
+        await character.send("Sell what?")
+        return True
+    
+    # 1. Check if the room is a shop
+    if "SHOP" not in character.location.flags:
+        await character.send("This is not a shop.")
+        return True
+    
+    # 2. Find the item in the character's top level inventory (hands)
+    item_to_sell = character.find_item_in_inventory_by_name(args_str)
+    if not item_to_sell:
+        await character.send("You aren't carrying that.")
+        return True
+    
+    # 3. Check if the item is sellable (e.g., not a "NOSELL" quest item)
+    if item_to_sell.has_flag("NOSELL"):
+        await character.send("You cannot sell that.")
+        return True
+    
+    # 4. Calculate the price
+    try:
+        # We need the item's template to find its base value
+        template = world.get_item_template(item_to_sell.template_id)
+        if not template:
+            raise ValueError("Template not found")
+        stats = json.loads(template.get('stats', '{}') or '{}')
+        base_value = stats.get('value', 0)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        base_value = 0
+
+    if base_value <= 0:
+        await character.send("That item is worthless")
+        return True
+    
+    # Determine the shop's sell rate. For now we'll use the first item
+    # in the shop's inventory to determine the shop's general rate.
+    shop_inventory = world.get_shop_inventory(character.location.dbid)
+    if not shop_inventory:
+        await character.send("This shop isn't buying anything right now.")
+        return True
+    
+    sell_modifier = shop_inventory[0]['sell_price_modifier']
+    price = int(base_value * sell_modifier)
+
+    if price <= 0:
+        await character.send("The shopkeeper offers you nothing for that.")
+        return True
+    
+    # 5. Perform the transaction
+    # First, modify the database
+    await world.db_manager.delete_item_instance(item_to_sell.id)
+
+    # Then update the game state
+    character.coinage += price
+    del character._inventory_items[item_to_sell.id]
+    del world._all_item_instances[item_to_sell.id]
+
+    await character.send(f"You sell {item_to_sell.name} for {utils.format_coinage(price)}.")
     return True
