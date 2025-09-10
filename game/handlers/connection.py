@@ -96,7 +96,14 @@ class ConnectionHandler:
         username = await self._read_line()
         if username is None: return
 
+        # --- Start of new logging ---
+        log.info(f"Received username: '{username}'. Querying database...")
+        
         player_data = await self.db_manager.load_player_account(username)
+        
+        log.info(f"Database query for '{username}' complete. Found data: {'Yes' if player_data else 'No'}")
+        # --- End of new logging ---
+
         if player_data:
             self.player_account = Player(**dict(player_data))
             self.state = ConnectionState.GETTING_PASSWORD
