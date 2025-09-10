@@ -19,6 +19,7 @@ from . import combat as combat_cmds
 from . import skill as skill_cmds
 from . import magic as magic_cmds
 from . import abilities as ability_cmds
+from . import trade as trade_cmds
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "drop": item_cmds.cmd_drop,
     "put": item_cmds.cmd_put,
     "examine": item_cmds.cmd_examine, "exa": item_cmds.cmd_examine,
+    "list": trade_cmds.cmd_list,
     # "drink": item_cmds.cmd_drink,
     # "eat": item_cmds.cmd_eat,
 

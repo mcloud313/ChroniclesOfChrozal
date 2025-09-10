@@ -203,6 +203,18 @@ class DatabaseManager:
                         )
                     )
                 """)
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS shop_inventories (
+                        id SERIAL PRIMARY KEY,
+                        room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                        item_template_id INTEGER NOT NULL REFERENCES item_templates(id) ON DELETE CASCADE,
+                        stock_quantity INTEGER NOT NULL DEFAULT -1, -- -1 for infinite stock
+                        buy_price_modifier REAL NOT NULL DEFAULT 1.25, -- Default 25% markup
+                        sell_price_modifier REAL NOT NULL DEFAULT 0.75, -- Default 25% markdown
+                        
+                        UNIQUE (room_id, item_template_id)
+                    )
+                """)
                 # --- Junction/Instance Tables ---
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS room_objects (

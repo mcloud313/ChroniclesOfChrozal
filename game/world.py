@@ -2,11 +2,12 @@
 """
 Manages the game world's loaded state and orchestrates ticker-driven updates.
 """
-# game/world.py
 import time
 import logging
 import asyncio
 from typing import Dict, Any, Optional, List, Union, TYPE_CHECKING
+from itertools import groupby
+from operator import itemgetter
 
 from .room import Room
 from .character import Character
@@ -34,8 +35,8 @@ class World:
         self.item_templates: Dict[int, Dict] = {}
         self.mob_templates: Dict[int, Dict] = {}
         self.active_characters: Dict[int, Character] = {}
-         # NEW: A cache for all unique item instances currently loaded in the world
         self._all_item_instances: Dict[str, Item] = {}
+        self.shop_inventories: Dict[int, List[Dict]] = {}
         log.info("World object initialized.")
 
     async def build(self):
@@ -52,9 +53,10 @@ class World:
                 self.db_manager.fetch_all("SELECT * FROM classes ORDER BY id"),
                 self.db_manager.fetch_all("SELECT * FROM item_templates ORDER BY id"),
                 self.db_manager.fetch_all("SELECT * FROM mob_templates ORDER BY id"),
-                self.db_manager.fetch_all("SELECT * FROM rooms ORDER BY id")
+                self.db_manager.fetch_all("SELECT * FROM rooms ORDER BY id"),
+                self.db_manager.fetch_all("SELECT * FROM shop_inventories ORDER BY room_id")
             )
-            area_rows, race_rows, class_rows, item_rows, mob_rows, room_rows = results
+            area_rows, race_rows, class_rows, item_rows, mob_rows, room_rows, shop_rows = results
 
             self.areas = {row['id']: dict(row) for row in area_rows or []}
             self.races = {row['id']: dict(row) for row in race_rows or []}
@@ -65,6 +67,13 @@ class World:
             log.info("Loaded %d areas, %d races, %d classes, %d item templates, %d mob templates.",
                      len(self.areas), len(self.races), len(self.classes), len(self.item_templates), len(self.mob_templates))
             
+            if shop_rows:
+                # Group all shop items by their room_id
+                for room_id, items_in_shop in groupby(shop_rows, key=itemgetter('room_id')):
+                    # Store the list of item dictionaries for that room
+                    self.shop_inventories[room_id] = [dict(item) for item in items_in_shop]
+                log.info("Loaded inventories for %d shops.", len(self.shop_inventories))
+            
             if not room_rows:
                 log.error("Failed to load rooms or no rooms found in database.")
                 return False
@@ -74,20 +83,17 @@ class World:
 
             # Populate rooms with their initial state
             for room in self.rooms.values():
-            # REFACTOR: Load unique item instances, not templates
                 instance_records = await self.db_manager.get_instances_in_room(room.dbid)
                 for record in instance_records:
                     instance_data = dict(record)
                     template_data = self.get_item_template(instance_data['template_id'])
                     if template_data:
                         item_obj = Item(instance_data, template_data)
-                        # Add both the ID to the room and the object to a new world cache
                         room.item_instance_ids.append(item_obj.id)
                         self._all_item_instances[item_obj.id] = item_obj
                         
                 object_rows = await self.db_manager.fetch_all("SELECT * FROM room_objects WHERE room_id = $1", room.dbid)
                 room.objects = [dict(r) for r in object_rows]
-            
                 
                 # Spawn initial mobs
                 for template_id_str, spawn_info in room.spawners.items():
@@ -108,6 +114,10 @@ class World:
     # --- Getters ---
     def get_room(self, room_id: int) -> Optional[Room]:
         return self.rooms.get(room_id)
+        
+    def get_shop_inventory(self, room_id: int) -> Optional[List[Dict]]:
+        """Returns the cached list of inventory items for a given shop room."""
+        return self.shop_inventories.get(room_id)
     
     def get_item_object(self, instance_id: str) -> Optional[Item]:
         """Gets a loaded item instance object from the world cache."""
@@ -184,7 +194,7 @@ class World:
                             await p.send("Something went wrong as your action finished.")
                         
                         base_rt = ability_data.get("roundtime", 1.0)
-                        rt_penalty = p.get_total_av(self) * 0.05
+                        rt_penalty = p.get_total_av() * 0.05
                         p.roundtime = base_rt + rt_penalty
                     else:
                         await p.send(f"{{RYou lose focus ({ability_data.get('name', ability_key)}) - not enough essence!{{x")
@@ -234,7 +244,7 @@ class World:
 
         if old_room := character.location:
              if old_room != respawn_room:
-                old_room.remove_character(character)
+                 old_room.remove_character(character)
 
         character.update_location(respawn_room)
         respawn_room.add_character(character)
