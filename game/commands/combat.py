@@ -48,11 +48,9 @@ async def cmd_attack(character: 'Character', world: 'World', args_str: str) -> b
 
     await character.send(f"You attack {target.name}!")
 
-    weapon = None
-    if weapon_template_id := character.equipment.get("WIELD_MAIN"):
-        weapon = character.get_item_instance(world, weapon_template_id)
-        if weapon and weapon.item_type != "WEAPON":
-            weapon = None
+    weapon = character._equipped_items.get("WIELD_MAIN")
+    if weapon and weapon.item_type != "WEAPON":
+        weapon = None
     
     await combat_logic.resolve_physical_attack(character, target, weapon, world)
     return True

@@ -6,6 +6,7 @@ import json
 import logging
 import asyncio
 import textwrap
+from .item import Item
 from typing import Set, Dict, Any, Optional, List, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -38,6 +39,7 @@ class Room:
         self.items: List[str] = []
         self.objects: List[Dict[str, Any]] = []
         self.coinage: int = db_data.get('coinage', 0)
+        self.item_instance_ids: List[str] = []
         
     def add_character(self, character: 'Character'):
         """Adds a character object to the room."""
@@ -46,6 +48,14 @@ class Room:
     def remove_character(self, character: 'Character'):
         """Removes a character object from the room."""
         self.characters.discard(character)
+
+    def get_item_instance_by_name(self, item_name: str, world: 'World') -> Optional['Item']:
+        name_lower = item_name.lower()
+        for instance_id in self.item_instance_ids:
+            item_object = world.get_item_object(instance_id)
+            if item_object and name_lower in item_object.name.lower():
+                return item_object
+        return None
 
     def get_look_string(self, looker: 'Character', world: 'World') -> str:
         """Generates the formatted string describing the room's appearance."""
@@ -133,22 +143,17 @@ class Room:
     async def mob_ai_tick(self, dt: float, world: 'World'):
         """Calls the AI tick method for all living mobs in the room."""
         living_mobs = [mob for mob in self.mobs if mob.is_alive()]
+        if not living_mobs:
+            return
+
         tasks = [mob.simple_ai_tick(dt, world) for mob in living_mobs]
-        if tasks:
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    log.exception("Room %d: Exception in AI tick for mob '%s'", self.dbid, getattr(living_mobs[i], 'name', '?'))
-        
-        
-        status = await world.db_manager.execute_query("DELETE FROM room_items WHERE id = (SELECT id FROM room_items WHERE room_id = $1 AND item_template_id = $2 LIMIT 1)", self.dbid, item_template_id)
-        if "DELETE 1" in status:
-            try:
-                self.items.remove(item_template_id)
-                return True
-            except ValueError:
-                return False
-        return False
+    
+        # Run all AI ticks concurrently and log any that fail
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                mob_name = getattr(living_mobs[i], 'name', 'Unknown Mob')
+                log.exception("Room %d: Exception in AI tick for mob '%s'", self.dbid, mob_name)
         
     async def add_coinage(self, amount: int, world: 'World') -> bool:
         """Adds or removes coinage from the room's cache and the database."""

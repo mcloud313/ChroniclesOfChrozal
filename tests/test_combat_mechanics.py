@@ -56,11 +56,11 @@ class TestCombatMechanics(unittest.IsolatedAsyncioTestCase):
         }
         character = Character(self.mock_writer, char_data, self.mock_world)
         
-        self.assertEqual(character.get_total_av(self.mock_world), 0)
+        self.assertEqual(character.get_total_av(), 0)
         character.equipment['HEAD'] = 10
-        self.assertEqual(character.get_total_av(self.mock_world), 2)
+        self.assertEqual(character.get_total_av(), 2)
         character.equipment['TORSO'] = 11
-        self.assertEqual(character.get_total_av(self.mock_world), 7)
+        self.assertEqual(character.get_total_av(), 7)
 
     @patch('random.randint')
     async def test_damage_mitigation(self, mock_randint):

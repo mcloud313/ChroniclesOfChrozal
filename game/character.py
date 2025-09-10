@@ -199,9 +199,6 @@ class Character:
         except Exception:
             log.exception("Unexpected error saving character %s (ID: %s):", self.name, self.dbid)
 
-    # (The rest of the Character class methods remain the same)
-    # ...
-
     def respawn(self):
         """Resets character state after death."""
         log.info("RESPAWN: Character %s (ID %s) is respawning.", self.name, self.dbid)
@@ -293,14 +290,9 @@ class Character:
 
     def get_total_av(self) -> int:
         """Calculates total armor value from equipped item instances."""
-        total_av = 0
-        for item in self._equipped_items.values():
-            if item.item_type in ["ARMOR", "SHIELD"]:
-                total_av += item.armor
-        return total_av
+        return sum(item.armor for item in self._equipped_items.values() if item.item_type in ["ARMOR", "SHIELD"])
 
     def get_shield(self) -> Optional[Item]:
-        """Returns the Item object for the equipped shield, or None."""
         shield_item = self._equipped_items.get("WIELD_OFF")
         if shield_item and shield_item.item_type == "SHIELD":
             return shield_item
@@ -323,9 +315,9 @@ class Character:
         attr_mod = utils.calculate_modifier(attr_value)
         return rank + attr_mod
     
-    def get_item_instance(self, world: 'World', template_id: int) -> Optional[Item]:
-        template_data = world.get_item_template(template_id)
-        return Item(template_data) if template_data else None
+    def get_item_instance(self, instance_id: str) -> Optional[Item]:
+        """Gets a loaded Item object for an instance the character owns."""
+        return self._inventory_items.get(instance_id) or next((item for item in self._equipped_items.values() if item.id == instance_id), None)
     
     def find_item_in_inventory_by_name(self, item_name: str) -> Optional[Item]:
         """Finds the first item instance in inventory matching a name."""

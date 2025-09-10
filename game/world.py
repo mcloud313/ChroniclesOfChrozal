@@ -2,23 +2,22 @@
 """
 Manages the game world's loaded state and orchestrates ticker-driven updates.
 """
+# game/world.py
 import time
 import logging
-import json
 import asyncio
-import config
 from typing import Dict, Any, Optional, List, Union, TYPE_CHECKING
 
 from .room import Room
 from .character import Character
 from .mob import Mob
-from . import utils
+from .item import Item
 from .definitions import abilities as ability_defs
 from . import combat
+import config
 
 if TYPE_CHECKING:
     from .database import DatabaseManager
-    import asyncpg
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ class World:
     Holds the currently loaded game world data and a reference to the database manager.
     """
     def __init__(self, db_manager: "DatabaseManager"):
-        self.db_manager: "DatabaseManager" = db_manager
+        self.db_manager = db_manager
         self.areas: Dict[int, Dict] = {}
         self.rooms: Dict[int, Room] = {}
         self.races: Dict[int, Dict] = {}
@@ -35,6 +34,8 @@ class World:
         self.item_templates: Dict[int, Dict] = {}
         self.mob_templates: Dict[int, Dict] = {}
         self.active_characters: Dict[int, Character] = {}
+         # NEW: A cache for all unique item instances currently loaded in the world
+        self._all_item_instances: Dict[str, Item] = {}
         log.info("World object initialized.")
 
     async def build(self):
@@ -81,8 +82,11 @@ class World:
                     if template_data:
                         item_obj = Item(instance_data, template_data)
                         # Add both the ID to the room and the object to a new world cache
-                        room.items.append(item_obj.id)
+                        room.item_instance_ids.append(item_obj.id)
                         self._all_item_instances[item_obj.id] = item_obj
+                        
+                object_rows = await self.db_manager.fetch_all("SELECT * FROM room_objects WHERE room_id = $1", room.dbid)
+                room.objects = [dict(r) for r in object_rows]
             
                 
                 # Spawn initial mobs

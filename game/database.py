@@ -239,7 +239,7 @@ class DatabaseManager:
     async def create_item_instance(self, template_id: int, room_id: Optional[int] = None, owner_char_id: Optional[int] = None) -> Optional[Dict]:
         """Creates a new item instance ina  room or a character's inventory."""
         query = """
-            INSER INTO item_instances (template_id, room_id, owner_char_id)
+            INSERT INTO item_instances (template_id, room_id, owner_char_id)
             VALUES ($1, $2, $3)
             RETURNING id, template_id, room_id, owner_char_id, condition, instance_stats
             """
@@ -304,6 +304,26 @@ class DatabaseManager:
     async def load_character_data(self, character_id: int) -> Optional[asyncpg.Record]:
         query = "SELECT * FROM characters WHERE id = $1"
         return await self.fetch_one(query, character_id)
+    
+    # NEW: Add the create_character method to the manager
+    async def create_character(self, player_id: int, first_name: str, last_name: str, sex: str,
+                               race_id: int, class_id: int, stats: dict, skills: dict,
+                               description: str, hp: float, max_hp: float, essence: float,
+                               max_essence: float, known_spells: list, known_abilities: list) -> Optional[int]:
+        query = """
+            INSERT INTO characters (
+                player_id, first_name, last_name, sex, race_id, class_id, stats, skills,
+                description, hp, max_hp, essence, max_essence, known_spells, known_abilities
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            RETURNING id
+        """
+        params = (
+            player_id, first_name, last_name, sex, race_id, class_id, json.dumps(stats),
+            json.dumps(skills), description, hp, max_hp, essence, max_essence,
+            json.dumps(known_spells), json.dumps(known_abilities)
+        )
+        record = await self.fetch_one(query, *params)
+        return record['id'] if record else None
     
     async def save_character_data(self, character_id: int, data: dict) -> str:
         """Dynamically updates character data."""
