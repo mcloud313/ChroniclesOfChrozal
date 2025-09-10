@@ -56,8 +56,8 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "get": item_cmds.cmd_get, "g": item_cmds.cmd_get, "take": item_cmds.cmd_get,
     "drop": item_cmds.cmd_drop,
     "examine": item_cmds.cmd_examine, "exa": item_cmds.cmd_examine,
-    "drink": item_cmds.cmd_drink,
-    "eat": item_cmds.cmd_eat,
+    # "drink": item_cmds.cmd_drink,
+    # "eat": item_cmds.cmd_eat,
 
     # Skill/Progression Commands
     "spend": skill_cmds.cmd_spend, "invest": skill_cmds.cmd_spend,
