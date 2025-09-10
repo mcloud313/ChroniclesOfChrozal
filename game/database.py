@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 DB_CONFIG = {
     "user": "chrozal",
-    "password": "timcp313", # IMPORTANT: Use the password from your docker-compose.yml
+    "password": "timcp313", 
     "database": "chrozaldb",
     "host": "localhost"
 }
@@ -116,6 +116,23 @@ class DatabaseManager:
                     )
                 """)
                 await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS item_instances (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        template_id INTEGER NOT NULL REFERENCES item_templates(id) ON DELETE CASCADE,
+                        owner_char_id INTEGER REFERENCES characters(id) ON DELETE CASCADE,
+                        room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
+                        condition INTEGER NOT NULL DEFAULT 100,
+                        instance_stats JSONB DEFAULT '{}'::jsonb,
+                        
+                        CONSTRAINT single_location_check CHECK (
+                            (owner_char_id IS NOT NULL AND room_id IS NULL) OR
+                            (owner_char_id IS NULL AND room_id IS NOT NULL) OR
+                            (owner_char_id IS NULL AND room_id IS NULL) -- For items in containers
+                        )
+                    )
+                """)
+                await conn.execute("DROP TABLE IF EXISTS room_items;")
+                await conn.execute("""
                     CREATE TABLE IF NOT EXISTS mob_templates (
                         id SERIAL PRIMARY KEY,
                         name TEXT UNIQUE NOT NULL,
@@ -189,14 +206,6 @@ class DatabaseManager:
 
                 # --- Junction/Instance Tables ---
                 await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS room_items (
-                        id SERIAL PRIMARY KEY,
-                        room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-                        item_template_id INTEGER NOT NULL REFERENCES item_templates(id) ON DELETE CASCADE,
-                        dropped_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                    )
-                """)
-                await conn.execute("""
                     CREATE TABLE IF NOT EXISTS room_objects (
                         id SERIAL PRIMARY KEY,
                         room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
@@ -225,6 +234,42 @@ class DatabaseManager:
                 await conn.execute("INSERT INTO players (username, hashed_password, email, is_admin) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING", "admin", utils.hash_password("password"), "admin@example.com", True)
                 
         log.info("--- PostgreSQL schema check complete ---")
+
+    # --- Item Instance Management Functions ---
+    async def create_item_instance(self, template_id: int, room_id: Optional[int] = None, owner_char_id: Optional[int] = None) -> Optional[Dict]:
+        """Creates a new item instance ina  room or a character's inventory."""
+        query = """
+            INSER INTO item_instances (template_id, room_id, owner_char_id)
+            VALUES ($1, $2, $3)
+            RETURNING id, template_id, room_id, owner_char_id, condition, instance_stats
+            """
+        record = await self.fetch_one(query, template_id, room_id, owner_char_id)
+        return dict(record) if record else None
+    
+    async def get_item_instance(self, instance_id: str) -> Optional[asyncpg.Record]:
+        """Retrives a single item instance by its UUID."""
+        query = "SELECT * FROM item_instances WHERE id = $1"
+        return await self.fetch_one(query, instance_id)
+    
+    async def get_instances_in_room(self, room_id: int) -> List[asyncpg.Record]:
+        """Fetches all item instances on the ground in a room."""
+        query ="SELECT * FROM item_instances WHERE room_id = $1"
+        return await self.fetch_all(query, room_id)
+    
+    async def get_instances_for_character(self, character_id: int) -> List[asyncpg.Record]:
+        """Fetches all item instances owned by a character (inventory/equipment)."""
+        query = "SELECT * FROM item_instances WHERE owner_char_id = $1"
+        return await self.fetch_all(query, character_id)
+    
+    async def update_item_location(self, instance_id: str, room_id: Optional[int] = None, owner_char_id: Optional[int] = None) -> str:
+        """Moves an item by changing its owner or room location."""
+        query = "UPDATE item_instances SET room_id = $1, owner_char_id = $2 WHERE id = $3"
+        return await self.execute_query(query, room_id, owner_char_id, instance_id)
+    
+    async def delete_item_instance(self, instance_id: str) -> str:
+        """Permanently deletes an item instance from the world."""
+        query = "DELETE FROM item_instances WHERE id = $1"
+        return await self.execute_query(query, instance_id)
 
     # --- Creator Functions (for seeding and building) ---
     async def create_item_template(self, name: str, item_type: str, description: str, stats: dict, flags: list, damage_type: Optional[str]) -> Optional[int]:

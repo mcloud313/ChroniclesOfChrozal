@@ -73,11 +73,17 @@ class World:
 
             # Populate rooms with their initial state
             for room in self.rooms.values():
-                item_id_rows = await self.db_manager.fetch_all("SELECT item_template_id FROM room_items WHERE room_id = $1", room.dbid)
-                room.items = [row['item_template_id'] for row in item_id_rows]
-                
-                object_rows = await self.db_manager.fetch_all("SELECT * FROM room_objects WHERE room_id = $1", room.dbid)
-                room.objects = [dict(row) for row in object_rows]
+            # REFACTOR: Load unique item instances, not templates
+                instance_records = await self.db_manager.get_instances_in_room(room.dbid)
+                for record in instance_records:
+                    instance_data = dict(record)
+                    template_data = self.get_item_template(instance_data['template_id'])
+                    if template_data:
+                        item_obj = Item(instance_data, template_data)
+                        # Add both the ID to the room and the object to a new world cache
+                        room.items.append(item_obj.id)
+                        self._all_item_instances[item_obj.id] = item_obj
+            
                 
                 # Spawn initial mobs
                 for template_id_str, spawn_info in room.spawners.items():
@@ -98,6 +104,10 @@ class World:
     # --- Getters ---
     def get_room(self, room_id: int) -> Optional[Room]:
         return self.rooms.get(room_id)
+    
+    def get_item_object(self, instance_id: str) -> Optional[Item]:
+        """Gets a loaded item instance object from the world cache."""
+        return self._all_item_instances.get(instance_id)
     
     def get_area(self, area_id: int) -> Optional[Dict]:
         return self.areas.get(area_id)

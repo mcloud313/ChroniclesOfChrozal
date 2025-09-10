@@ -21,9 +21,20 @@ from game.handlers.creation import CreationHandler
 log = logging.getLogger(__name__)
 
 MOTD = """
---- {CWelcome to Chronicles of Chrozal (Alpha 0.50) ---{x
-... (Your ASCII art and welcome message) ...
-{W--------------------------------------------------{x
+ ____ _   _ ____   ___  _   _ ___ ____ _     _____ ____   
+ / ___| | | |  _ \ / _ \| \ | |_ _/ ___| |   | ____/ ___|  
+| |   | |_| | |_) | | | |  \| || | |   | |   |  _| \___ \  
+| |___|  _  |  _ <| |_| | |\  || | |___| |___| |___ ___) | 
+ \____|_| |_|_| \_\\___/|_| \_|___\____|_____|_____|____/  
+                       / _ \|  ___|                        
+                      | | | | |_                           
+                      | |_| |  _|                          
+  ____ _   _ ____   ___\___/|_| _    _                     
+ / ___| | | |  _ \ / _ \__  /  / \  | |                    
+| |   | |_| | |_) | | | |/ /  / _ \ | |                    
+| |___|  _  |  _ <| |_| / /_ / ___ \| |___                 
+ \____|_| |_|_| \_\\___/____/_/   \_\_____|
+                    Version 0.51          
 """
 
 class ConnectionState(Enum):
@@ -190,11 +201,15 @@ class ConnectionHandler:
             await self._send("Invalid input.")
 
     async def _handle_post_load(self):
+        # NEW: Call the character's method to load its unique item instances
+        await self.active_character.load_instances()
+        
         room = self.world.get_room(self.active_character.location_id) or self.world.get_room(1)
         self.active_character.update_location(room)
         room.add_character(self.active_character)
         self.world.add_active_character(self.active_character)
         self.active_character.login_timestamp = time.monotonic()
+        
         await self._send(MOTD)
         await command_handler.process_command(self.active_character, self.world, "look")
         await room.broadcast(f"\r\n{self.active_character.name} has entered the realm.\r\n", {self.active_character})
@@ -217,7 +232,7 @@ class ConnectionHandler:
         if new_char_id:
             char_data = await self.db_manager.load_character_data(new_char_id)
             self.active_character = Character(self.writer, dict(char_data), self.world, self.player_account.is_admin)
-            await self._handle_post_load()
+            await self._handle_post_load() # New characters also go through post-load
         else:
             self.state = ConnectionState.SELECTING_CHARACTER
 
@@ -244,8 +259,6 @@ class ConnectionHandler:
                     log.error("Unhandled connection state: %s", self.state.name)
                     self.state = ConnectionState.DISCONNECTED
                 
-                # FIX: Add a small sleep to prevent a tight loop if a state handler
-                # is waiting for input but doesn't change the state itself.
                 if self.state == current_state and self.state != ConnectionState.PLAYING:
                     await asyncio.sleep(0.1)
         except Exception:

@@ -11,11 +11,8 @@ import json
 import logging
 import config
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple, Union
-
 from .item import Item
-from .definitions import skills as skill_defs
-from .definitions import abilities as ability_defs
-from .definitions import classes as class_defs
+from .definitions import skills as skill_defs, abilities as ability_defs, classes as class_defs
 from . import utils
 
 if TYPE_CHECKING:
@@ -26,9 +23,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 class Character:
-    """
-    Represents an individual character within the game world.
-    """
+    """Represents a character, now aware of unique item instances."""
     @property
     def might_mod(self) -> int: return utils.calculate_modifier(self.stats.get("might", 10))
     @property
@@ -69,7 +64,6 @@ class Character:
                     total_bv += effect_data.get("amount", 0)
         return total_bv
 
-    # REFACTOR: The constructor now requires the world object for context.
     def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any], world: 'World', player_is_admin: bool = False):
         self.writer: asyncio.StreamWriter = writer
         self.is_admin: bool = player_is_admin
@@ -78,9 +72,9 @@ class Character:
         # Data loaded from DB
         self.dbid: int = db_data['id']
         self.player_id: int = db_data['player_id']
-        # ... (all other attribute assignments from db_data remain the same) ...
         self.first_name: str = db_data['first_name']
         self.last_name: str = db_data['last_name']
+        self.name: str = f"{self.first_name} {self.last_name}"
         self.sex: str = db_data['sex']
         self.race_id: Optional[int] = db_data['race_id']
         self.class_id: Optional[int] = db_data['class_id']
@@ -118,14 +112,45 @@ class Character:
         self.known_spells: List[str] = db_data.get('known_spells') or []
         self.known_abilities: List[str] = db_data.get('known_abilities') or []
         self.skills: Dict[str, int] = db_data.get('skills') or {}
-        self.inventory: List[int] = db_data.get('inventory') or []
-        self.equipment: Dict[str, int] = db_data.get('equipment') or {}
+        self.inventory: List[str] = db_data.get('inventory') or []
+        self.equipment: Dict[str, str] = db_data.get('equipment') or {}
+
+        # --- NEW: Runtime caches for loaded Item objects ---
+        self._inventory_items: Dict[str, Item] = {}
+        self._equipped_items: Dict[str, Item] = {}
 
         # Clamp loaded HP/Essence
         self.hp = min(self.hp, self.max_hp)
         self.essence = min(self.essence, self.max_essence)
         if self.status in ["DYING", "DEAD"]:
             self.hp = 0.0
+
+    async def load_instances(self):
+        """Fetches all item instances from the DB and populates runtime caches."""
+        instance_records = await self.world.db_manager.get_instances_for_character(self.dbid)
+        if not instance_records:
+            return
+
+        for inst_record in instance_records:
+            instance_data = dict(inst_record)
+            template_data = self.world.get_item_template(instance_data['template_id'])
+            if template_data:
+                item_obj = Item(instance_data, template_data)
+                
+                # Check if this item is equipped
+                is_equipped = False
+                for slot, equipped_id in self.equipment.items():
+                    if equipped_id == item_obj.id:
+                        self._equipped_items[slot] = item_obj
+                        is_equipped = True
+                        break
+                
+                # If not equipped, it's in the main inventory
+                if not is_equipped:
+                    self._inventory_items[item_obj.id] = item_obj
+        
+        log.debug("Loaded %d equipped items and %d inventory items for %s",
+                  len(self._equipped_items), len(self._inventory_items), self.name)
     
     async def send(self, message: str, add_newline: bool = True):
         """Safely sends a message to this character's client."""
@@ -138,9 +163,7 @@ class Character:
             await self.writer.drain()
         except (ConnectionResetError, BrokenPipeError):
             log.warning("Connection lost for %s during write.", self.name)
-            # The main handler will catch this and clean up the connection.
 
-    # REFACTOR: The save method now uses the world.db_manager and updates playtime.
     async def save(self):
         """Gathers character data, updates playtime, and saves to the database."""
         # --- 1. Update Playtime ---
@@ -160,7 +183,9 @@ class Character:
             "spiritual_tether": self.spiritual_tether, "status": self.status,
             "stance": self.stance, "stats": self.stats, "skills": self.skills,
             "known_spells": self.known_spells, "known_abilities": self.known_abilities,
-            "inventory": self.inventory, "equipment": self.equipment, "coinage": self.coinage,
+            "inventory": list(self._inventory_items.keys()),
+            "equipment": {slot: item.id for slot, item in self._equipped_items.items()},
+            "coinage": self.coinage,
             "max_hp": self.max_hp, "max_essence": self.max_essence,
         }
         
@@ -266,25 +291,20 @@ class Character:
     def is_alive(self) -> bool:
         return self.hp > 0 and self.status != "DEAD"
 
-    def get_total_av(self, world: 'World') -> int:
-        """Calculates total armor value (AV) from worn equipment."""
+    def get_total_av(self) -> int:
+        """Calculates total armor value from equipped item instances."""
         total_av = 0
-        if not self.equipment:
-            return 0
-        
-        for slot, template_id in self.equipment.items():
-            template = world.get_item_template(template_id)
-            if template and template['type'].upper() in ["ARMOR", "SHIELD"]:
-                try:
-                    stats_dict = json.loads(template['stats'] or '{}')
-                    item_av = stats_dict.get("armor", 0)
-                    total_av += item_av
-                except (json.JSONDecodeError, TypeError):
-                    log.warning("Could not parse stats for equipped item %d (Slot: %s) for AV calc.", template_id, slot)
-        
-        # BUG FIX: Moved log outside the loop.
-        log.debug("Character %s final calculated Total AV: %d", self.name, total_av)
+        for item in self._equipped_items.values():
+            if item.item_type in ["ARMOR", "SHIELD"]:
+                total_av += item.armor
         return total_av
+
+    def get_shield(self) -> Optional[Item]:
+        """Returns the Item object for the equipped shield, or None."""
+        shield_item = self._equipped_items.get("WIELD_OFF")
+        if shield_item and shield_item.item_type == "SHIELD":
+            return shield_item
+        return None
 
     def get_skill_rank(self, skill_name: str) -> int:
         """Gets the character's rank in a specific skill."""
@@ -307,14 +327,13 @@ class Character:
         template_data = world.get_item_template(template_id)
         return Item(template_data) if template_data else None
     
-    def find_item_in_inventory_by_name(self, world: 'World', item_name: str) -> Optional[int]:
+    def find_item_in_inventory_by_name(self, item_name: str) -> Optional[Item]:
+        """Finds the first item instance in inventory matching a name."""
         name_lower = item_name.lower()
-        for template_id in self.inventory:
-            template = world.get_item_template(template_id)
-            if template and name_lower in template['name'].lower():
-                return template_id
+        for item in self._inventory_items.values():
+            if name_lower in item.name.lower():
+                return item
         return None
-
 
     def knows_spell(self, spell_key: str) -> bool:
         """Checks if the character knows a specific spell by its internal key."""
@@ -323,17 +342,6 @@ class Character:
     def knows_ability(self, ability_key: str) -> bool:
         """Checks if the character knows a specific ability by its internal key."""
         return ability_key.lower() in self.known_abilities
-
-    def get_shield(self, world: 'World') -> Optional[Item]:
-        """Returns the Item object for the equipped shield, or None."""
-        shield_template_id = self.equipment.get("WIELD_OFF")
-        if not shield_template_id:
-            return None
-        
-        shield_item = self.get_item_instance(world, shield_template_id)
-        if shield_item and shield_item.item_type.upper() == "SHIELD":
-            return shield_item
-        return None
 
     def __repr__(self) -> str:
         return f"<Character {self.dbid}: '{self.name}'>"

@@ -21,11 +21,7 @@ class Room:
         self.dbid: int = db_data['id']
         self.area_id: int = db_data['area_id']
         self.name: str = db_data['name']
-        self.description: str = db_data['description']
-        
-        # --- FIX: Robustly load JSONB data ---
-        # This logic handles data that may be a string or already a Python object.
-        
+        self.description: str = db_data['description'] 
         exits_data = db_data.get('exits') or {}
         self.exits: Dict[str, Any] = json.loads(exits_data) if isinstance(exits_data, str) else exits_data
         
@@ -39,7 +35,7 @@ class Room:
         # Runtime attributes, populated by World.build()
         self.characters: Set['Character'] = set()
         self.mobs: Set['Mob'] = set()
-        self.items: List[int] = []
+        self.items: List[str] = []
         self.objects: List[Dict[str, Any]] = []
         self.coinage: int = db_data.get('coinage', 0)
         
@@ -121,6 +117,18 @@ class Room:
             if not mob.is_alive() and mob.time_of_death and (current_time - mob.time_of_death) >= mob.respawn_delay:
                 mob.respawn()
                 await self.broadcast(f"\r\nA {mob.name} suddenly appears!\r\n")
+
+    def get_item_instance_by_name(self, item_name: str, world: 'World') -> Optional['Item']:
+        """Finds the first item instance on the ground matching a name."""
+        name_lower = item_name.lower()
+        for instance_id in self.items:
+            # We need to load the full item object to check its name
+            instance_data = world.db_manager.get_item_instance_sync(instance_id) # (Assuming a sync helper, let's adapt)
+            # This reveals a need for a way to get item objects from the world cache. Let's add it to World.
+            item_object = world.get_item_object(instance_id)
+            if item_object and name_lower in item_object.name.lower():
+                return item_object
+        return None
     
     async def mob_ai_tick(self, dt: float, world: 'World'):
         """Calls the AI tick method for all living mobs in the room."""
@@ -131,19 +139,7 @@ class Room:
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
                     log.exception("Room %d: Exception in AI tick for mob '%s'", self.dbid, getattr(living_mobs[i], 'name', '?'))
-
-    async def add_item(self, item_template_id: int, world: 'World') -> bool:
-        """Adds an item to the room's cache and the database."""
-        status = await world.db_manager.execute_query("INSERT INTO room_items (room_id, item_template_id) VALUES ($1, $2)", self.dbid, item_template_id)
-        if "INSERT 0 1" in status:
-            self.items.append(item_template_id)
-            return True
-        return False
         
-    async def remove_item(self, item_template_id: int, world: 'World') -> bool:
-        """Removes ONE item instance from the room's cache and the database."""
-        if item_template_id not in self.items:
-            return False
         
         status = await world.db_manager.execute_query("DELETE FROM room_items WHERE id = (SELECT id FROM room_items WHERE room_id = $1 AND item_template_id = $2 LIMIT 1)", self.dbid, item_template_id)
         if "DELETE 1" in status:

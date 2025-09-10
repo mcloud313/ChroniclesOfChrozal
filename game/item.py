@@ -1,7 +1,6 @@
 # game/item.py
 """
-Represents an Item instance in the game world.
-Loads data from an item template.
+Represents a unique instance of an item in the game world.
 """
 import json
 import logging
@@ -11,79 +10,94 @@ log = logging.getLogger(__name__)
 
 class Item:
     """
-    Represents an item instance, based on an item_template row from the DB.
+    Represents a unique item instance, combining template data with instance data.
     """
-    def __init__(self, template_data: Dict[str, Any]):
+    def __init__(self, instance_data: Dict[str, Any], template_data: Dict[str, Any]):
         """
-        Initializes an Item from a dictionary of template data.
+        Initializes an Item from its unique instance data and shared template data.
         """
-        if not template_data:
-            raise ValueError("Cannot initialize Item with empty template_data.")
+        if not instance_data or not template_data:
+            raise ValueError("Item requires both instance and template data.")
 
-        self._data = template_data
-        self.template_id: int = self._data['id']
-        self.name: str = self._data['name']
-        self.description: str = self._data['description']
-        self.item_type: str = self._data['type'].upper()
-        self.damage_type: Optional[str] = self._data['damage_type']
+        # --- Unique Instance Data ---
+        self.id: str = instance_data['id'] # The UUID of this specific item
+        self.condition: int = instance_data.get('condition', 100)
+        self.instance_stats: Dict[str, Any] = instance_data.get('instance_stats', {})
 
-        # Load stats JSON, providing defaults for key attributes
+        # --- Shared Template Data ---
+        self._template = template_data
+        self._template_stats: Dict[str, Any] = {}
         try:
-            stats_str = self._data.get('stats') or '{}'
-            self._stats_dict: Dict[str, Any] = json.loads(stats_str)
+            # Pre-parse the stats JSON from the template for easier access via properties.
+            self._template_stats = json.loads(self._template.get('stats', '{}') or '{}')
         except (json.JSONDecodeError, TypeError):
-            log.warning("Item template %d (%s): Could not decode stats JSON.", self.template_id, self.name)
-            self._stats_dict = {}
+            log.warning("Could not parse stats JSON for item template %s", self._template.get('id'))
 
-        # Load flags JSON into a set
+    @property
+    def template_id(self) -> int:
+        return self._template.get('id', 0)
+
+    @property
+    def name(self) -> str:
+        # In the future, this could be modified by instance_stats (e.g., "a glowing sword")
+        return self._template.get('name', 'an unknown item')
+
+    @property
+    def description(self) -> str:
+        # This could also be modified by instance_stats (e.g., "It glows faintly.")
+        return self._template.get('description', 'It is nondescript.')
+
+    @property
+    def item_type(self) -> str:
+        return self._template.get('type', 'GENERAL').upper()
+
+    @property
+    def damage_type(self) -> Optional[str]:
+        return self._template.get('damage_type')
+
+    @property
+    def flags(self) -> Set[str]:
         try:
-            flags_str = self._data.get('flags') or '[]'
-            flags_list = json.loads(flags_str)
-            self.flags: Set[str] = {flag.upper() for flag in flags_list}
+            return set(json.loads(self._template.get('flags', '[]') or '[]'))
         except (json.JSONDecodeError, TypeError):
-            log.warning("Item template %d (%s): Could not decode flags JSON.", self.template_id, self.name)
-            self.flags = set()
+            return set()
 
-    # --- Properties for easy access to common stats ---
+    # --- Properties that pull from the template's stats dictionary ---
     @property
     def weight(self) -> int:
-        return self._stats_dict.get("weight", 1)
+        return self._template_stats.get("weight", 1)
 
     @property
     def value(self) -> int:
-        return self._stats_dict.get("value", 0)
+        return self._template_stats.get("value", 0)
 
     @property
     def wear_location(self) -> Optional[Union[str, List[str]]]:
-        return self._stats_dict.get("wear_location")
+        return self._template_stats.get("wear_location")
 
     @property
     def speed(self) -> float:
-        return self._stats_dict.get("speed", 1.0)
+        return self._template_stats.get("speed", 1.0)
 
     @property
     def damage_base(self) -> int:
-        return self._stats_dict.get("damage_base", 0)
+        return self._template_stats.get("damage_base", 0)
 
     @property
     def damage_rng(self) -> int:
-        return self._stats_dict.get("damage_rng", 0)
+        return self._template_stats.get("damage_rng", 0)
 
     @property
     def armor(self) -> int:
-        return self._stats_dict.get("armor", 0)
+        return self._template_stats.get("armor", 0)
         
     @property
     def block_chance(self) -> float:
-        # BUG FIX: Safely handle missing value, preventing a crash.
-        return self._stats_dict.get("block_chance", 0.0)
+        return self._template_stats.get("block_chance", 0.0)
 
     def has_flag(self, flag_name: str) -> bool:
         """Check if the item has a specific flag (case-insensitive)."""
         return flag_name.upper() in self.flags
 
     def __repr__(self) -> str:
-        return f"<Item {self.template_id}: '{self.name}'>"
-
-    def __str__(self) -> str:
-        return self.name
+        return f"<Item {self.id} (Template: {self.template_id})>"
