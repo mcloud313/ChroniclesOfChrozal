@@ -1,10 +1,11 @@
 # tests/test_item_interaction.py
 import unittest
-from unittest.mock import Mock, AsyncMock, MagicMock
+from unittest.mock import MagicMock, AsyncMock
 import sys
 import os
 import asyncio
 
+# Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from game.world import World
@@ -15,45 +16,87 @@ from game.commands import item as item_cmds
 
 class TestItemInteraction(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        """Set up a mock world, character, and items for testing."""
+        # Create a mock for the database manager
         self.mock_db_manager = AsyncMock()
+
+        # --- KEY FIX ---
+        # The command functions (e.g., cmd_get, cmd_drop) will try to 'await'
+        # methods on the db_manager. We must configure those specific methods
+        # to be awaitable by making them AsyncMocks as well.
+        self.mock_db_manager.update_item_location = AsyncMock()
+
+        # Set up a mock writer for the character
         mock_writer = MagicMock(spec=asyncio.StreamWriter)
         mock_writer.drain = AsyncMock()
+        
+        # Initialize the world with our mock database manager
         self.world = World(self.mock_db_manager)
         
+        # Populate the world with necessary templates
         self.world.item_templates[1] = {'id': 1, 'name': 'a simple sword', 'type': 'WEAPON', 'description': 'A test sword.', 'stats': '{}', 'flags': '[]'}
         self.world.item_templates[2] = {'id': 2, 'name': 'a leather cap', 'type': 'ARMOR', 'description': 'A test cap.', 'stats': '{"wear_location": "HEAD"}', 'flags': '[]'}
 
+        # Create item instance data and objects
         self.sword_instance_data = {'id': 'sword-uuid-123', 'template_id': 1, 'room_id': 1}
         self.cap_instance_data = {'id': 'cap-uuid-456', 'template_id': 2, 'owner_char_id': 1}
         
-        self.room = Room({'id': 1, 'area_id': 1, 'name': 'Test Room', 'description': 'A room for testing.'})
         sword_obj = Item(self.sword_instance_data, self.world.item_templates[1])
-        self.world._all_item_instances = {self.sword_instance_data['id']: sword_obj}
+        cap_obj = Item(self.cap_instance_data, self.world.item_templates[2])
+
+        # Place the sword instance into the world's master list
+        self.world._all_item_instances = {
+            self.sword_instance_data['id']: sword_obj,
+            self.cap_instance_data['id']: cap_obj 
+        }
+
+        # Set up the room and place the sword in it
+        self.room = Room({'id': 1, 'area_id': 1, 'name': 'Test Room', 'description': 'A room for testing.'})
         self.room.item_instance_ids.append(self.sword_instance_data['id'])
         self.world.rooms[1] = self.room
 
+        # Set up the character and place the cap in their inventory
         char_data = {"id": 1, "player_id": 1, "first_name": "Hero", "last_name": "Test", "sex": "Male", "race_id": 1, "class_id": 1, "level": 1, "hp": 50.0, "max_hp": 50.0, "essence": 50.0, "max_essence": 50.0, "stats": {}, "skills": {}, "equipment": {}, "inventory": [self.cap_instance_data['id']], "status": "ALIVE", "stance": "Standing", "xp_pool": 0, "xp_total": 0, "unspent_skill_points": 0, "unspent_attribute_points": 0, "spiritual_tether": 1, "description": "", "coinage": 0, "location_id": 1, "total_playtime_seconds": 0, "known_spells": [], "known_abilities": []}
         self.character = Character(mock_writer, char_data, self.world)
-        cap_obj = Item(self.cap_instance_data, self.world.item_templates[2])
         self.character._inventory_items[self.cap_instance_data['id']] = cap_obj
         
+        # Place the character in the room
         self.character.update_location(self.room)
         self.room.add_character(self.character)
 
     async def test_get_item_from_room(self):
+        """Verify that a character can get an item from the room."""
+        # Pre-condition: Sword is in the room
         self.assertIn(self.sword_instance_data['id'], self.room.item_instance_ids)
+
+        # Action: Run the 'get' command
         await item_cmds.cmd_get(self.character, self.world, "sword")
+
+        # Post-condition: Sword is no longer in the room and is now in inventory
         self.assertNotIn(self.sword_instance_data['id'], self.room.item_instance_ids)
         self.assertIn(self.sword_instance_data['id'], self.character._inventory_items)
 
     async def test_drop_item_from_inventory(self):
+        """Verify that a character can drop an item into the room."""
+        # Pre-condition: Cap is in inventory
         self.assertIn(self.cap_instance_data['id'], self.character._inventory_items)
+
+        # Action: Run the 'drop' command
         await item_cmds.cmd_drop(self.character, self.world, "cap")
+
+        # Post-condition: Cap is no longer in inventory and is now in the room
         self.assertNotIn(self.cap_instance_data['id'], self.character._inventory_items)
         self.assertIn(self.cap_instance_data['id'], self.room.item_instance_ids)
 
     async def test_wear_item_from_inventory(self):
+        """Verify that a character can wear an item from their inventory."""
+        # Pre-condition: Cap is in inventory
         self.assertIn(self.cap_instance_data['id'], self.character._inventory_items)
+
+        # Action: Run the 'wear' command
         await item_cmds.cmd_wear(self.character, self.world, "cap")
+
+        # Post-condition: Cap is no longer in inventory and is now equipped
         self.assertNotIn(self.cap_instance_data['id'], self.character._inventory_items)
         self.assertIn('HEAD', self.character._equipped_items)
+        self.assertEqual(self.character._equipped_items['HEAD'].id, self.cap_instance_data['id'])

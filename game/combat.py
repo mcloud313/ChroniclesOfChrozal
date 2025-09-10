@@ -110,7 +110,7 @@ async def resolve_physical_attack(
         return
 
     # --- 6. Resolve Block (if hit) ---
-    if isinstance(target, Character) and (shield := target.get_shield(world)):
+    if isinstance(target, Character) and (shield := target.get_shield()):
         shield_skill_rank = target.get_skill_rank("shield usage")
         block_chance = shield.block_chance + (math.floor(shield_skill_rank / 10) * 0.01)
         if random.random() < block_chance:

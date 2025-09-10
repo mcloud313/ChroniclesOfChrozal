@@ -289,8 +289,13 @@ class Character:
         return self.hp > 0 and self.status != "DEAD"
 
     def get_total_av(self) -> int:
-        """Calculates total armor value from equipped item instances."""
-        return sum(item.armor for item in self._equipped_items.values() if item.item_type in ["ARMOR", "SHIELD"])
+        """Calculates total armor value from all equipped items."""
+        total_av = 0
+        for item in self._equipped_items.values():
+            # The item object has an 'armor' property that gets the value
+            # from the template's stats.
+            total_av += item.armor
+        return total_av
 
     def get_shield(self) -> Optional[Item]:
         shield_item = self._equipped_items.get("WIELD_OFF")
