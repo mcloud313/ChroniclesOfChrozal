@@ -21,8 +21,12 @@ class Item:
 
         # --- Unique Instance Data ---
         self.id: str = instance_data['id'] # The UUID of this specific item
+        self.container_id: Optional[str] = instance_data.get('container_id')
         self.condition: int = instance_data.get('condition', 100)
         self.instance_stats: Dict[str, Any] = instance_data.get('instance_stats', {})
+
+        # --- Runtime Attributes ---
+        self.contents: Dict[str, 'Item'] = {}
 
         # --- Shared Template Data ---
         self._template = template_data
@@ -33,9 +37,20 @@ class Item:
         except (json.JSONDecodeError, TypeError):
             log.warning("Could not parse stats JSON for item template %s", self._template.get('id'))
 
+    def get_current_weight(self) -> int:
+        """Calculates the total weight of all items inside this container."""
+        if not self.contents:
+            return 0
+        return sum(item.weight for item in self.contents.values())
+
     @property
     def template_id(self) -> int:
         return self._template.get('id', 0)
+    
+    @property
+    def Capacity(self) -> int:
+        """The maximum weight this item can hold if it's a container."""
+        return self._template_stats.get("capacity", 0)
 
     @property
     def name(self) -> str:

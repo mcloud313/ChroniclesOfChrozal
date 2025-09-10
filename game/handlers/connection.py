@@ -95,10 +95,7 @@ class ConnectionHandler:
         log.info("Now prompting for username...")
         await self._prompt("Enter your account name")
         
-        log.info("Waiting for username input from client...")
         username = await self._read_line()
-        
-        # If the log below does not appear, the hang is in _read_line()
         log.info(f"Username received: '{username}'.")
         if username is None: return
 

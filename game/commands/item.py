@@ -36,27 +36,64 @@ async def cmd_inventory(character: 'Character', world: 'World', args_str: str) -
     return True
 
 async def cmd_get(character: 'Character', world: 'World', args_str: str) -> bool:
-    """Gets a unique item instance from the room."""
+    "Gets an item from the room or from a container."""
     if not args_str:
         await character.send("Get what?")
         return True
     
-    item_to_get = character.location.get_item_instance_by_name(args_str, world)
-    
-    if not item_to_get:
-        await character.send("You don't see that here.")
+    # Case 1: Get item from a container (e.g., "get sword from bag")
+    if " from " in args_str:
+        item_name, container_name, = [s.strip() for s in args_str.split(" from ", 1)]
+
+        container = character.find_container_by_name(container_name)
+        if not container:
+            await character.send(f"You don't have a {container_name}.")
+            return True
+        
+        # Find the item inside the container's contents
+        item_to_get = next((item for item in container.contents.values() if item_name.lower() in item.name.lower()), None)
+        if not item_to_get:
+            await character.send(f"Tehre is no {item_name} in the {container_name}.")
+            return True
+        
+        # Check the two-hand limit
+        if len(character._inventory_items) >= 2:
+            await character.send("Your hands are full.")
+            return True
+        
+        # Perform the move in memory
+        del container.contents[item_to_get.id]
+        character._inventory_items[item_to_get.id] = item_to_get
+        item_to_get.container_id = None
+
+        # Perform the move in the database (assign to character)
+        await world.db_manager.update_item_location(item_to_get.id, owner_char_id=character.dbid)
+
+        await character.send(f"You get the {item_to_get.name} from the {container.name}.")
         return True
-
-    # Move item in the database
-    await world.db_manager.update_item_location(item_to_get.id, owner_char_id=character.dbid)
-
-    # Move item in memory
-    character.location.item_instance_ids.remove(item_to_get.id)
-    character._inventory_items[item_to_get.id] = item_to_get
     
-    await character.send(f"You get {item_to_get.name}.")
-    await character.location.broadcast(f"\r\n{character.name} gets {item_to_get.name}.\r\n", exclude={character})
-    return True
+    # Case 2: Get the item from the room (original logic)
+    else:
+        item_to_get = character.location.get_item_instance_by_name(args_str, world)
+        if not item_to_get:
+            await character.send("You don't see that here.")
+            return True
+        
+        # Check the two hand limit
+        if len(character._inventory_items) >= 2:
+            await character.send("Your hands are full.")
+            return True
+        
+        # Move item in the database
+        await world.db_manager.update_item_location(item_to_get.id, owner_char_id=character.dbid)
+
+        # Move item in memory
+        character.location.item_instance_ids.remove(item_to_get.id)
+        character._inventory_items[item_to_get.id] = item_to_get
+        
+        await character.send(f"You get {item_to_get.name}.")
+        await character.location.broadcast(f"\r\n{character.name} gets {item_to_get.name}.\r\n", exclude={character})
+        return True
 
 async def cmd_drop(character: 'Character', world: 'World', args_str: str) -> bool:
     """Drops a unique item instance onto the ground."""
@@ -122,6 +159,47 @@ async def cmd_remove(character: 'Character', world: 'World', args_str: str) -> b
 
     await character.send(f"You remove {item_to_remove.name}.")
     await character.location.broadcast(f"\r\n{character.name} removes {item_to_remove.name}.\r\n", exclude={character})
+    return True
+
+async def cmd_put(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Puts an item from inventory into a container"""
+    if " in " not in args_str:
+        await character.send("What do you want to put in what? (e.g., put sword in bag)")
+        return True
+    
+    item_name, container_name = [s.strip() for s in args_str.split(" in ", 1)]
+
+    # 1. Find the item in the character's hands (top-level inventory)
+    item_to_put = character.find_item_in_inventory_by_name(item_name)
+    if not item_to_put:
+        await character.send(f"You aren't holding a {item_name}.")
+        return True
+    
+    # 2. Find the container in hands or equipped
+    container = character.find_container_by_name(container_name)
+    if not container:
+        await character.send(f"You don't have a {container_name}.")
+        return True
+    
+    # 3. Sanity check: can't put a container in itself
+    if item_to_put.id == container.id:
+        await character.send("You can't put an item inside itself.")
+        return True
+    
+    # 4. Check capacity
+    if container.get_current_weight() + item_to_put.weight > container.capacity:
+        await character.send(f"The {container.name} is too full.")
+        return True
+    
+    #5. Perform the move in memory
+    del character._inventory_items[item_to_put.id]
+    container.contents[item_to_put.id] = item_to_put
+    item_to_put.container_id = container.id
+
+    #6. Perform the move in the database
+    await world.db_manager.update_item_location(item_to_put.id, container_id=container.id)
+
+    await character.send(f"You put the {item_to_put.name} in the {container.name}.")
     return True
 
 async def cmd_examine(character: 'Character', world: 'World', args_str: str) -> bool:

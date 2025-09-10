@@ -55,6 +55,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "remove": item_cmds.cmd_remove, "rem": item_cmds.cmd_remove,
     "get": item_cmds.cmd_get, "g": item_cmds.cmd_get, "take": item_cmds.cmd_get,
     "drop": item_cmds.cmd_drop,
+    "put": item_cmds.cmd_put,
     "examine": item_cmds.cmd_examine, "exa": item_cmds.cmd_examine,
     # "drink": item_cmds.cmd_drink,
     # "eat": item_cmds.cmd_eat,

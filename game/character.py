@@ -126,31 +126,44 @@ class Character:
             self.hp = 0.0
 
     async def load_instances(self):
-        """Fetches all item instances from the DB and populates runtime caches."""
+        """
+        Fetches all item instances from the DB and populates runtime caches,
+        correctly placing items inside their containers.
+        """
         instance_records = await self.world.db_manager.get_instances_for_character(self.dbid)
         if not instance_records:
             return
 
+        # --- First Pass: Create all Item objects ---
+        # Create a temporary dictionary to hold all items owned by the character.
+        all_owned_items: Dict[str, Item] = {}
         for inst_record in instance_records:
             instance_data = dict(inst_record)
             template_data = self.world.get_item_template(instance_data['template_id'])
             if template_data:
                 item_obj = Item(instance_data, template_data)
-                
-                # Check if this item is equipped
-                is_equipped = False
+                all_owned_items[item_obj.id] = item_obj
+
+        # --- Second Pass: Place items into containers or inventory/equipment ---
+        for item_id, item_obj in all_owned_items.items():
+            # Check if the item is inside a container
+            if item_obj.container_id and item_obj.container_id in all_owned_items:
+                # Find the container object and add this item to its contents
+                container_obj = all_owned_items[item_obj.container_id]
+                container_obj.contents[item_id] = item_obj
+            # Check if the item is equipped
+            elif item_id in self.equipment.values():
+                # Find which slot this item ID belongs to and place it
                 for slot, equipped_id in self.equipment.items():
-                    if equipped_id == item_obj.id:
+                    if equipped_id == item_id:
                         self._equipped_items[slot] = item_obj
-                        is_equipped = True
                         break
-                
-                # If not equipped, it's in the main inventory
-                if not is_equipped:
-                    self._inventory_items[item_obj.id] = item_obj
+            # Otherwise, the item is in the top-level inventory
+            else:
+                self._inventory_items[item_id] = item_obj
         
-        log.debug("Loaded %d equipped items and %d inventory items for %s",
-                  len(self._equipped_items), len(self._inventory_items), self.name)
+        log.debug("Loaded instances for %s: %d equipped, %d in inventory.",
+                  self.name, len(self._equipped_items), len(self._inventory_items))
     
     async def send(self, message: str, add_newline: bool = True):
         """Safely sends a message to this character's client."""
@@ -331,6 +344,19 @@ class Character:
             if name_lower in item.name.lower():
                 return item
         return None
+    
+    def find_container_by_name(self, name: str) -> Optional[Item]:
+        """Finds a container item in the character's top-level inventory or equipment"""
+        name_lower = name.lower()
+        # Check inventory (hands) first
+        for item in self._inventory_items.values():
+            if item.capacity > 0 and name_lower in item.name.lower():
+                return item
+            # Then check equipped items
+        for item in self._equipped_items.values():
+            if item.capacity > 0 and name_lower in item.name.lower():
+                return item
+            return None
 
     def knows_spell(self, spell_key: str) -> bool:
         """Checks if the character knows a specific spell by its internal key."""
