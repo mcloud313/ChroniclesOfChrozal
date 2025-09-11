@@ -1,5 +1,6 @@
 # game/commands/item.py
 import logging
+import json
 from typing import TYPE_CHECKING
 from ..item import Item
 from .. import utils
@@ -266,3 +267,62 @@ async def cmd_repair(character: 'Character', world: 'World', args_str: str) -> b
 
     await character.send(f"You pay {utils.format_coinage(cost)} and the smith repairs your {item_to_repair.name} to perfect condition.")
     return True
+
+async def _handle_consume(character: 'Character', world: 'World', args_str: str, consume_type: str) -> bool:
+    """Private helper to handle the logic for eating or drinking."""
+    if not args_str:
+        await character.send(f"{consume_type.capitalize()} what?")
+        return True
+    
+    item_to_consume = character.find_item_in_inventory_by_name(args_str)
+    if not item_to_consume:
+        await character.send("You aren't carrying that.")
+        return True
+    
+    # Check if the item is of the correct type (FOOD for eat, DRINK/POTION for drink)
+    valid_types = {"FOOD"} if consume_type == "eat" else {"DRINK", "POTION"}
+    if item_to_consume.item_type not in valid_types:
+        await character.send(f"You can't {consume_type} that.")
+        return True
+    
+    # Get the effect from the item's template stats
+    template = world.get_item_template(item_to_consume.template_id)
+    if not template: return True # should not happen
+
+    try:
+        stats = json.loads(template.get('stats', '{}') or '{}')
+        effect = stats.get("effect")
+        amount = stats.get("amount", 0)
+    except (json.JSONDecodeError, TypeError):
+        effect, amount = None, 0
+
+    if not effect:
+        await character.send(f"You {consume_type} the {item_to_consume.name}, but nothing seems to happen.")
+
+    # apply the effect
+    if effect == "heal_hp":
+        healed_amount = min(amount, character.max_hp - character.hp)
+        character.hp += healed_amount
+        await character.send(f"You {consume_type} the {item_to_consume.name} and heal {int(healed_amount)} hit points.")
+
+    elif effect == "heal_essence":
+        healed_amount = min(amount, character.max_essence - character.essence)
+        character.essence += healed_amount
+        await character.send(f"You {consume_type} the {item_to_consume.name} and restore {int(healed_amount)} essence.")
+
+    # Destroy the item instance
+    await world.db_manager.delete_item_instance(item_to_consume.id)
+    del character._inventory_items[item_to_consume.id]
+    del world._all_item_instances[item_to_consume.id]
+
+    # Broadcast to the room
+    await character.location.broadcast(f"\r\n{character.name} {consume_type}s a {item_to_consume.name}.\r\n", exclude={character})
+    return True
+
+async def cmd_eat(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Eats a food item from inventory."""
+    return await _handle_consume(character, world, args_str, "eat")
+
+async def cmd_drink(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Drinks a potion or beverage from inventory."""
+    return await _handle_consume(character, world, args_str, "drink")
