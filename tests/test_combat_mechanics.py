@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from game import combat
 from game.character import Character
 from game.world import World
+from game.mob import Mob
 
 class TestCombatMechanics(unittest.IsolatedAsyncioTestCase):
     """Test suite for core combat functions and calculations."""
@@ -19,6 +20,12 @@ class TestCombatMechanics(unittest.IsolatedAsyncioTestCase):
         self.mock_world = Mock()
         self.mock_writer = MagicMock(spec=asyncio.StreamWriter)
         self.mock_writer.drain = AsyncMock()
+
+        # --- ADD THIS ---
+        # Mock the database manager for durability updates
+        self.mock_world.db_manager = AsyncMock()
+        self.mock_world.db_manager.update_item_condition = AsyncMock()
+        self.mock_world.db_manager.delete_item_instance = AsyncMock()
         
         self.mock_world.get_item_template.side_effect = lambda tid: {
             10: {'id': 10, 'name': 'a leather cap', 'type': 'ARMOR', 'stats': '{"armor": 2}'},
@@ -89,6 +96,7 @@ class TestCombatMechanics(unittest.IsolatedAsyncioTestCase):
         mock_attacker.mar = 20
         mock_attacker.might_mod = 5
         mock_attacker.get_skill_rank.return_value = 0
+        mock_attacker.get_total_av.return_value = 0
         
         # side_effect[0] is hit roll, side_effect[1] is damage roll
         mock_randint.side_effect = [15, 10]
@@ -128,3 +136,54 @@ class TestCombatMechanics(unittest.IsolatedAsyncioTestCase):
         
         damage_taken = initial_hp - target_character.hp
         self.assertEqual(damage_taken, expected_damage)
+
+    # Add this test to the TestCombatMechanics class
+    
+    @patch('game.combat.random.random', return_value=0.05) # Force the 10% chance to succeed
+    @patch('random.randint')
+    async def test_weapon_loses_condition_on_hit(self, mock_randint, mock_random_float):
+        """Tests that an attacker's weapon loses condition after a successful hit."""
+        from game.item import Item # Import Item locally for the test
+
+        # --- 1. Arrange ---
+        # Set up a mock attacker, target, and room
+        attacker_char = Mock(spec=Character)
+        attacker_char.name = "Attacker"
+        attacker_char.is_alive.return_value = True
+        attacker_char.mar = 20
+        attacker_char.might_mod = 5
+        attacker_char.get_skill_rank.return_value = 0
+        attacker_char.get_total_av.return_value = 0
+
+        target_mob = Mock(spec=Mob)
+        target_mob.name = "Target"
+        target_mob.is_alive.return_value = True
+        target_mob.mv = 5
+        target_mob.hp = 20
+        target_mob.dv = 10
+        target_mob.barrier_value = 0
+        target_mob.pds = 0
+        target_mob.get_total_av.return_value = 0
+        target_mob.mv
+        
+        mock_room = Mock()
+        mock_room.broadcast = AsyncMock()
+        attacker_char.location = mock_room
+        target_mob.location = mock_room
+        
+        # Create a weapon with 100 condition
+        weapon_template = {'id': 100, 'name': 'a test sword', 'type': 'WEAPON', 'stats': '{}'}
+        weapon_instance = Item({'id': 'weapon-uuid-1', 'template_id': 100}, weapon_template)
+        self.assertEqual(weapon_instance.condition, 100)
+
+        # Mock the hit and damage rolls to ensure a successful hit
+        mock_randint.side_effect = [15, 5] # 15 for hit, 5 for damage
+
+        # --- 2. Act ---
+        await combat.resolve_physical_attack(attacker_char, target_mob, weapon_instance, self.mock_world)
+
+        # --- 3. Assert ---
+        # Check that condition dropped by 1
+        self.assertEqual(weapon_instance.condition, 99)
+        # Check that the database was called to save the new condition
+        self.mock_world.db_manager.update_item_condition.assert_called_once_with(weapon_instance.id, 99)

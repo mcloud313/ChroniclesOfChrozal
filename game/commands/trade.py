@@ -3,11 +3,11 @@ import logging
 import json
 from typing import TYPE_CHECKING
 from .. import utils
+from ..item import Item
 
 if TYPE_CHECKING:
     from ..character import Character
     from ..world import World
-    from ..item import Item
 
 log = logging.getLogger(__name__)
 

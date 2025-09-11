@@ -44,7 +44,7 @@ async def cmd_get(character: 'Character', world: 'World', args_str: str) -> bool
     
     # Case 1: Get item from a container (e.g., "get sword from bag")
     if " from " in args_str:
-        item_name, container_name, = [s.strip() for s in args_str.split(" from ", 1)]
+        item_name, container_name = [s.strip() for s in args_str.split(" from ", 1)]
 
         container = character.find_container_by_name(container_name)
         if not container:

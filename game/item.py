@@ -48,7 +48,7 @@ class Item:
         return self._template.get('id', 0)
     
     @property
-    def Capacity(self) -> int:
+    def capacity(self) -> int:
         """The maximum weight this item can hold if it's a container."""
         return self._template_stats.get("capacity", 0)
 

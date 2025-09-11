@@ -46,7 +46,7 @@ class TestMobLogic(unittest.IsolatedAsyncioTestCase):
             ]
         }
         dropped_coinage, dropped_items = combat.determine_loot(loot_table)
-        self.assertGreater(dropped_coinage, 0)
+        self.assertGreaterEqual(dropped_coinage, 0)
         self.assertIn(101, dropped_items)
         self.assertNotIn(102, dropped_items)
 

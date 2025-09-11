@@ -8,6 +8,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from game.character import Character
+from game.item import Item
 import config
 
 class TestCharacterProgression(unittest.TestCase):
@@ -86,3 +87,53 @@ class TestCharacterProgression(unittest.TestCase):
         self.assertEqual(self.character.level, 2)
         self.assertEqual(self.character.unspent_skill_points, 5)
         self.assertGreater(self.character.max_hp, self.char_data['max_hp'])
+
+    def test_stat_bonuses_from_equipment(self):
+        """Tests that stats are correctly modified by equipping and unequipping enchanted items."""
+        # --- 1. Setup ---
+        # Create mock templates (we only need a name)
+        sword_template = {'name': 'a magical sword'}
+        helmet_template = {'name': 'a magical helmet'}
+        
+        # Create magical item instances with bonuses in `instance_stats`
+        sword_instance = Item(
+            {'id': 'sword-enchanted-1', 'template_id': 999},
+            sword_template
+        )
+        sword_instance.instance_stats = {"bonus_might": 5, "bonus_mar": 10}
+
+        helmet_instance = Item(
+            {'id': 'helmet-enchanted-1', 'template_id': 998},
+            helmet_template
+        )
+        helmet_instance.instance_stats = {"bonus_might": 2}
+
+        # --- 2. Baseline Check ---
+        # Base stats: might=15 (mod 5), agility=10 (mod 3)
+        # Base MAR = 5 + floor(3/2) = 6
+        self.assertEqual(self.character.might_mod, 5)
+        self.assertEqual(self.character.mar, 6)
+
+        # --- 3. Equip Sword and Verify ---
+        self.character._equipped_items['WIELD_MAIN'] = sword_instance
+        
+        # New might = 15 + 5 = 20. New mod = floor(20/3) = 6
+        self.assertEqual(self.character.might_mod, 6)
+        # New MAR = (new might_mod 6) + floor(3/2) + (bonus_mar 10) = 17
+        self.assertEqual(self.character.mar, 17)
+
+        # --- 4. Equip Helmet and Verify Stacking ---
+        self.character._equipped_items['HEAD'] = helmet_instance
+
+        # New might = 15 + 5 (sword) + 2 (helmet) = 22. New mod = floor(22/3) = 7
+        self.assertEqual(self.character.might_mod, 7)
+        # New MAR = (new might_mod 7) + floor(3/2) + (bonus_mar 10) = 18
+        self.assertEqual(self.character.mar, 18)
+
+        # --- 5. Unequip Sword and Verify ---
+        del self.character._equipped_items['WIELD_MAIN']
+
+        # Might = 15 + 2 (helmet) = 17. New mod = floor(17/3) = 5
+        self.assertEqual(self.character.might_mod, 5)
+        # MAR = (new might_mod 5) + floor(3/2) + (no bonus_mar) = 6
+        self.assertEqual(self.character.mar, 6)

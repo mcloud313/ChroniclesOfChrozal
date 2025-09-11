@@ -49,6 +49,12 @@ class Character:
         return utils.calculate_modifier(base_intellect + bonus_intellect)
     
     @property
+    def aura_mod(self) -> int:
+        base_aura = self.stats.get("aura", 10)
+        bonus_aura = self.get_stat_bonus_from_equipment("bonus_aura")
+        return utils.calculate_modifier(base_aura + bonus_aura)
+    
+    @property
     def pers_mod(self) -> int:
         base_persona = self.stats.get("persona", 10)
         bonus_persona = self.get_stat_bonus_from_equipment("bonus_persona")
