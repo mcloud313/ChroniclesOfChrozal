@@ -346,17 +346,16 @@ class Character:
         return None
     
     def find_container_by_name(self, name: str) -> Optional[Item]:
-        """Finds a container item in the character's top-level inventory or equipment"""
+        """Finds a container item in the character's top-level inventory or equipment."""
         name_lower = name.lower()
         # Check inventory (hands) first
         for item in self._inventory_items.values():
             if item.capacity > 0 and name_lower in item.name.lower():
                 return item
-            # Then check equipped items
         for item in self._equipped_items.values():
             if item.capacity > 0 and name_lower in item.name.lower():
                 return item
-            return None
+        return None
 
     def knows_spell(self, spell_key: str) -> bool:
         """Checks if the character knows a specific spell by its internal key."""
