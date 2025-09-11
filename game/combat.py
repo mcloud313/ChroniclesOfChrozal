@@ -382,10 +382,20 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
 
         # --- Item Drop Logic (Shared by Solo and Group) ---
         if dropped_item_ids and target_loc:
-            # Item drop logic needs to be implemented here, creating new instances
-            # For now, we can log it.
-            log.info("Mob %s dropped item templates: %s", target_name, dropped_item_ids)
+            dropped_item_names = []
+            for template_id in dropped_item_ids:
+                # Create a new unique instance of the item in the room
+                instance_data = await world.db_manager.create_item_instance(template_id, room_id=target_loc.dbid)
+                if instance_data:
+                    template = world.get_item_template(template_id)
+                    item_obj = Item(instance_data, template)
 
+                    # Add the new item to the world's in memory state
+                    world._all_item_instances[item_obj.id] = item_obj
+                    target_loc.item_instance_ids.append(item_obj.id)
+                    dropped_item_names.append(template['name'])
+            if dropped_item_names:
+                await target_loc.broadcast(f"\r\n{target_name}'s corpse drops: {', '.join(dropped_item_names)}.\r\n")
 
     # --- Character Defeat Logic ---
     elif isinstance(target, Character) and target.status == "ALIVE":
