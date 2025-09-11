@@ -204,6 +204,29 @@ class DatabaseManager:
                     )
                 """)
                 await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS bank_accounts (
+                        character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+                        balance BIGINT NOT NULL DEFAULT 0,
+                        PRIMARY KEY (character_id)
+                    )
+                """)
+
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS banked_items (
+                        id SERIAL PRIMARY KEY,
+                        character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+                        item_instance_id UUID NOT NULL UNIQUE REFERENCES item_instances(id) ON DELETE CASCADE,
+                        stored_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS game_economy (
+                        key TEXT PRIMARY KEY,
+                        value BIGINT NOT NULL DEFAULT 0
+                    )
+                """)
+                await conn.execute("""
                     CREATE TABLE IF NOT EXISTS shop_inventories (
                         id SERIAL PRIMARY KEY,
                         room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,

@@ -9,6 +9,11 @@ services:
     volumes:
       # This links your project code into the environment
       - .:/workspaces/${localWorkspaceFolderBasename}:cached
+    
+    # --- ADD THIS LINE ---
+    # This tells Codespaces to run as the standard 'vscode' non-root user.
+    user: vscode
+
     command: sleep infinity
     depends_on:
       - db
