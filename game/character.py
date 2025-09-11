@@ -3,11 +3,10 @@
 Represents a character in the game world, controlled by a player account.
 Holds in-game state, attributes, and connection information.
 """
-import math
+from __future__ import annotations
 import time
 import random
 import asyncio
-import json
 import logging
 import config
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple, Union
@@ -19,6 +18,7 @@ if TYPE_CHECKING:
     from .room import Room
     from .world import World
     from .mob import Mob
+    from .group import Group
 
 log = logging.getLogger(__name__)
 
@@ -161,7 +161,7 @@ class Character:
         self.roundtime: float = 0.0
         self.death_timer_ends_at: Optional[float] = None
         self.login_timestamp: Optional[float] = None # NEW: For tracking session playtime
-
+        self.group: Optional['Group'] = None
         self.status: str = db_data.get('status', 'ALIVE')
         self.stance: str = db_data.get('stance', 'Standing')
 

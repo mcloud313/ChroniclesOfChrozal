@@ -2,13 +2,13 @@
 """
 Manages the game world's loaded state and orchestrates ticker-driven updates.
 """
+from __future__ import annotations
 import time
 import logging
 import asyncio
 from typing import Dict, Any, Optional, List, Union, TYPE_CHECKING
 from itertools import groupby
 from operator import itemgetter
-
 from .room import Room
 from .character import Character
 from .mob import Mob
@@ -19,6 +19,7 @@ import config
 
 if TYPE_CHECKING:
     from .database import DatabaseManager
+    from .group import Group
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class World:
         self.active_characters: Dict[int, Character] = {}
         self._all_item_instances: Dict[str, Item] = {}
         self.shop_inventories: Dict[int, List[Dict]] = {}
+        self.active_groups: Dict[int, 'Group'] = {}
         log.info("World object initialized.")
 
     async def build(self):
@@ -155,6 +157,18 @@ class World:
     
     def get_active_characters_list(self) -> List[Character]:
         return list(self.active_characters.values())
+
+    # -- Grouping Functions ---
+    def add_active_group(self, group: ' Group'):
+        """Adds a group to the world's list of active groups."""
+        self.active_groups[group.id] = group
+        log.debug(f"Group {group.id} created by {group.leader.name} now active.")
+
+    def remove_active_group(self, group_id: int):
+        """Removes a group from the active list."""
+        if group_id in self.active_groups:
+            del self.active_groups[group_id]
+            log.debug(f"Group {group_id} removed from active list.")
 
     # --- Ticker Callback Functions ---
     async def update_roundtimes(self, dt: float):

@@ -43,6 +43,18 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
         arrival_msg = f"\r\n{char_name} arrives.\r\n"
     await target_room.broadcast(arrival_msg, exclude={character})
 
+    # --- NEW: Group Cohesion Check ---
+    # This runs after the move is complete.
+    if character.group and character.group.leader != character:
+        # Check if the member is now in a different room than their leader
+        if character.location != character.group.leader.location:
+            group = character.group # Get a reference before leaving
+            group.remove_member(character)
+            
+            await character.send("{yYou have strayed too far from your group and have been removed.{x")
+            await group.broadcast(f"{character.name} has strayed from the group.")
+
+
     # --- Send new room info to the character ---
     look_string = target_room.get_look_string(character, world)
     await character.send(look_string)
@@ -73,7 +85,7 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
         await character.send(f"Your armor slows your movement (+{rt_penalty:.1f}s).")
 
 
-async def cmd_move(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', direction: str) -> bool:
+async def cmd_move(character: 'Character', world: 'World', direction: str) -> bool:
     """Handles all cardinal/ordinal directional movement commands."""
     if not character.location:
         await character.send("You cannot seem to move from the void.")
@@ -106,7 +118,7 @@ async def cmd_move(character: 'Character', world: 'World', db_conn: 'aiosqlite.C
     return True
 
 
-async def cmd_go(character: 'Character', world: 'World', db_conn: 'aiosqlite.Connection', args_str: str) -> bool:
+async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'go <target>' command for complex, named exits that may require skill checks."""
     if not character.location:
         await character.send("You cannot seem to go anywhere from the void.")

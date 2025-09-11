@@ -20,6 +20,7 @@ from . import skill as skill_cmds
 from . import magic as magic_cmds
 from . import abilities as ability_cmds
 from . import trade as trade_cmds
+from . import social as social_cmds
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +44,12 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "sit": general_cmds.cmd_sit,
     "stand": general_cmds.cmd_stand,
     "lie": general_cmds.cmd_lie,
+
+    # Social Commands
+    "group": social_cmds.cmd_group,
+    "disband": social_cmds.cmd_disband,
+    "kick": social_cmds.cmd_kick,
+    "leave": social_cmds.cmd_leave,
 
     # Combat & Ability Commands
     "attack": combat_cmds.cmd_attack, "a": combat_cmds.cmd_attack, "kill": combat_cmds.cmd_attack,
