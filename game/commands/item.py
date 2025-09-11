@@ -202,26 +202,29 @@ async def cmd_put(character: 'Character', world: 'World', args_str: str) -> bool
     await character.send(f"You put the {item_to_put.name} in the {container.name}.")
     return True
 
-async def cmd_examine(character: 'Character', world: 'World', args_str: str) -> bool:
+async def cmd_examine(character: ' Character', world: 'World', args_str: str) -> bool:
     if not args_str:
         await character.send("Examine what?")
         return True
     
+    # This logic correctly finds an item in hands, equippped or on the ground.
     item_to_examine = (character.find_item_in_inventory_by_name(args_str) or 
                        next((item for item in character._equipped_items.values() if args_str.lower() in item.name.lower()), None) or 
                        character.location.get_item_instance_by_name(args_str, world))
-
     if not item_to_examine:
         await character.send("You don't see that here.")
         return True
-        
+    
+    # --- Use color codes for italics on the UUID and call our new helper
+    uuid_str = f"{{i({item_to_examine.id}){{x"
+
     output = [
-        f"\r\n--- {item_to_examine.name} ---",
+        f"\n\r--- {item_to_examine.name} {uuid_str} ---",
         item_to_examine.description,
-        f"It is in {item_to_examine.condition}% condition.",
+        utils.get_condition_desc(item_to_examine.condition), # <-- New condition description
         f"Type: {item_to_examine.item_type.capitalize()}, Weight: {item_to_examine.weight} stones"
     ]
-    await character.send("\r\n".join(output))
+    await character.send("\n\r".join(output))
     return True
 
 async def cmd_repair(character: 'Character', world: 'World', args_str: str) -> bool:

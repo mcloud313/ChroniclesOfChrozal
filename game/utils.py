@@ -325,3 +325,22 @@ def parse_quoted_args(args_str: str, min_args: int, max_args: int) -> Optional[L
         log.debug("Parse error: Incorrect number of args (%d) for '%s'", len(args), args_str)
         return None
     return args
+
+def get_condition_desc(condition: int) -> str:
+    """Returns a descriptive string for an item's condition level."""
+    if condition >= 100:
+        return "It is in perfect condition."
+    elif condition >= 90:
+        return "It shows signs of light use."
+    elif condition >= 70:
+        return "It is moderately worn."
+    elif condition >= 50:
+        return "It is heavily worn and battered."
+    elif condition >= 30:
+        return "It is in poor condition, with visible wear and tear."
+    elif condition >= 10:
+        return "It is on the verge of disrepair."
+    elif condition >= 1:
+        return "It looks like it could fall apart at any moment."
+    else:
+        return "It is completely broken."
