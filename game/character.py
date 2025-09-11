@@ -25,33 +25,77 @@ log = logging.getLogger(__name__)
 class Character:
     """Represents a character, now aware of unique item instances."""
     @property
-    def might_mod(self) -> int: return utils.calculate_modifier(self.stats.get("might", 10))
+    def might_mod(self) -> int:
+        base_might = self.stats.get("might", 10)
+        bonus_might = self.get_stat_bonus_from_equipment("bonus_might")
+        return utils.calculate_modifier(base_might + bonus_might)
+    
     @property
-    def vit_mod(self) -> int: return utils.calculate_modifier(self.stats.get("vitality", 10))
+    def vit_mod(self) -> int:
+        base_vitality = self.stats.get("vitality", 10)
+        bonus_vitality = self.get_stat_bonus_from_equipment("bonus_vitality")
+        return utils.calculate_modifier(base_vitality + bonus_vitality)
+    
     @property
-    def agi_mod(self) -> int: return utils.calculate_modifier(self.stats.get("agility", 10))
+    def agi_mod(self) -> int:
+        base_agility = self.stats.get("agility", 10)
+        bonus_agility = self.get_stat_bonus_from_equipment("bonus_agility")
+        return utils.calculate_modifier(base_agility + bonus_agility)
+    
     @property
-    def int_mod(self) -> int: return utils.calculate_modifier(self.stats.get("intelligence", 10))
+    def int_mod(self) -> int:
+        base_intellect = self.stats.get("intellect", 10)
+        bonus_intellect = self.get_stat_bonus_from_equipment("bonus_intellect")
+        return utils.calculate_modifier(base_intellect + bonus_intellect)
+    
     @property
-    def aura_mod(self) -> int: return utils.calculate_modifier(self.stats.get("aura", 10))
-    @property
-    def pers_mod(self) -> int: return utils.calculate_modifier(self.stats.get("persona", 10))
+    def pers_mod(self) -> int:
+        base_persona = self.stats.get("persona", 10)
+        bonus_persona = self.get_stat_bonus_from_equipment("bonus_persona")
+        return utils.calculate_modifier(base_persona + bonus_persona)
 
     # Derived Combat Stats
     @property
-    def mar(self) -> int: return self.might_mod + (self.agi_mod // 2)
+    def mar(self) -> int:
+        base_mar = self.might_mod + (self.agi_mod // 2)
+        bonus_mar = self.get_stat_bonus_from_equipment("bonus_mar")
+        return base_mar + bonus_mar
+
     @property
-    def rar(self) -> int: return self.agi_mod + (self.might_mod // 2)
+    def rar(self) -> int:
+        base_rar = self.agi_mod + (self.might_mod // 2)
+        bonus_rar = self.get_stat_bonus_from_equipment("bonus_rar")
+        return base_rar + bonus_rar
+
     @property
-    def apr(self) -> int: return self.int_mod + (self.aura_mod // 2)
+    def apr(self) -> int:
+        base_apr = self.int_mod + (self.aura_mod // 2)
+        bonus_apr = self.get_stat_bonus_from_equipment("bonus_apr")
+        return base_apr + bonus_apr
+
     @property
-    def dpr(self) -> int: return self.aura_mod + (self.pers_mod // 2)
+    def dpr(self) -> int:
+        base_dpr = self.aura_mod + (self.pers_mod // 2)
+        bonus_dpr = self.get_stat_bonus_from_equipment("bonus_dpr")
+        return base_dpr + bonus_dpr
+
     @property
-    def pds(self) -> int: return self.vit_mod
+    def pds(self) -> int:
+        base_pds = self.vit_mod
+        bonus_pds = self.get_stat_bonus_from_equipment("bonus_pds")
+        return base_pds + bonus_pds
+
     @property
-    def sds(self) -> int: return self.aura_mod
+    def sds(self) -> int:
+        base_sds = self.aura_mod
+        bonus_sds = self.get_stat_bonus_from_equipment("bonus_sds")
+        return base_sds + bonus_sds
+
     @property
-    def dv(self) -> int: return self.agi_mod * 2
+    def dv(self) -> int:
+        base_dv = self.agi_mod * 2
+        bonus_dv = self.get_stat_bonus_from_equipment("bonus_dv")
+        return base_dv + bonus_dv
     
     @property
     def barrier_value(self) -> int:
@@ -372,6 +416,16 @@ class Character:
     def knows_ability(self, ability_key: str) -> bool:
         """Checks if the character knows a specific ability by its internal key."""
         return ability_key.lower() in self.known_abilities
+    
+    def get_stat_bonus_from_equipment(self, stat_name: str) -> int:
+        """
+        Calculate the total bonus for a given stat from all equipped items.
+        This reads from the item's unique 'instance stats'.
+        """
+        total_bonus = 0
+        for item in self._equipped_items.values():
+            total_bonus += item.instance_stats.get(stat_name, 0)
+        return total_bonus
 
     def __repr__(self) -> str:
         return f"<Character {self.dbid}: '{self.name}'>"
