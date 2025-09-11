@@ -451,4 +451,10 @@ class DatabaseManager:
                     character_id, item_instance_id
                 )
                 return True
+            
+    async def update_item_condition(self, instance_id: str, new_condition: int) -> str:
+        """Updates the condition of a single item instance."""
+        query = "UPDATE item_instances SET condition = $1 WHERE id = $2"
+        return await self.execute_query(query, new_condition, instance_id)
+    
 db_manager = DatabaseManager()

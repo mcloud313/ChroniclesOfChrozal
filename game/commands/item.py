@@ -223,3 +223,43 @@ async def cmd_examine(character: 'Character', world: 'World', args_str: str) -> 
     ]
     await character.send("\r\n".join(output))
     return True
+
+async def cmd_repair(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Repairs a damaged item at a repair shop."""
+    if not args_str:
+        await character.send("What do you want to repair?")
+        return True
+    
+    if "REPAIRER" not in character.location.flags:
+        await character.send("You can't get anything repaired here.")
+        return True
+    
+    item_to_repair = character.find_item_in_inventory_by_name(args_str)
+    if not item_to_repair:
+        await character.send("You aren't holding that.")
+        return True
+    
+    if item_to_repair.condition >= 100:
+        await character.send(f"The {item_to_repair.name} is already in perfect condition.")
+        return True
+    
+    #Calculate the cost (100 - condition) / 100 * (value * 0.25)
+    # Simplified: (100 - condition) * value * 0.0025
+    depletion = 100 - item_to_repair.condition
+    cost = int(depletion * item_to_repair.value * 0.0025)
+    # Ensure a minimum cost of 1 coin for any repair
+    cost = max(1, cost)
+
+    if character.coinage < cost:
+        await character.send(f"You can't afford the {utils.format_coinage(cost)} repair cost.")
+        return True
+    
+    # Perform transaction
+    character.coinage -= cost
+    item_to_repair.condition = 100
+
+    # Update the database
+    await world.db_manager.update_item_condition(item_to_repair.id, 100)
+
+    await character.send(f"You pay {utils.format_coinage(cost)} and the smith repairs your {item_to_repair.name} to perfect condition.")
+    return True

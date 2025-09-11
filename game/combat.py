@@ -120,6 +120,23 @@ async def resolve_physical_attack(
             await attacker_loc.broadcast(f"\r\n{target_name} blocks {attacker_name}'s attack.\r\n", exclude={attacker, target})
             return
         
+    # --- 6a. Attacker weapon durability
+    if isinstance(attacker, Character) and isinstance(attack_source, Item) and attack_source.item_type == "WEAPON":
+        if random.random() < 0.10: # 10% chance
+            attack_source.condition -= 1
+            # update the database
+            await world.db_manager.update_item_condition(attack_source.id, attack_source.condition)
+
+            if attack_source.condition <= 0:
+                await attacker.send(f"{{RYour {attack_source.name} shatters into pieces!{{x")
+                # Remove from memory
+                del attacker._equipped_items[attack_source.wear_location[0]] # Assumes single wield slot
+                del world._all_item_instances[attack_source.id]
+                # remove from database
+                await world.db_manager.delete_item_instance(attack_source.id)
+            elif attack_source.condition <= 10:
+                await attacker.send(f"{{yYour {attack_source.name} is badly damaged.{{x")
+
     # --- 7. Calculate Damage ---
     rng_roll_result = random.randint(1, wpn_rng_dmg) if wpn_rng_dmg > 0 else 0
     if is_crit:
@@ -133,6 +150,28 @@ async def resolve_physical_attack(
     mit_bv = math.floor(target.barrier_value / 2)
     
     final_damage = max(0, pre_mitigation_damage - mit_pds - mit_av - mit_bv)
+
+    # --- 8a. Target armor durability
+    if isinstance(target, Character):
+        # Get all equipped armor pieces
+        armor_pieces = [item for item in target._equipped_items.values() if item.item_type == "ARMOR"]
+        if armor_pieces and random.random() < 0.10: # 10% chance
+            # Choose a random piece of armor to damage
+            armor_hit = random.choice(armor_pieces)
+            armor_hit.condition -= 1
+            # Update the database
+            await world.db_manager.update_item_condition(armor_hit.id, armor_hit.condition)
+
+            if armor_hit.condition <= 0:
+                await target.send(f"{{RYour {armor_hit.name} is destroyed by the blow!{{x")
+                # Remove from memory
+                del target._equipped_items[armor_hit.wear_location] # Assumes single slot
+                del world._all_item_instances[armor_hit.id]
+                # Remove from database
+                await world.db_manager.delete_item_instance(armor_hit.id)
+            elif armor_hit.condition <= 10:
+                await target.send(f"{{yYour {armor_hit.name} was damaged.{{x")
+
 
     # --- 9. Apply Damage & Send Messages ---
     target.hp = max(0.0, target.hp - final_damage)

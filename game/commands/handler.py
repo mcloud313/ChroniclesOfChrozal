@@ -63,6 +63,8 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "sell": trade_cmds.cmd_list,
     "balance": trade_cmds.cmd_list,
     "deposit": trade_cmds.cmd_list,
+    "withdraw": trade_cmds.cmd_withdraw,
+    "repair": item_cmds.cmd_repair,
     # "drink": item_cmds.cmd_drink,
     # "eat": item_cmds.cmd_eat,
 
