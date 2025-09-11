@@ -269,3 +269,66 @@ async def cmd_deposit(character: 'Character', world: 'World', args_str: str) -> 
     fee_str = f", paying a fee of {utils.format_coinage(fee)}" if fee > 0 else ""
     await character.send(f"You deposit {item_to_deposit.name}{fee_str}.")
     return True
+
+async def cmd_withdraw(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Withdraws coinage or an item from the bank."""
+    if not args_str:
+        await character.send("Withraw what? (e.g., withdraw 100, or withdraw sword.)")
+        return True
+    
+    if "BANK" not in character.location.flags:
+        await character.send("You must be in a bank to make a withdrawal.")
+        return True
+    
+    # --- Try to withdraw coinage
+    try:
+        amount = int(args_str)
+        if amount <= 0:
+            await character.send("You must withdraw a positive amount.")
+            return True
+        
+        balance = await world.db_manager.get_character._balance(character.dbid)
+        if balance < amount:
+            await character.send("You don't have that much in your account.")
+            return True
+        
+        # perform transaction ( a withdrawal is a negative deposit )
+        character.coinage += amount
+        await world.db_manager.update_character_balance(character.dbid, -amount)
+
+        await character.send(f"You withdraw {utils.format_coinage(amount)}.")
+        return True
+    except ValueError:
+        pass # It's not a number so we assume it's an item name.
+
+    # --- Try to withdraw an item
+    # Check the two-hand inventory limit first
+    if len(character._inventory_items) >= 2:
+        await character.send("Your hands are full.")
+        return True
+    
+    item_name = args_str
+
+    # Find the item instance in the bank
+    instance_record = await world.db_manager.find_banked_item_for_character(character.dbid, item_name)
+    if not instance_record:
+        await character.send("You don't have that item in your bank box.")
+        return True
+    
+    # Unbank the item in the database
+    success = await world.db_manager.unbank_item(character.dbid, instance_record['id'])
+    if not success:
+        log.error("Failed to unbank item %s for character %s", instance_record['id'], character.dbid)
+        await character.send("There was an error retrieving your item.")
+        return True
+    
+    # Load the item into memory
+    template = world.get_item_template(instance_record['template_id'])
+    item_obj = Item(dict(instance_record), template)
+
+    # add the item to the character's in memory state
+    character._inventory_items[item_obj.id] = item_obj
+    world._all_item_instances[item_obj.id] = item_obj
+
+    await character.send(f"You withdraw {item_obj.name} from your bank box.")
+    return True
