@@ -3,6 +3,7 @@
 Commands related to spellcasting.
 """
 import logging
+import random
 from typing import TYPE_CHECKING, Optional, Union
 import aiosqlite  # <-- FIX: Added missing import
 
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-async def cmd_cast(character: Character, world: 'World', db_conn: aiosqlite.Connection, args_str: str) -> bool:
+async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
     """Handles the 'cast <spell_name> [target_name]' command."""
     if character.stance != "Standing":
         await character.send("You must be standing to cast spells.")
@@ -60,8 +61,18 @@ async def cmd_cast(character: Character, world: 'World', db_conn: aiosqlite.Conn
         await character.send(f"You are not experienced enough to cast {display_name}.")
         return True
         
-    if character.essence < spell_data.get("cost", 0):
+    spell_cost = spell_data.get("cost", 0)
+    if character.essence < spell_cost:
         await character.send(f"You don't have enough essence to cast {display_name}.")
+        return True
+    
+    # --- Armor Spell Failure Check
+    failure_chance = character.total_spell_failure
+    if failure_chance > 0 and (random.random() * 100) < failure_chance:
+        await character.send(f"{{RYour armor restricts your movement, causing your {display_name} spell to fizzle!{{x")
+        # The spell still costs essence and time on failure.
+        character.essence -= spell_cost
+        character.roundtime = spell_data.get("cast_time", 0.0)
         return True
     
     # --- 3. Validate Target ---

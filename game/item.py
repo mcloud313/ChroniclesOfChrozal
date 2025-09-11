@@ -105,6 +105,11 @@ class Item:
     @property
     def armor(self) -> int:
         return self._template_stats.get("armor", 0)
+    
+    @property
+    def spell_failure(self) -> int:
+        """The percentage chance this item adds to spell failure."""
+        return self._template_stats.get("spell_failure", 0)
         
     @property
     def block_chance(self) -> float:

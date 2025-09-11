@@ -191,7 +191,10 @@ async def resolve_physical_attack(
             await attacker_loc.broadcast(f"\r\n{target_name} is snapped out of their meditative trance by the attack!\r\n", exclude={target})
 
     # --- 10. Apply Roundtime ---
-    attacker.roundtime = wpn_speed
+    rt_penalty = 0.0
+    if isinstance(attacker, Character):
+        rt_penalty = attacker.get_total_av() * 0.05
+    attacker.roundtime = wpn_speed + rt_penalty
     
     # --- 11. Check for Defeat ---
     if target.hp <= 0:

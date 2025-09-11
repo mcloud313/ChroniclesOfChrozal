@@ -63,6 +63,14 @@ class Character:
                 if effect_data.get("ends_at", 0) > current_time:
                     total_bv += effect_data.get("amount", 0)
         return total_bv
+    
+    @property
+    def total_spell_failure(self) -> int:
+        """Calculates total spell failure chance from all equipped items."""
+        total_failure = 0
+        for item in self._equipped_items.values():
+            total_failure += item.spell_failure
+        return total_failure
 
     def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any], world: 'World', player_is_admin: bool = False):
         self.writer: asyncio.StreamWriter = writer
