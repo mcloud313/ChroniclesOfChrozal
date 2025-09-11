@@ -198,3 +198,74 @@ async def cmd_sell(character: 'Character', world: 'World', args_str: str) -> boo
 
     await character.send(f"You sell {item_to_sell.name} for {utils.format_coinage(price)}.")
     return True
+
+async def cmd_balance(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Displays the character's bank balance"""
+    if "BANK" not in character.location.flags:
+        await character.send("You must be in a bank to check your balance.")
+        return True
+    
+    balance = await world.db_manager.get_character_balance(character.dbid)
+    await character.send(f"Your current bank balance is {utils.format_coinage(balance)}.")
+    return True
+
+async def cmd_deposit(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Deposits coinage or an item into the bank."""
+    if not args_str:
+        await character.send("Deposit what? (e.g. deposit 100 or deposit sword)")
+        return True
+    
+    if "BANK" not in character.location.flags:
+        await character.send("You must be in a bank to make a deposit.")
+        return True
+    
+    # --- Try to deposit coinage
+    try:
+        amount = int(args_str)
+        if amount <= 0:
+            await character.send("You must deposit a positive amount.")
+            return True
+        if character.coinage < amount:
+            await character.send("You don't have that much coinage.")
+            return True
+        
+        # Perform transaction
+        character.coinage -= amount
+        await world.db_manager.update_character_balanace(character.dbid, amount)
+
+        await character.send(f"You deposit {utils.format_coinage(amount)}.")
+        return True
+    except ValueError:
+        pass # IT's not a number so we assume it's an item name
+
+    # Try to store an item
+    item_name = args_str
+    item_to_deposit = character.find_item_in_inventory_by_name(item_name)
+    if not item_to_deposit:
+        await character.send("You aren't carrying that.")
+        return True
+    
+    #CAlculate storage fee (10% of value)
+    fee = int(item_to_deposit.value * 0.10)
+    if character.coinage < fee:
+        await character.send(f"You can't afford the {utils.format_coinage(fee)} storage fee for that item.")
+        return True
+    
+    # Perform Transaction
+    character.coinage -= fee
+
+    #Move item to the bank in the database
+    success = await world.db_manager.bank_item(character.dbid, item_to_deposit.id)
+    if not success:
+        log.error("Failed to bank item %s for character %s", item_to_deposit.id, character.dbid)
+        character.coinage += fee # Refund
+        await character.send("There was an error storing your item. You have been refunded.")
+        return True
+    
+    # Remove item from character's in-memory state
+    del world._all_item_instances[item_to_deposit.id]
+    del character._inventory_items[item_to_deposit.id]
+
+    fee_str = f", paying a fee of {utils.format_coinage(fee)}" if fee > 0 else ""
+    await character.send(f"You deposit {item_to_deposit.name}{fee_str}.")
+    return True

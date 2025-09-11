@@ -383,4 +383,40 @@ class DatabaseManager:
             """
         return await self.execute_query(query, quantity_change, shop_inventory_id)
     
+    async def get_character_balance(self, character_id: int) -> int:
+        """Fetches the coin balance for a character's bank account."""
+        query = "SELECT balance FROM bank_accounts WHERE character_id = $1"
+        record = await self.fetch_one(query, character_id)
+        return record['balance'] if record else 0
+    
+    async def update_character_balance(self, character_id: int, amount_change: int) -> str:
+        """Updates a character's bank balance, creating an account if needed."""
+        query = """
+            INSERT INTO bank_accounts (character_id, balance)
+            VALUES ($1, $2)
+            ON CONFLICT (character_id)
+            DO UPDATE SET balance = bank_accounts.balance + $2;
+        """
+        return await self.execute_query(query, character_id, amount_change)
+    
+    async def bank_item(self, character_id: int, item_instance_id: str) -> bool:
+        """Moves an item from a character's inventory into their bank box."""
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                # Remove the item from any in-world location
+                status = await conn.execute(
+                    "UPDATE item_instances SET owner_char_id = NULL WHERE id = $1",
+                    item_instance_id
+                )
+                if "UPDATE 1" not in status:
+                    # Rollback the transaction
+                    return False
+                
+                # Add the item to the bank
+                await conn.execute(
+                    "INSERT INTO banked_items (character_id, item_instance_id) VALUES ($1, $2)",
+                    character_id, item_instance_id
+                )
+        return True
+    
 db_manager = DatabaseManager()
