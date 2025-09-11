@@ -344,3 +344,23 @@ def get_condition_desc(condition: int) -> str:
         return "It looks like it could fall apart at any moment."
     else:
         return "It is completely broken."
+    
+def get_health_desc(character: 'Character') -> str:
+    """Returns a descriptive string for a character's health percentage."""
+    percent = (character.hp / character.max_hp) * 100
+    name = character.first_name
+
+    if percent >= 100:
+        return f"{name} is in perfect health."
+    elif percent >= 90:
+        return f"{name} has a few scratches."
+    elif percent >= 70:
+        return f"{name} has some minor wounds."
+    elif percent >= 50:
+        return f"{name} is noticeably injured."
+    elif percent >= 30:
+        return f"{name} is bleeding and badly wounded."
+    elif percent >= 10:
+        return f"{name} is in critical condition."
+    else:
+        return f"{name} is on the verge of death."
