@@ -339,7 +339,6 @@ class DatabaseManager:
         query = "SELECT * FROM characters WHERE id = $1"
         return await self.fetch_one(query, character_id)
     
-    # NEW: Add the create_character method to the manager
     async def create_character(self, player_id: int, first_name: str, last_name: str, sex: str,
                                race_id: int, class_id: int, stats: dict, skills: dict,
                                description: str, hp: float, max_hp: float, essence: float,
@@ -374,6 +373,7 @@ class DatabaseManager:
         query = "UPDATE characters SET total_playtime_seconds = total_playtime_seconds + $1 WHERE id = $2"
         return await self.execute_query(query, session_seconds, character_id)
     
+    # --- Item Functions and Economy
     async def update_shop_stock(self, shop_inventory_id: int, quantity_change: int):
         """Updates the stock for an item in a shop's inventory"""
         query = """
@@ -419,4 +419,36 @@ class DatabaseManager:
                 )
         return True
     
+    async def find_banked_item_for_character(self, character_id: int, item_name: str) -> Optional[dict]:
+        """Finds a banked item for a character by its name via a JOIN."""
+        query = """
+            SELECT inst.*
+            FROM banked_items AS bank
+            JOIN item_instances AS inst ON bank.item_instance_id = inst.id
+            JOIN item_templates AS tmpl ON inst.template_id = tmpl.id
+            WHERE bank.character_id = $1 AND lower(tmpl.name) LIKE lower($2)
+            LIMIT 1;
+            """
+        # Add wildcards for partial name matching
+        search_pattern = f"%{item_name}"
+        record = await self.fetch_one(query, character_id, search_pattern)
+        return dict(record) if record else None
+
+    async def unbank_item(self, character_id: int, item_instance_id: str) -> bool:
+        """Moves an item from a character's bank box to their inventory."""
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                # remove the item from the bank
+                status = await conn.execute(
+                    "DELETE FROM banked_items WHERE character_id = $1 AND item_instance_id = $2",
+                    character_id, item_instance_id)
+                if "DELETE 1" not in status:
+                    return False
+                
+                # Assign the item to the character
+                await conn.execute(
+                    "UPDATE item_instances SET owner_char_id = $1 WHERE id = $2",
+                    character_id, item_instance_id
+                )
+                return True
 db_manager = DatabaseManager()
