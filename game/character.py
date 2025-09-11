@@ -162,6 +162,7 @@ class Character:
         self.death_timer_ends_at: Optional[float] = None
         self.login_timestamp: Optional[float] = None # NEW: For tracking session playtime
         self.group: Optional['Group'] = None
+        self.pending_give_offer: Optional[Dict[str, Any]] = None
         self.status: str = db_data.get('status', 'ALIVE')
         self.stance: str = db_data.get('stance', 'Standing')
 

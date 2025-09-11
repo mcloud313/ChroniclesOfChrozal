@@ -332,3 +332,129 @@ async def cmd_withdraw(character: 'Character', world: 'World', args_str: str) ->
 
     await character.send(f"You withdraw {item_obj.name} from your bank box.")
     return True
+
+async def cmd_give(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Initiates giving an item or coinage to another character."""
+    if " to " not in args_str:
+        await character.send("Who do you want to give what to? (e.g., give sword to aragorn)")
+        return True
+    
+    item_or_amount, target_name = [s.strip() for s in args_str.split(" to ", 1)]
+
+    target_char = character.location.get_character_by_name(target_name)
+    if not target_char:
+        await character.send("You don't see them here.")
+        return True
+    if target_char == character:
+        await character.send("You can't give things to yourself.")
+        return True
+    if target_char.pending_give_offer:
+        await character.send(f"{target_char.name} is busy considering another offer.")
+        return True
+    
+    # -- Try to give coinage ---
+    try:
+        amount = int(item_or_amount)
+        if amount <= 0:
+            await character.send("You must give a positive amount.")
+            return True
+        if character.coinage < amount:
+            await character.send("You don't have that much coinage.")
+            return True
+        
+        # Set the pending offer on the target
+        target_char.pending_give_offer = {
+            "from_char": character,
+            "coinage": amount,
+            "item": None
+        }
+        await target_char.send(f"{{y{character.name} offers you {utils.format_coinage(amount)}. Type 'accept' or 'decline'.{{x")
+        await character.send(f"You offer {utils.format_coinage(amount)} to {target_char.name}.")
+        return True
+    except ValueError:
+        pass # not a number so it's an item
+
+    # --- Try to give an item
+    item_to_give = character.find_item_in_inventory_by_name(item_or_amount)
+    if not item_to_give:
+        await character.send("You aren't carrying that.")
+        return True
+    if len(target_char._inventory_items) >= 2:
+        await character.send(f"{target_char.name}'s hands are full.")
+        return True
+    
+    # Set the pending offer on the target
+    target_char.pending_give_offer = {
+        "from_char": character,
+        "coinage": 0,
+        "item": item_to_give
+    }
+    await target_char.send(f"{{y{character.name} offers you {item_to_give.name}. Type 'accept' or 'decline'.{{x")
+    await character.send(f"You offer {item_to_give.name} to {target_char.name}.")
+    return True
+
+async def cmd_accept(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Accepts a pending item or coinage offer."""
+    offer = character.pending_give_offer
+    if not offer:
+        await character.send("You have not been offered anything.")
+        return True
+    
+    giver = offer["from_char"]
+    item_to_receive = offer["item"]
+    coinage_to_receive = offer["coinage"]
+
+    # Clear the offer immediately to prevent race conditions
+    character.pending_give_offer = None
+
+    #Re-validate conditions
+    if not giver or giver.location != character.location:
+        await character.send(f"{giver.name} is no longer here.")
+        return True
+    
+    if item_to_receive:
+        if len(character._inventory_items) >= 2:
+            await character.send("Your hands are now full. You cannot accept the item.")
+            await giver.send(f"{character.name}'s hands are now full; they could not accept your {item_to_receive.name}.")
+            return True
+        if item_to_receive.id not in giver._inventory_items:
+            await character.send("The item is no longer available.")
+            return True
+        
+        # Perform item transfer
+        del giver._inventory_items[item_to_receive.id]
+        character._inventory_items[item_to_receive.id] = item_to_receive
+        await world.db_manager.update_item_location(item_to_receive.id, owner_char_id=character.dbid)
+
+        await character.send(f"You accept the {item_to_receive.name} from {giver.name}.")
+        await giver.send(f"{character.name} accepts your {item_to_receive.name}.")
+
+    elif coinage_to_receive > 0:
+        if giver.coinage < coinage_to_receive:
+            await character.send("The coinage is no longer available.")
+            return True
+        
+        # Perform coin transfer
+        giver.coinage -= coinage_to_receive
+        character.coinage += coinage_to_receive
+        
+        await character.send(f"You accept {utils.format_coinage(coinage_to_receive)} from {giver.name}.")
+        await giver.send(f"{character.name} accepts your {utils.format_coinage(coinage_to_receive)}.")
+
+    return True
+
+async def cmd_decline(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Declines a pending item or coinage offer."""
+    offer = character.pending_give_offer
+    if not offer:
+        await character.send("You have not been offered anything.")
+        return True
+
+    giver = offer["from_char"]
+    character.pending_give_offer = None # Clear the offer
+
+    await character.send("You decline the offer.")
+    if giver and giver.location == character.location:
+        await giver.send(f"{character.name} has declined your offer.")
+    return True
+
