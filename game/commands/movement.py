@@ -19,71 +19,86 @@ log = logging.getLogger(__name__)
 
 async def _perform_move(character: 'Character', world: 'World', target_room: 'Room', exit_name: str):
     """
-    Handles the logic after a valid exit is found: announcements,
-    state changes, and sending the new room's description.
+    Handles the logic for moving characters between rooms, now with group support.
     """
+    # --- 1. Identify Who to Move ---
+    # Start with just the character, but expand to the whole group if they are the leader.
+    chars_to_move = [character]
+    is_group_move = character.group and character.group.leader == character
+    if is_group_move:
+        # Get a stable list of members to move
+        chars_to_move = list(character.group.members)
+
     current_room = character.location
-    char_name = character.name
-
-    # --- Announce Departure ---
-    if current_room:
-        departure_msg = f"\r\n{char_name} leaves {exit_name}.\r\n"
-        await current_room.broadcast(departure_msg, exclude={character})
-        current_room.remove_character(character)
-
-    # --- Update Character State ---
-    character.update_location(target_room)
-    target_room.add_character(character)
-
-    # --- Announce Arrival (with improved immersion) ---
-    opposite_direction = utils.get_opposite_direction(exit_name)
-    if opposite_direction:
-        arrival_msg = f"\r\n{char_name} arrives from the {opposite_direction}.\r\n"
-    else:
-        arrival_msg = f"\r\n{char_name} arrives.\r\n"
-    await target_room.broadcast(arrival_msg, exclude={character})
-
-    # --- NEW: Group Cohesion Check ---
-    # This runs after the move is complete.
-    if character.group and character.group.leader != character:
-        # Check if the member is now in a different room than their leader
-        if character.location != character.group.leader.location:
-            group = character.group # Get a reference before leaving
-            group.remove_member(character)
-            
-            await character.send("{yYou have strayed too far from your group and have been removed.{x")
-            await group.broadcast(f"{character.name} has strayed from the group.")
-
-
-    # --- Send new room info to the character ---
-    look_string = target_room.get_look_string(character, world)
-    await character.send(look_string)
-
-    # Display items and coins on the ground
-    ground_items_output = []
-    item_counts = {}
-    for item_id in target_room.items:
-        item_counts[item_id] = item_counts.get(item_id, 0) + 1
-
-    for template_id, count in sorted(item_counts.items()):
-        template = world.get_item_template(template_id)
-        item_name = template['name'] if template else f"Item #{template_id}"
-        display_name = item_name + (f" (x{count})" if count > 1 else "")
-        ground_items_output.append(display_name)
-
-    if target_room.coinage > 0:
-        ground_items_output.append(utils.format_coinage(target_room.coinage))
-
-    if ground_items_output:
-        await character.send("You also see here: " + ", ".join(ground_items_output) + ".")
-
-    # Apply roundtime with armor penalty
+    
+    # --- 2. Calculate Shared Roundtime ---
     base_rt = 1.0
-    rt_penalty = character.get_total_av(world) * 0.05  # +0.05s RT per point of total AV
-    character.roundtime = base_rt + rt_penalty
-    if rt_penalty > 0:
-        await character.send(f"Your armor slows your movement (+{rt_penalty:.1f}s).")
+    # The leader's armor penalty affects the whole group's base move time
+    leader_penalty = character.get_total_av() * 0.05
+    move_rt = base_rt + leader_penalty
+    
+    # Final roundtime is the greater of the move time or anyone's current roundtime
+    final_rt = move_rt
+    if is_group_move:
+        slowest_member_rt = character.group.get_slowest_member_rt()
+        final_rt = max(move_rt, slowest_member_rt)
 
+    # --- 3. Announce Departure ---
+    if current_room:
+        if is_group_move:
+            # A single message for the whole group leaving
+            await current_room.broadcast(f"\r\n{character.name}'s group leaves {exit_name}.\r\n")
+        else:
+            await current_room.broadcast(f"\r\n{character.name} leaves {exit_name}.\r\n", exclude={character})
+        
+        # Remove all moving characters from the old room
+        for char in chars_to_move:
+            current_room.remove_character(char)
+
+    # --- 4. Update State for All Movers ---
+    for char in chars_to_move:
+        char.update_location(target_room)
+        target_room.add_character(char)
+        char.roundtime = final_rt # Apply the shared roundtime to everyone
+
+    # --- 5. Announce Arrival ---
+    opposite_direction = utils.get_opposite_direction(exit_name)
+    arrival_msg = ""
+    if is_group_move:
+        arrival_msg = f"\r\n{character.name}'s group arrives.\r\n"
+    elif opposite_direction:
+        arrival_msg = f"\r\n{character.name} arrives from the {opposite_direction}.\r\n"
+    else:
+        arrival_msg = f"\r\n{character.name} arrives.\r\n"
+    
+    await target_room.broadcast(arrival_msg)
+
+    # --- 6. Send Room Info to All Movers ---
+    for char in chars_to_move:
+        # We broadcast the look string to the mover(s)
+        look_string = target_room.get_look_string(char, world)
+        await char.send(look_string)
+
+        # Check for items on the ground individually
+        ground_items_output = []
+        item_counts = {}
+        for item_id in target_room.item_instance_ids:
+            item_obj = world.get_item_object(item_id)
+            if item_obj:
+                item_counts[item_obj.name] = item_counts.get(item_obj.name, 0) + 1
+        
+        for name, count in sorted(item_counts.items()):
+            display_name = name + (f" (x{count})" if count > 1 else "")
+            ground_items_output.append(display_name)
+
+        if target_room.coinage > 0:
+            ground_items_output.append(utils.format_coinage(target_room.coinage))
+
+        if ground_items_output:
+            await char.send("You also see here: " + ", ".join(ground_items_output) + ".")
+        
+        if leader_penalty > 0 and char == character:
+            await character.send(f"Your armor slows your movement (+{leader_penalty:.1f}s).")
 
 async def cmd_move(character: 'Character', world: 'World', direction: str) -> bool:
     """Handles all cardinal/ordinal directional movement commands."""

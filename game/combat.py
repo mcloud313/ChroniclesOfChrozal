@@ -329,13 +329,14 @@ async def resolve_ability_effect(
 
 
 async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character, Mob], world: 'World'):
-    """Handles logic when a target's HP reaches 0."""
+    """Handles logic for when a target's HP reaches 0, with group reward sharing."""
     attacker_name = getattr(attacker, 'name', 'Something').capitalize()
     target_name = getattr(target, 'name', 'Something').capitalize()
     target_loc = getattr(target, 'location', None)
 
     log.info("%s has defeated %s!", attacker_name, target_name)
 
+    # --- Mob Defeat Logic ---
     if isinstance(target, Mob):
         if isinstance(attacker, Character):
             await attacker.send(f"You have slain {target_name}!")
@@ -345,34 +346,52 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
         target.die()
         
         dropped_coinage, dropped_item_ids = determine_loot(target.loot_table)
+        base_xp = 50
+        xp_gain = max(1, target.level * base_xp + random.randint(-base_xp // 2, base_xp // 2))
+        killer = attacker if isinstance(attacker, Character) else None
 
-        if dropped_coinage > 0 and target_loc:
-            if await target_loc.add_coinage(dropped_coinage, world):
-                await target_loc.broadcast(f"\r\n{utils.format_coinage(dropped_coinage)} falls from {target_name}!\r\n", exclude={attacker})
-                if isinstance(attacker, Character):
-                    await attacker.send(f"You find {utils.format_coinage(dropped_coinage)} on the corpse.")
-            else:
-                log.error("Failed to add dropped coinage %d to room %d", dropped_coinage, target_loc.dbid)
+        # Check if this was a group kill with other members present
+        is_group_kill = False
+        if killer and killer.group:
+            present_members = [m for m in killer.group.members if m.location == killer.location and m.is_alive()]
+            if len(present_members) > 1:
+                is_group_kill = True
 
-        if dropped_item_ids and target_loc:
-            dropped_item_names = []
-            for item_id in dropped_item_ids:
-                if await target_loc.add_item(item_id, world):
-                    template = world.get_item_template(item_id)
-                    dropped_item_names.append(template['name'] if template else f"Item #{item_id}")
+        # --- Group Kill Logic ---
+        if is_group_kill:
+            group_xp_total = int(xp_gain * 0.80) # 80% XP penalty/bonus for groups
+            xp_per_member = group_xp_total // len(present_members)
             
-            if dropped_item_names:
-                log.info("%s dropped items: %s in room %d", target_name, dropped_item_names, target_loc.dbid)
-                await target_loc.broadcast(f"\r\n{target_name}'s corpse drops: {', '.join(dropped_item_names)}.\r\n")
+            coins_per_member = dropped_coinage // len(present_members)
+            remainder_coins = dropped_coinage % len(present_members)
+            
+            await killer.group.broadcast(f"{{yYour group receives {group_xp_total} XP and {utils.format_coinage(dropped_coinage)}!{{x")
+            
+            for member in present_members:
+                await award_xp_to_character(member, xp_per_member)
+                member.coinage += coins_per_member
+            
+            killer.group.leader.coinage += remainder_coins
 
-        if isinstance(attacker, Character):
-            await award_xp(attacker, target)
+        # --- Solo Kill Logic ---
+        elif killer:
+            await award_xp_to_character(killer, xp_gain)
+            if dropped_coinage > 0 and target_loc:
+                await target_loc.add_coinage(dropped_coinage, world)
+                await target_loc.broadcast(f"\r\n{utils.format_coinage(dropped_coinage)} falls from {target_name}!\r\n")
 
+        # --- Item Drop Logic (Shared by Solo and Group) ---
+        if dropped_item_ids and target_loc:
+            # Item drop logic needs to be implemented here, creating new instances
+            # For now, we can log it.
+            log.info("Mob %s dropped item templates: %s", target_name, dropped_item_ids)
+
+
+    # --- Character Defeat Logic ---
     elif isinstance(target, Character) and target.status == "ALIVE":
         target.hp, target.status, target.stance = 0, "DYING", "Lying"
         target.is_fighting, target.target, target.casting_info = False, None, None
 
-        xp_lost_pool = target.xp_pool
         target.xp_pool = 0.0
         xp_at_start_of_level = utils.xp_needed_for_level(target.level - 1) if target.level > 1 else 0
         xp_progress = target.xp_total - xp_at_start_of_level
@@ -383,8 +402,7 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
 
         timer_duration = float(target.stats.get('vitality', 10))
         target.death_timer_ends_at = time.monotonic() + timer_duration
-        log.info("Character %s is now DYING (Timer: %.1f s).", target.name, timer_duration)
-
+        
         coinage_to_drop = int(target.coinage * 0.10)
         if coinage_to_drop > 0 and target_loc:
             target.coinage -= coinage_to_drop
@@ -394,7 +412,6 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
         await target.send("\r\n{r*** YOU ARE DYING! ***{x")
         if target_loc:
             await target_loc.broadcast(f"\r\n{target_name} collapses to the ground, dying!\r\n", exclude={target})
-
 
 def determine_loot(loot_table: Dict[str, Any]) -> Tuple[int, List[int]]:
     """Calculates loot based on the provided loot_table dictionary."""
@@ -415,22 +432,22 @@ def determine_loot(loot_table: Dict[str, Any]) -> Tuple[int, List[int]]:
     return dropped_coinage, dropped_item_ids
 
 
-async def award_xp(attacker: Character, defeated_mob: Mob):
-    """Awards XP to the attacker's XP Pool."""
-    base_xp = 50
-    xp_gain = max(1, defeated_mob.level * base_xp + random.randint(-base_xp // 2, base_xp // 2))
-    
-    intellect = attacker.stats.get("intellect", 10)
+async def award_xp_to_character(character: Character, xp_amount: int):
+    """Awards a specific amount of XP to a character's XP Pool."""
+    if xp_amount <= 0:
+        return
+        
+    intellect = character.stats.get("intellect", 10)
     xp_pool_cap = intellect * 100
-    space_available = max(0, xp_pool_cap - attacker.xp_pool)
-    actual_xp_added = min(xp_gain, space_available)
+    space_available = max(0, xp_pool_cap - character.xp_pool)
+    actual_xp_added = min(xp_amount, space_available)
 
     if actual_xp_added > 0:
-        attacker.xp_pool += actual_xp_added
-        await attacker.send(f"You gain {int(actual_xp_added)} experience points into your pool.")
-    else:
-        await attacker.send("Your mind cannot hold any more raw experience right now.")
-
+        character.xp_pool += actual_xp_added
+        await character.send(f"You gain {int(actual_xp_added)} experience points into your pool.")
+    # To avoid spam, we don't show the "pool is full" message to group members
+    elif not character.group:
+        await character.send("Your mind cannot hold any more raw experience right now.")
 
 def perform_hit_check(attacker: Union[Character, Mob], target: Union[Character, Mob], mar_mult: float = 1.0) -> bool:
     """ Basic hit check logic (d20 + MAR*mult vs DV). """
