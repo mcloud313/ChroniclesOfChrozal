@@ -270,6 +270,26 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "description": "Applies a basic poison to your wielded weapon for 60 seconds. Your next successful attack will poison the target.",
         "apply_msg_self": "{gYou carefully apply a thin coat of poison to your weapon.{x"
     },
+    "trip": {
+        "name": "Trip",
+        "type": "ABILITY",
+        "class_req": ["rogue"],
+        "level_req": 8,
+        "cost": 15,
+        "target_type": TARGET_CHAR_OR_MOB,
+        "effect_type": "CONTESTED_DEBUFF", # A new custom type for our logic
+        "effect_details": {
+            # Defines the skill contest
+            "contest": {"attacker_skill": "acrobatics", "defender_skill": "acrobatics"},
+            # Defines the effects to apply if the attacker wins
+            "on_success": {
+                "name": "Prone", "type": "stun", "duration": 3.0, "potency": 3.0,
+                "set_stance": "Lying" # A new custom flag
+            }
+        },
+        "roundtime": 2.0,
+        "description": "Attempt to trip your opponent, knocking them prone and stunning them briefly."
+    },
 }
 
 # Helper function to get data safely

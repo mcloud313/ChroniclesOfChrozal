@@ -444,6 +444,27 @@ async def resolve_ability_effect(
         else:
             await caster.location.broadcast(f"\r\n{caster.name.capitalize()} tries to bash {target.name}, but misses.\r\n", exclude={})
 
+    elif effect_type == "CONTESTED_DEBUFF":
+        contest_details = effect_details.get("contest")
+        if not contest_details: return
+
+        # Perform a skill vs skill contest
+        attacker_mod = caster.get_skill_modifier(contest_details["attacker_skill"])
+        defender_mod = target.get_skill_modifier(contest_details["defender_skill"])
+
+        attacker_roll = random.randint(1, 20) + attacker_mod
+        defender_roll = random.randint(1, 20) + defender_mod
+
+        if attacker_roll > defender_roll:
+            # Attacker wins, apply the 'on_success' effects
+            await caster.send(f"{{gYou successfully trip {target.name}!{{x")
+            success_effects = effect_details.get("on_success")
+            if success_effects:
+                await apply_effect(caster, target, success_effects, ability_data, world)
+        else:
+            # Defender wins
+            await caster.send(f"{{rYou fail to trip {target.name}.{{x")
+
 async def apply_dot_damage(target: Union[Character, Mob], effect_data: Dict[str, Any], world: 'World'):
     """Applies damage from a damage over time effect like poison or bleed."""
     damage = effect_data.get('potency', 0)
@@ -676,6 +697,10 @@ async def apply_effect(caster: Character, target: Union[Character, Mob], effect_
             await target.send("{RYou are stunned!{x")
         if target.location:
             await target.location.broadcast(f"\r\n{target.name.capitalize()} is stunned!\r\n", exclude={target})
+
+    if new_stance := effect_details.get('set_stance'):
+        if isinstance(target, Character):
+            target.stance = new_stance
 
     # --- Messaging ---
     caster_name = caster.name.capitalize()
