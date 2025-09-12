@@ -290,6 +290,25 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "roundtime": 2.0,
         "description": "Attempt to trip your opponent, knocking them prone and stunning them briefly."
     },
+    "garrote": {
+        "name": "Garrote",
+        "type": "ABILITY",
+        "class_req": ["rogue"],
+        "level_req": 15,
+        "cost": 25,
+        "target_type": TARGET_CHAR_OR_MOB,
+        "effect_type": EFFECT_DEBUFF,
+        "effect_details": {
+            "requires_stealth": True, # A new flag for the 'use' command
+            # This ability will apply two separate effects
+            "effects_to_apply": [
+                {"name": "GarroteBleed", "type": "bleed", "duration": 9.0, "potency": 8, "stat_affected": "hp"},
+                {"name": "GarroteSilence", "type": "silence", "duration": 6.0, "stat_affected": "none"}
+            ]
+        },
+        "roundtime": 3.0,
+        "description": "A vicious attack from the shadows that causes a deep bleeding wound and prevents spellcasting."
+    },
 }
 
 # Helper function to get data safely

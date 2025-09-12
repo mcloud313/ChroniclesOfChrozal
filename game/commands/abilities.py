@@ -13,7 +13,6 @@ from .. import utils
 
 if TYPE_CHECKING:
     from ..world import World
-    import aiosqlite
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +49,7 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
     ability_key = found_key
     ability_data = ability_defs.get_ability_data(ability_key)
     display_name = ability_data.get("name", ability_key)
+    effect_details = ability_data.get("effect_details", {})
 
     # --- 2. Check Requirements ---
     if not character.knows_ability(ability_key):
@@ -61,8 +61,12 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
         await character.send(f"You don't have enough essence to use {display_name}.")
         return True
     
-    # --- NEW: Stance Handling Logic ---
-    effect_details = ability_data.get("effect_details", {})
+    # --- Special Ability Requirement Checks (e.g., Stealth) ---
+    if effect_details.get("requires_stealth") and not character.is_hidden:
+        await character.send("You must be hidden to use that ability.")
+        return True
+
+    # --- Stance Handling Logic ---
     if effect_details.get("is_stance"):
         stance_effects = effect_details.get("effects_to_apply", [])
         if not stance_effects:
@@ -70,14 +74,12 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
             await character.send("That ability seems to be configured incorrectly.")
             return True
 
-        # Check if the stance is already active by looking for its first defined effect
         first_effect_name = stance_effects[0].get("name")
         if first_effect_name and first_effect_name in character.effects:
             # --- TOGGLE OFF ---
             for effect_info in stance_effects:
                 effect_name = effect_info.get("name")
                 if effect_name and effect_name in character.effects:
-                    # Handle temporary max_hp reduction when the buff is removed
                     if effect_info.get("stat_affected") == "max_hp":
                         amount = effect_info.get("amount", 0)
                         character.max_hp -= amount
@@ -85,19 +87,15 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
                     del character.effects[effect_name]
             
             await character.send(f"You relax from your {display_name}.")
-            character.roundtime = 1.0 # Small RT for exiting a stance
+            character.roundtime = 1.0
             return True
-        else:
-            # --- TOGGLE ON ---
-            # Remove any other active stances first (not yet implemented, but this is where it would go)
-            pass
 
     # --- 3. Validate Target ---
-    # ... (This logic is unchanged) ...
     required_target_type = ability_data.get("target_type", ability_defs.TARGET_NONE)
     target_obj: Optional[Union[Character, Mob]] = None
     target_id: Optional[Union[int, str]] = None
     target_obj_type_str: Optional[str] = None
+
     if required_target_type == ability_defs.TARGET_SELF:
         target_obj, target_id, target_obj_type_str = character, "self", "SELF"
     elif required_target_type == ability_defs.TARGET_NONE:
@@ -110,7 +108,6 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
             await character.send(f"Who or what do you want to use {display_name} on?")
             return True
     else:
-        # ... (unchanged) ...
         target_char = character.location.get_character_by_name(target_name_input)
         target_mob = character.location.get_mob_by_name(target_name_input)
         if target_char and target_char.is_alive():
@@ -123,14 +120,20 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
         target_id = target_obj.dbid if isinstance(target_obj, Character) else target_obj.instance_id
 
     # --- 4. Execute Ability ---
+    # Break stealth if hidden
+    if character.is_hidden:
+        character.is_hidden = False
+        await character.send("You emerge from the shadows...")
+
     log.debug("Character %s using ability: %s", character.name, ability_key)
     character.essence -= essence_cost
     
-    # --- MODIFIED: Handle stances that apply multiple effects ---
+    # Handle stances that apply multiple effects
     if effect_details.get("is_stance"):
         for effect in effect_details.get("effects_to_apply", []):
             await combat_logic.apply_effect(character, character, effect, ability_data, world)
     else:
+        # Handle all other abilities
         await combat_logic.resolve_ability_effect(
             caster=character,
             target_ref=target_id,

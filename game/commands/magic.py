@@ -22,6 +22,11 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
     if character.stance != "Standing":
         await character.send("You must be standing to cast spells.")
         return True
+    
+    for effect in character.effects.values():
+        if effect.get('type') == 'silence':
+            await character.send("You are silenced and cannot cast spells!")
+            return True
 
     if not args_str:
         await character.send("Cast which spell?")
