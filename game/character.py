@@ -183,7 +183,8 @@ class Character:
         self.skills: Dict[str, int] = db_data.get('skills') or {}
         self.inventory: List[str] = db_data.get('inventory') or []
         self.equipment: Dict[str, str] = db_data.get('equipment') or {}
-
+        self.resistances: Dict[str, float] = {}
+        
         # --- NEW: Runtime caches for loaded Item objects ---
         self._inventory_items: Dict[str, Item] = {}
         self._equipped_items: Dict[str, Item] = {}

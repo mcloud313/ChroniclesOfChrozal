@@ -87,6 +87,8 @@ class Mob:
         self.location: 'Room' = current_room
         self.mob_type: Optional[str] = template_data.get('mob_type')
         self.effects: Dict[str, Dict[str, Any]] = {}
+        self.resistances: Dict[str, float] = template_data.get('resistances', {})
+        self.flags: List[str] = template_data.get('flags', [])
 
         # --- Load Variance Data ---
         try:

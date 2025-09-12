@@ -174,6 +174,12 @@ async def resolve_physical_attack(
             elif armor_hit.condition <= 10:
                 await target.send(f"{{yYour {armor_hit.name} was damaged.{{x")
 
+    #8b. Apply resistances/vulnerabilities ----
+    resistance = target.resistances.get(dmg_type, 0.0)
+    if resistance != 0:
+        multiplier = 1.0 - (resistance / 100.0)
+        final_damage = int(final_damage * multiplier)
+
 
     # --- 9. Apply Damage & Send Messages ---
     target.hp = max(0.0, target.hp - final_damage)
@@ -241,6 +247,13 @@ async def resolve_magical_attack(
     mit_sds = target.sds
     mit_bv = target.barrier_value
     final_damage = max(0, pre_mitigation_damage - mit_sds - mit_bv)
+
+    dmg_type = effect_details.get("damage_type")
+    if dmg_type:
+        resistance = target.resistances.get(dmg_type, 0.0)
+        if resistance != 0:
+            multiplier = 1.0 - (resistance / 100.0)
+            final_damage = int(final_damage * multiplier)
 
     # --- 6. Apply Damage & Send Messages ---
     target.hp = max(0.0, target.hp - final_damage)
