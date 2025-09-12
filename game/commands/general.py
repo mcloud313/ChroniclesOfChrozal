@@ -430,5 +430,28 @@ async def cmd_search(character: 'Character', world: 'World', args_str: str) -> b
         await character.send("You don't find anything unusual.")
         
     return True
+
+# Add this function to game/commands/general.py
+async def cmd_release(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Releases a dead character's spirit to their tether point."""
+    if character.status != "DEAD":
+        await character.send("You are not dead.")
+        return True
+
+    await character.send("{RYou release your spirit from your corpse...{x")
+    
+    # Apply tether loss
+    initial_tether = character.spiritual_tether
+    character.spiritual_tether = max(0, initial_tether - 1)
+    log.info("Character %s tether decreased from %d to %d.", character.name, initial_tether, character.spiritual_tether)
+    await character.send("{RYour connection to the living world weakens...{x")
+    
+    if character.spiritual_tether <= 0:
+        log.critical("!!! PERMANENT DEATH: Character %s (ID: %s) has reached 0 spiritual tether!", character.name, character.dbid)
+        await character.send("{R*** Your soul feels irrevocably severed! ***{x")
+
+    # Call the existing respawn logic
+    await world.respawn_character(character)
+    return True
     
                         

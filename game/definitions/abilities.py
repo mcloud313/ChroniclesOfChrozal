@@ -144,6 +144,22 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "roundtime": 2.0, # RT applied AFTER spell fires
         "description": "Calls down divine energy to strike your foe."
     },
+    "resurrect": {
+        "name": "Resurrect",
+        "type": "SPELL",
+        "class_req": ["cleric"],
+        "level_req": 20,
+        "cost": 100,
+        "target_type": TARGET_CHAR,
+        "effect_type": "RESURRECT",
+        "cast_time": 30.0,
+        "roundtime": 10.0,
+        "effect_details": {
+            # Change from component to XP cost
+            "xp_cost": 5000 
+        },
+        "description": "A powerful plea to restore a soul to its body, preventing tether loss. This ritual costs the caster some of their own life experience."
+    },
     # == ROGUE ==
     "backstab": {
       "name": "Backstab",

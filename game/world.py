@@ -226,7 +226,7 @@ class World:
                         
                         base_rt = ability_data.get("roundtime", 1.0)
                         rt_penalty = p.get_total_av() * 0.05
-                        p.roundtime = base_rt + rt_penalty + p.slow_penalty
+                        p.roundtime = base_rt + rt_penalty
                     else:
                         await p.send(f"{{RYou lose focus ({ability_data.get('name', ability_key)}) - not enough essence!{{x")
 
@@ -243,6 +243,7 @@ class World:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
+    # In game/world.py
     async def update_death_timers(self, dt: float):
         """Ticker: Checks dying characters and transitions them to DEAD."""
         current_time = time.monotonic()
@@ -254,16 +255,13 @@ class World:
                 char.status = "DEAD"
                 char.death_timer_ends_at = None
                 
-                initial_tether = char.spiritual_tether
-                char.spiritual_tether = max(0, initial_tether - 1)
-                log.info("Character %s tether decreased from %d to %d.", char.name, initial_tether, char.spiritual_tether)
-                await char.send("{RYour connection to the living world weakens...{x")
+                await char.send("\r\n{RYou have succumbed to your wounds. Your spirit now lingers over your corpse.{x")
+                await char.send("{RYou may be resurrected by a powerful cleric, or you may <release> your spirit to return to your spiritual tether.{x")
                 
-                if char.spiritual_tether <= 0:
-                    log.critical("!!! PERMANENT DEATH: Character %s (ID: %s) has reached 0 spiritual tether!", char.name, char.dbid)
-                    await char.send("{R*** Your soul feels irrevocably severed! ***{x")
-                
-                await self.respawn_character(char)
+                if char.location:
+                    # We leave a "corpse" which is just the disconnected character object.
+                    # A better implementation might swap them with an item, but this works for now.
+                    await char.location.broadcast(f"\r\n{char.name} has died.\r\n")
 
     async def respawn_character(self, character: Character):
         """Handles moving a character to their respawn point and resetting their state."""
@@ -373,32 +371,32 @@ class World:
             
     # Replace the existing function in the World class
 
-async def update_stealth_checks(self, dt: float):
-    """Ticker: Periodically allows observers to detect hidden characters."""
-    # Only run this check occasionally to reduce spam and processing
-    if random.random() > 0.25: # Roughly 25% chance per second
-        return
+    async def update_stealth_checks(self, dt: float):
+        """Ticker: Periodically allows observers to detect hidden characters."""
+        # Only run this check occasionally to reduce spam and processing
+        if random.random() > 0.25: # Roughly 25% chance per second
+            return
 
-    hidden_chars = [c for c in self.get_active_characters_list() if c.is_hidden]
-    if not hidden_chars:
-        return
+        hidden_chars = [c for c in self.get_active_characters_list() if c.is_hidden]
+        if not hidden_chars:
+            return
 
-    for hidden_char in hidden_chars:
-        # FIX: Get the hidden character's stealth modifier here
-        stealth_mod = hidden_char.get_skill_modifier("stealth")
+        for hidden_char in hidden_chars:
+            # FIX: Get the hidden character's stealth modifier here
+            stealth_mod = hidden_char.get_skill_modifier("stealth")
 
-        observers = [c for c in hidden_char.location.characters if c != hidden_char] + \
-                    [m for m in hidden_char.location.mobs if m.is_alive()]
+            observers = [c for c in hidden_char.location.characters if c != hidden_char] + \
+                        [m for m in hidden_char.location.mobs if m.is_alive()]
 
-        for observer in observers:
-            perception_mod = observer.get_skill_modifier("perception") if isinstance(observer, Character) \
-                else observer.level * 3
+            for observer in observers:
+                perception_mod = observer.get_skill_modifier("perception") if isinstance(observer, Character) \
+                    else observer.level * 3
 
-            # The hidden character's stealth is the DC for the observer's perception check
-            if utils.skill_check(observer, "perception", dc=stealth_mod)['success']:
-                hidden_char.is_hidden = False
-                await hidden_char.send(f"{{RYou have been spotted by {observer.name}!{{x")
-                if isinstance(observer, Character):
-                    await observer.send(f"You spot {hidden_char.name} hiding in the shadows!")
-                break # Stop checking once spotted
-        
+                # The hidden character's stealth is the DC for the observer's perception check
+                if utils.skill_check(observer, "perception", dc=stealth_mod)['success']:
+                    hidden_char.is_hidden = False
+                    await hidden_char.send(f"{{RYou have been spotted by {observer.name}!{{x")
+                    if isinstance(observer, Character):
+                        await observer.send(f"You spot {hidden_char.name} hiding in the shadows!")
+                    break # Stop checking once spotted
+            

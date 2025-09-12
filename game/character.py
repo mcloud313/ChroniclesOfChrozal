@@ -128,7 +128,7 @@ class Character:
         for effect in self.effects.values():
             if effect.get('type') == 'slow' and effect.get('ends_at', 0) > time.monotonic():
                 return effect.get('potency', 0.0)
-            return 0.0
+        return 0.0
 
     def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any], world: 'World', player_is_admin: bool = False):
         self.writer: asyncio.StreamWriter = writer

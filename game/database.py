@@ -117,22 +117,23 @@ class DatabaseManager:
                 """)
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS mob_templates (
-                        id SERIAL PRIMARY KEY,
-                        name TEXT UNIQUE NOT NULL,
-                        description TEXT DEFAULT 'A creature.',
-                        mob_type TEXT,
-                        level INTEGER NOT NULL DEFAULT 1,
-                        stats JSONB DEFAULT '{}'::jsonb,
-                        max_hp INTEGER NOT NULL DEFAULT 10,
-                        attacks JSONB DEFAULT '[]'::jsonb,
-                        loot JSONB DEFAULT '{}'::jsonb,
-                        flags JSONB DEFAULT '[]'::jsonb,
-                        respawn_delay_seconds INTEGER DEFAULT 300,
-                        variance JSONB DEFAULT '{}'::jsonb,
-                        movement_chance REAL NOT NULL DEFAULT 0.0,
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                    )
+                    id SERIAL PRIMARY KEY,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT DEFAULT 'A creature.',
+                    mob_type TEXT,
+                    level INTEGER NOT NULL DEFAULT 1,
+                    stats JSONB DEFAULT '{}'::jsonb,
+                    resistances JSONB DEFAULT '{}'::jsonb,
+                    max_hp INTEGER NOT NULL DEFAULT 10,
+                    attacks JSONB DEFAULT '[]'::jsonb,
+                    loot JSONB DEFAULT '{}'::jsonb,
+                    flags JSONB DEFAULT '[]'::jsonb,
+                    respawn_delay_seconds INTEGER DEFAULT 300,
+                    variance JSONB DEFAULT '{}'::jsonb,
+                    movement_chance REAL NOT NULL DEFAULT 0.0,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
                 """)
 
                 # --- Lookup & Entity Tables ---

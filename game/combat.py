@@ -340,6 +340,35 @@ async def resolve_ability_effect(
         await resolve_physical_attack(caster, target, weapon, world, 
                                       ability_mods=effect_details, 
                                       damage_multiplier=damage_mult)
+        
+    elif effect_type == "RESURRECT":
+        if not isinstance(target, Character) or target.status != "DEAD":
+            await caster.send("Your spell requires a dead target.")
+            return
+
+        # Check for and consume the XP cost from the caster's pool
+        xp_cost = effect_details.get("xp_cost", 5000)
+        if caster.xp_total < xp_cost:
+            await caster.send(f"{{RYou lack the spiritual energy ({xp_cost} XP) to perform the ritual.{{x")
+            return
+        
+        caster.xp_total -= xp_cost
+        await caster.send(f"{{yYou sacrifice {xp_cost} of your stored experience to fuel the ritual...{{x")
+
+        # Perform the resurrection
+        target.status = "ALIVE"
+        target.hp = 1
+        
+        # Move the resurrected player to the caster's location
+        if target.location != caster.location:
+            if old_room := target.location:
+                old_room.remove_character(target)
+            target.update_location(caster.location)
+            caster.location.add_character(target)
+
+        await world.broadcast(f"{{Y{caster.name}'s divine intervention brings {target.name} back from the dead!{{x")
+
+
     elif effect_type == ability_defs.EFFECT_STUN_ATTEMPT:
         if effect_details.get("requires_shield", False) and not caster.get_shield(world):
             await caster.send("You need a shield equipped for that!")
@@ -518,16 +547,30 @@ def perform_hit_check(attacker: Union[Character, Mob], target: Union[Character, 
     return (mod_mar + hit_roll) >= target_dv
 
 async def apply_heal(caster: Character, target: Union[Character, Mob], effect_details: Dict[str, Any], world: 'World'):
-    """Applies healing to a target."""
-    if not target.is_alive():
-        await caster.send(f"{target.name.capitalize()} cannot be healed now.")
+    """Applies healing to a target, and can revive them from a DYING state."""
+    # Allow healing on DYING characters, but not DEAD ones.
+    if isinstance(target, Character) and target.status == "DEAD":
+        await caster.send(f"{target.name.capitalize()} is beyond simple healing.")
+        return
+    # Mobs that are not alive cannot be healed.
+    if not target.is_alive() and isinstance(target, Mob):
         return
 
     heal_amount = effect_details.get("heal_base", 0) + random.randint(0, effect_details.get("heal_rng", 0))
     if heal_amount <= 0: return
 
+    was_dying = isinstance(target, Character) and target.status == "DYING"
+
     actual_healed = min(heal_amount, target.max_hp - target.hp)
     target.hp += actual_healed
+
+    # If they were dying, bring them back to consciousness
+    if was_dying and target.hp > 0:
+        target.status = "ALIVE"
+        target.death_timer_ends_at = None # Stop the death timer
+        await target.send("{gYou feel life return to your limbs! You are no longer dying.{x")
+        if target.location:
+            await target.location.broadcast(f"\r\n{target.name} stirs and returns from the brink of death!\r\n", exclude={target})
 
     msg_caster = f"You heal yourself for {int(actual_healed)} hit points." if caster == target else f"You heal {target.name} for {int(actual_healed)} hit points."
     msg_target = f"{caster.name.capitalize()} heals you for {int(actual_healed)} hit points."
@@ -538,7 +581,6 @@ async def apply_heal(caster: Character, target: Union[Character, Mob], effect_de
         await target.send(msg_target)
     if target.location:
         await target.location.broadcast(f"\r\n{msg_room}\r\n", exclude={caster, target})
-
 async def apply_effect(caster: Character, target: Union[Character, Mob], effect_details: Dict[str, Any], ability_data: Dict[str, Any], world: 'World'):
     """Applies a temporary BUFF or DEBUFF effect to the target."""
     effect_name = effect_details.get("name", "UnknownEffect")

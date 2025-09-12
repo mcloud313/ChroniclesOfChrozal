@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 
 # REFACTOR: Removed the database connection from the function signature type
 CommandHandlerFunc = Callable[[Character, World, str], Awaitable[bool]]
+DEAD_ALLOWED_CMDS = {"quit", "release", "look", "who", "tell", "help"}
 
 # --- Command Map ---
 COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
@@ -45,6 +46,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "sit": general_cmds.cmd_sit,
     "stand": general_cmds.cmd_stand,
     "lie": general_cmds.cmd_lie,
+    "release": general_cmds.cmd_release,
 
     # Social Commands
     "group": social_cmds.cmd_group,
@@ -131,8 +133,8 @@ async def process_command(character: Character, world: World, raw_input: str) ->
     if character.status == "DYING" and command_verb != "quit":
         await character.send("You are dying and cannot act!")
         return True
-    if character.status == "DEAD" and command_verb != "quit":
-        await character.send("You are dead and cannot do that.")
+    if character.status == "DEAD" and command_verb not in DEAD_ALLOWED_CMDS:
+        await character.send("You are dead and cannot do that. Type 'release' to respawn.")
         return True
         
     MEDITATION_ALLOWED_CMDS = {"look", "l", "score", "stats", "skills", "quit", "help", "who", "tell"}
