@@ -4,9 +4,12 @@ Defines data for spells and abilities available in the game.
 Keys in ABILITIES_DATA are lowerecase internal names used in commands/storage.
 """
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, TYPE_CHECKING
 from ..definitions import abilities as ability_defs
-from ..world import World
+
+if TYPE_CHECKING:
+    from ..world import World
+
 
 log = logging.getLogger(__name__)
 
