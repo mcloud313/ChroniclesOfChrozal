@@ -4,9 +4,11 @@ Manages the game world's loaded state and orchestrates ticker-driven updates.
 """
 from __future__ import annotations
 import time
+import random
 import logging
 import asyncio
-from typing import Dict, Any, Optional, List, Union, TYPE_CHECKING
+import config
+from typing import Dict, Optional, List, Union, TYPE_CHECKING
 from itertools import groupby
 from operator import itemgetter
 from .room import Room
@@ -15,7 +17,9 @@ from .mob import Mob
 from .item import Item
 from .definitions import abilities as ability_defs
 from . import combat
-import config
+from . import utils
+from . import ticker
+
 
 if TYPE_CHECKING:
     from .database import DatabaseManager
@@ -169,6 +173,18 @@ class World:
         if group_id in self.active_groups:
             del self.active_groups[group_id]
             log.debug(f"Group {group_id} removed from active list.")
+            
+    def subscribe_to_ticker(self):
+        """Subscribes all world update methods to the global ticker."""
+        log.info("Subscribing world systems to the game ticker...")
+        ticker.subscribe(self.update_roundtimes)
+        ticker.subscribe(self.update_mob_ai)
+        ticker.subscribe(self.update_respawns)
+        ticker.subscribe(self.update_death_timers)
+        ticker.subscribe(self.update_effects)
+        ticker.subscribe(self.update_xp_absorption)
+        ticker.subscribe(self.update_regen)
+        ticker.subscribe(self.update_stealth_checks)
 
     # --- Ticker Callback Functions ---
     async def update_roundtimes(self, dt: float):
@@ -304,3 +320,35 @@ class World:
         for char in self.get_active_characters_list():
             is_in_node = char.location and "NODE" in char.location.flags
             char.update_regen(dt, is_in_node)
+            
+    # Replace the existing function in the World class
+
+async def update_stealth_checks(self, dt: float):
+    """Ticker: Periodically allows observers to detect hidden characters."""
+    # Only run this check occasionally to reduce spam and processing
+    if random.random() > 0.25: # Roughly 25% chance per second
+        return
+
+    hidden_chars = [c for c in self.get_active_characters_list() if c.is_hidden]
+    if not hidden_chars:
+        return
+
+    for hidden_char in hidden_chars:
+        # FIX: Get the hidden character's stealth modifier here
+        stealth_mod = hidden_char.get_skill_modifier("stealth")
+
+        observers = [c for c in hidden_char.location.characters if c != hidden_char] + \
+                    [m for m in hidden_char.location.mobs if m.is_alive()]
+
+        for observer in observers:
+            perception_mod = observer.get_skill_modifier("perception") if isinstance(observer, Character) \
+                else observer.level * 3
+
+            # The hidden character's stealth is the DC for the observer's perception check
+            if utils.skill_check(observer, "perception", dc=stealth_mod)['success']:
+                hidden_char.is_hidden = False
+                await hidden_char.send(f"{{RYou have been spotted by {observer.name}!{{x")
+                if isinstance(observer, Character):
+                    await observer.send(f"You spot {hidden_char.name} hiding in the shadows!")
+                break # Stop checking once spotted
+        

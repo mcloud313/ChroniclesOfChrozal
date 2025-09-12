@@ -5,6 +5,7 @@ Keys in ABILITIES_DATA are lowerecase internal names used in commands/storage.
 """
 import logging
 from typing import Dict, List, Any, Optional
+from ..definitions import abilities as ability_defs
 
 log = logging.getLogger(__name__)
 
@@ -145,21 +146,24 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "description": "Calls down divine energy to strike your foe."
     },
     # == ROGUE ==
-    "backstab attempt": {
-        "name": "Backstab Attempt", "type": "ABILITY", "class_req": ["rogue"], "level_req": 1,
-        "cost": 0, "target_type": TARGET_CHAR_OR_MOB, # Allow vs players if flanking possible?
-        "cast_time": 0.0, # Instant activation
-        "effect_type": EFFECT_MODIFIED_ATTACK, # Use modified attack
-        "effect_details": {
-            "damage_base": 4, # Base damage ADDED if successful? Or multiplier? Let's do bonus base.
-            "damage_rng": 8,
-            "damage_type": DAMAGE_PIERCE,
-            "school": "Physical",
-            "requires_behind": True, # Combat logic needs to check position
-            "requires_stealth": False # Maybe not require stealth for V1?
-        },
-        "roundtime": 3.0, # Slightly higher RT
-        "description": "Attempt a devastating attack from behind an opponent (Requires Piercing Weapon?)."
+    "backstab": {
+      "name": "Backstab",
+      "type": "ABILITY",
+      "class": "Rogue",
+      "level_req": 3,
+      "cost": 15,
+      "roundtime": 3.0,
+      "target_type": ability_defs.TARGET_MOB,
+      "effect_type": ability_defs.EFFECT_MODIFIED_ATTACK,
+      "effect_details": {
+          # Custom flags for our combat logic
+          "requires_stealth_or_flank": True,
+          "damage_multiplier": 3.0
+      },
+      "messages": {
+        "caster_self": "You slip behind {target_name} and drive your weapon home!",
+        "room": "{caster_name} slips behind {target_name} and viciously attacks!"
+      }
     },
     "quick reflexes": {
         "name": "Quick Reflexes", "type": "ABILITY", "class_req": ["rogue"], "level_req": 1,

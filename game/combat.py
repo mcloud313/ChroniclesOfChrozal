@@ -48,7 +48,8 @@ async def resolve_physical_attack(
     target: Union[Character, Mob],
     attack_source: Optional[Union[Item, Dict[str, Any]]],
     world: 'World',
-    ability_mods: Optional[Dict[str, Any]] = None
+    ability_mods: Optional[Dict[str, Any]] = None,
+    damage_multiplier: float = 1.0
 ):
     """
     Resolves a single physical attack round with detailed calculations and messaging.
@@ -143,6 +144,8 @@ async def resolve_physical_attack(
         rng_roll_result += roll_exploding_dice(wpn_rng_dmg)
     
     pre_mitigation_damage = max(0, wpn_base_dmg + rng_roll_result + base_stat_modifier)
+    
+    pre_mitigation_damage = int(pre_mitigation_damage * damage_multiplier)
     
     # --- 8. Mitigate Damage ---
     mit_pds = target.pds
@@ -308,11 +311,25 @@ async def resolve_ability_effect(
         await apply_effect(caster, target, effect_details, ability_data, world)
     
     elif effect_type == ability_defs.EFFECT_MODIFIED_ATTACK:
+        if effect_details.get("requires_stealth_or_flank"):
+            is_stealthed = caster.is_hidden
+            is_flanking = (isinstance(target, Mob) and target.is_fighting and target.target != caster)
+
+            if not is_stealthed and not is_flanking:
+                await caster.send("You must be hidden or attacking an engaged target to backstab!")
+                return # Stop the ability
+
+        # Get the damage multiplier from the ability's data
+        damage_mult = effect_details.get("damage_multiplier", 1.0)
+        
         weapon = None
-        if (weapon_id := caster.equipment.get("WIELD_MAIN")):
-            weapon = caster.get_item_instance(world, weapon_id)
-        await resolve_physical_attack(caster, target, weapon, world, ability_mods=effect_details)
-    
+        # Use .get() on _equipped_items for safety
+        if (weapon_obj := caster._equipped_items.get("WIELD_MAIN")):
+            weapon = weapon_obj
+            
+        await resolve_physical_attack(caster, target, weapon, world, 
+                                      ability_mods=effect_details, 
+                                      damage_multiplier=damage_mult)
     elif effect_type == ability_defs.EFFECT_STUN_ATTEMPT:
         if effect_details.get("requires_shield", False) and not caster.get_shield(world):
             await caster.send("You need a shield equipped for that!")
