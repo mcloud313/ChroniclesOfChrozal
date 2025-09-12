@@ -47,7 +47,7 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
         return True
         
     ability_key = found_key
-    ability_data = ability_defs.get_ability_data(ability_key)
+    ability_data = ability_defs.get_ability_data(world, ability_key)
     display_name = ability_data.get("name", ability_key)
     effect_details = ability_data.get("effect_details", {})
 
