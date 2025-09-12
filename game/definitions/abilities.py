@@ -116,8 +116,7 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "name": "Mage Armor", "type": "SPELL", "class_req": ["mage"], "level_req": 1,
         "cost": 5, "target_type": TARGET_SELF, "cast_time": 2.0,
         "effect_type": EFFECT_BUFF,
-        "effect_details": {"name": "MageArmorBuff", "stat_affected": STAT_BARRIER_VALUE, "amount": 15, "duration": 180.0}, # Buffed amount
-        "roundtime": 1.0,
+        "effect_details": {"name": "MageArmorBuff", "type": "buff", "stat_affected": STAT_BARRIER_VALUE, "amount": 15, "duration": 180.0},
         "description": "Surrounds you with a shimmering field...",
         "apply_msg_self": "{{WAn shimmering barrier surrounds you!{{x", # {W -> {{W, {x -> {{x
         "apply_msg_target": None,
@@ -169,7 +168,7 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "name": "Quick Reflexes", "type": "ABILITY", "class_req": ["rogue"], "level_req": 1,
         "cost": 3, "target_type": TARGET_SELF, "cast_time": 0.0,
         "effect_type": EFFECT_BUFF,
-        "effect_details": {"name": "QuickReflexBuff", "stat_affected": STAT_DODGE_VALUE, "amount": 5, "duration": 15.0},
+        "effect_details": {"name": "QuickReflexBuff", "type": "buff", "stat_affected": STAT_DODGE_VALUE, "amount": 5, "duration": 15.0},
         "roundtime": 1.0,
         "description": "Heightens your awareness...",
         "apply_msg_self": "{{GYou feel your reflexes quicken!{{x",
@@ -177,6 +176,24 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "apply_msg_room": "{{G{caster_name} seems to move with sudden alertness.{{x",
         "expire_msg_self": "{{GYour heightened reflexes return to normal.{{x",
         "expire_msg_room": "{{G{target_name} seems less twitchy.{{x",
+    },
+    "apply poison": {
+        "name": "Apply Poison",
+        "type": "ABILITY",
+        "class_req": ["rogue"],
+        "level_req": 2,
+        "cost": 10,
+        "roundtime": 3.0,
+        "target_type": TARGET_SELF, # This ability affects the rogue's next attack
+        "effect_type": EFFECT_BUFF,
+        "effect_details": {
+            "name": "Venom Coat",
+            "type": "buff", # This is a buff that enables a poison attack
+            "duration": 60.0,
+            "potency": 5 # This will be the poison's damage per tick
+        },
+        "description": "Applies a basic poison to your wielded weapon for 60 seconds. Your next successful attack will poison the target.",
+        "apply_msg_self": "{gYou carefully apply a thin coat of poison to your weapon.{x"
     },
 }
 
