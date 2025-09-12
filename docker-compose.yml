@@ -6,6 +6,12 @@ services:
     build:
       context: .
       dockerfile: .devcontainer/Dockerfile
+
+# --- ADD THIS SECTION ---
+    ports:
+      - "4000:4000" # Your existing MUD port
+      - "8000:8000" # The new port for the Django dev server
+
     volumes:
       # This links your project code into the environment
       - .:/workspaces/${localWorkspaceFolderBasename}:cached

@@ -1,0 +1,2 @@
+django
+psycop2-binary
