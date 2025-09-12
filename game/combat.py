@@ -272,6 +272,9 @@ async def resolve_magical_attack(
         if caster.location:
             await caster.location.broadcast(f"\r\n{target_name} is snapped out of their meditative trance by the attack!\r\n", exclude={target})
 
+    if is_hit and (rider_effect := effect_details.get("applies_effect")):
+        await apply_effect(caster, target, rider_effect, spell_data, world)
+
     # --- 7. Check for Defeat ---
     if target.hp <= 0:
         await handle_defeat(caster, target, world)
@@ -349,6 +352,23 @@ async def resolve_ability_effect(
               effect_type, ability_key, caster.name, getattr(target, 'name', 'None'))
 
     if effect_type == ability_defs.EFFECT_DAMAGE:
+        # --- NEW: Handle Cone AoE spells like Burning Hands ---
+        if effect_details.get("is_cone_aoe"):
+            primary_target = target
+            other_mobs = [m for m in caster.location.mobs if m.is_alive() and m != primary_target]
+            random.shuffle(other_mobs)
+            
+            max_targets = effect_details.get("max_aoe_targets", 1)
+            secondary_targets = other_mobs[:max_targets - 1]
+            all_targets = [primary_target] + secondary_targets
+            
+            await caster.send(f"A fan of flames erupts from your hands!")
+
+            for t in all_targets:
+                await resolve_magical_attack(caster, t, ability_data, world)
+        else:
+            # Original single-target damage logic
+            await resolve_magical_attack(caster, target, ability_data, world)
         await resolve_magical_attack(caster, target, ability_data, world)
     
     elif effect_type == ability_defs.EFFECT_HEAL:

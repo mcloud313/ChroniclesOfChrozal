@@ -184,6 +184,67 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "expire_msg_room": "{{WThe shimmering barrier surrounding {target_name} dissipates.{{x", 
         # --- ^ ^ ^ ---
     },
+    "chill touch": {
+        "name": "Chill Touch",
+        "type": "SPELL",
+        "class_req": ["mage"],
+        "level_req": 6,
+        "cost": 8,
+        "target_type": TARGET_CHAR_OR_MOB,
+        "cast_time": 2.0,
+        "effect_type": EFFECT_DAMAGE,
+        "effect_details": {
+            "damage_base": 4,
+            "damage_rng": 4,
+            "damage_type": DAMAGE_COLD,
+            "school": "Arcane",
+            # This "rider" effect is applied on a successful hit
+            "applies_effect": {
+                "name": "Chilled", "type": "slow", "duration": 8.0, "potency": 0.5
+            }
+        },
+        "roundtime": 1.5,
+        "description": "A touch of frigid energy damages your target and leaves them slowed."
+    },
+    "burning hands": {
+        "name": "Burning Hands",
+        "type": "SPELL",
+        "class_req": ["mage"],
+        "level_req": 14,
+        "cost": 25,
+        "target_type": TARGET_MOB, # Player selects a primary target
+        "cast_time": 3.0,
+        "effect_type": EFFECT_DAMAGE,
+        "effect_details": {
+            "is_cone_aoe": True,
+            "max_aoe_targets": 3,
+            "damage_base": 15,
+            "damage_rng": 10,
+            "damage_type": DAMAGE_FIRE,
+            "school": "Arcane"
+        },
+        "roundtime": 3.0,
+        "description": "A fan of flames erupts from your hands, scorching your target and up to two other nearby enemies."
+    },
+    "fireball": {
+        "name": "Fireball",
+        "type": "SPELL",
+        "class_req": ["mage"],
+        "level_req": 22,
+        "cost": 40,
+        "target_type": TARGET_AREA, # <-- This is the key
+        "cast_time": 6.0,
+        "effect_type": EFFECT_DAMAGE,
+        "effect_details": {
+            "aoe_target_scope": "enemies", # Hits all mobs in the room
+            "damage_base": 25,
+            "damage_rng": 15,
+            "damage_type": DAMAGE_FIRE,
+            "school": "Arcane"
+        },
+        "roundtime": 4.0,
+        "description": "A massive explosion of fire that damages all enemies in the area."
+    },
     # == CLERIC ==
     "minor heal": {
         "name": "Minor Heal", "type": "SPELL", "class_req": ["cleric"], "level_req": 1,
