@@ -64,44 +64,51 @@ class Character:
     @property
     def mar(self) -> int:
         base_mar = self.might_mod + (self.agi_mod // 2)
-        bonus_mar = self.get_stat_bonus_from_equipment("bonus_mar")
-        return base_mar + bonus_mar
+        item_bonus = self.get_stat_bonus_from_equipment("bonus_mar")
+        effect_bonus = self.get_stat_bonus_from_effects("bonus_mar")
+        return base_mar + item_bonus + effect_bonus
 
     @property
     def rar(self) -> int:
         base_rar = self.agi_mod + (self.might_mod // 2)
-        bonus_rar = self.get_stat_bonus_from_equipment("bonus_rar")
-        return base_rar + bonus_rar
+        item_bonus = self.get_stat_bonus_from_equipment("bonus_rar")
+        effect_bonus = self.get_stat_bonus_from_effects("bonus_rar")
+        return base_rar + item_bonus + effect_bonus
 
     @property
     def apr(self) -> int:
         base_apr = self.int_mod + (self.aura_mod // 2)
-        bonus_apr = self.get_stat_bonus_from_equipment("bonus_apr")
-        return base_apr + bonus_apr
+        item_bonus = self.get_stat_bonus_from_equipment("bonus_apr")
+        effect_bonus = self.get_stat_bonus_from_effects("bonus_apr")
+        return base_apr + item_bonus + effect_bonus
 
     @property
     def dpr(self) -> int:
         base_dpr = self.aura_mod + (self.pers_mod // 2)
-        bonus_dpr = self.get_stat_bonus_from_equipment("bonus_dpr")
-        return base_dpr + bonus_dpr
+        item_bonus = self.get_stat_bonus_from_equipment("bonus_dpr")
+        effect_bonus = self.get_stat_bonus_from_effects("bonus_dpr")
+        return base_dpr + item_bonus + effect_bonus
 
     @property
     def pds(self) -> int:
         base_pds = self.vit_mod
-        bonus_pds = self.get_stat_bonus_from_equipment("bonus_pds")
-        return base_pds + bonus_pds
+        item_bonus = self.get_stat_bonus_from_equipment("bonus_pds")
+        effect_bonus = self.get_stat_bonus_from_effects("bonus_pds")
+        return base_pds + item_bonus + effect_bonus
 
     @property
     def sds(self) -> int:
         base_sds = self.aura_mod
-        bonus_sds = self.get_stat_bonus_from_equipment("bonus_sds")
-        return base_sds + bonus_sds
+        item_bonus = self.get_stat_bonus_from_equipment("bonus_sds")
+        effect_bonus = self.get_stat_bonus_from_effects("bonus_sds")
+        return base_sds + item_bonus + effect_bonus
 
     @property
     def dv(self) -> int:
         base_dv = self.agi_mod * 2
-        bonus_dv = self.get_stat_bonus_from_equipment("bonus_dv")
-        return base_dv + bonus_dv
+        item_bonus = self.get_stat_bonus_from_equipment("bonus_dv")
+        effect_bonus = self.get_stat_bonus_from_effects("bonus_dv")
+        return base_dv + item_bonus + effect_bonus
     
     @property
     def barrier_value(self) -> int:
@@ -129,6 +136,17 @@ class Character:
             if effect.get('type') == 'slow' and effect.get('ends_at', 0) > time.monotonic():
                 return effect.get('potency', 0.0)
         return 0.0
+    
+    # In the Character class, replace the get_total_av method with this property
+    @property
+    def get_total_av(self) -> int:
+        """Calculates total armor value from equipment and effects."""
+        base_av = 0
+        for item in self._equipped_items.values():
+            base_av += item.armor
+
+        bonus_av = self.get_stat_bonus_from_effects("bonus_av")
+        return base_av + bonus_av
 
     def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any], world: 'World', player_is_admin: bool = False):
         self.writer: asyncio.StreamWriter = writer
@@ -371,14 +389,14 @@ class Character:
     def is_alive(self) -> bool:
         return self.hp > 0 and self.status != "DEAD"
 
-    def get_total_av(self) -> int:
-        """Calculates total armor value from all equipped items."""
-        total_av = 0
-        for item in self._equipped_items.values():
-            # The item object has an 'armor' property that gets the value
-            # from the template's stats.
-            total_av += item.armor
-        return total_av
+    # def get_total_av(self) -> int:
+    #     """Calculates total armor value from all equipped items."""
+    #     total_av = 0
+    #     for item in self._equipped_items.values():
+    #         # The item object has an 'armor' property that gets the value
+    #         # from the template's stats.
+    #         total_av += item.armor
+    #     return total_av
 
     def get_shield(self) -> Optional[Item]:
         shield_item = self._equipped_items.get("WIELD_OFF")
@@ -435,6 +453,17 @@ class Character:
         """Checks if the character knows a specific ability by its internal key."""
         return ability_key.lower() in self.known_abilities
     
+    def get_stat_bonus_from_effects(self, stat_name: str) -> int:
+        """
+        Calculates the total bonus for a given stat from all active effects.
+        """
+        total_bonus = 0
+        current_time = time.monotonic()
+        for effect in self.effects.values():
+            if effect.get('stat_affected') == stat_name and effect.get('ends_at', 0) > current_time:
+                total_bonus += effect.get('amount', 0)
+        return total_bonus
+
     def get_stat_bonus_from_equipment(self, stat_name: str) -> int:
         """
         Calculate the total bonus for a given stat from all equipped items.

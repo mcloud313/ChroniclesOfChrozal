@@ -61,12 +61,43 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
         await character.send(f"You don't have enough essence to use {display_name}.")
         return True
     
+    # --- NEW: Stance Handling Logic ---
+    effect_details = ability_data.get("effect_details", {})
+    if effect_details.get("is_stance"):
+        stance_effects = effect_details.get("effects_to_apply", [])
+        if not stance_effects:
+            log.error(f"Stance ability '{ability_key}' has no effects_to_apply.")
+            await character.send("That ability seems to be configured incorrectly.")
+            return True
+
+        # Check if the stance is already active by looking for its first defined effect
+        first_effect_name = stance_effects[0].get("name")
+        if first_effect_name and first_effect_name in character.effects:
+            # --- TOGGLE OFF ---
+            for effect_info in stance_effects:
+                effect_name = effect_info.get("name")
+                if effect_name and effect_name in character.effects:
+                    # Handle temporary max_hp reduction when the buff is removed
+                    if effect_info.get("stat_affected") == "max_hp":
+                        amount = effect_info.get("amount", 0)
+                        character.max_hp -= amount
+                        character.hp = min(character.hp, character.max_hp)
+                    del character.effects[effect_name]
+            
+            await character.send(f"You relax from your {display_name}.")
+            character.roundtime = 1.0 # Small RT for exiting a stance
+            return True
+        else:
+            # --- TOGGLE ON ---
+            # Remove any other active stances first (not yet implemented, but this is where it would go)
+            pass
+
     # --- 3. Validate Target ---
+    # ... (This logic is unchanged) ...
     required_target_type = ability_data.get("target_type", ability_defs.TARGET_NONE)
     target_obj: Optional[Union[Character, Mob]] = None
     target_id: Optional[Union[int, str]] = None
     target_obj_type_str: Optional[str] = None
-
     if required_target_type == ability_defs.TARGET_SELF:
         target_obj, target_id, target_obj_type_str = character, "self", "SELF"
     elif required_target_type == ability_defs.TARGET_NONE:
@@ -79,36 +110,38 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
             await character.send(f"Who or what do you want to use {display_name} on?")
             return True
     else:
+        # ... (unchanged) ...
         target_char = character.location.get_character_by_name(target_name_input)
         target_mob = character.location.get_mob_by_name(target_name_input)
-        
         if target_char and target_char.is_alive():
             target_obj, target_obj_type_str = target_char, "CHAR"
         elif target_mob and target_mob.is_alive():
             target_obj, target_obj_type_str = target_mob, "MOB"
-        
         if not target_obj:
             await character.send(f"You don't see '{target_name_input}' here to target.")
             return True
-        
         target_id = target_obj.dbid if isinstance(target_obj, Character) else target_obj.instance_id
 
-    # --- 4. Instant Ability Execution ---
-    log.debug("Character %s using instant ability: %s", character.name, ability_key)
-    
+    # --- 4. Execute Ability ---
+    log.debug("Character %s using ability: %s", character.name, ability_key)
     character.essence -= essence_cost
     
-    await combat_logic.resolve_ability_effect(
-        caster=character,
-        target_ref=target_id,
-        target_type_str=target_obj_type_str,
-        ability_data=ability_data,
-        world=world
-    )
+    # --- MODIFIED: Handle stances that apply multiple effects ---
+    if effect_details.get("is_stance"):
+        for effect in effect_details.get("effects_to_apply", []):
+            await combat_logic.apply_effect(character, character, effect, ability_data, world)
+    else:
+        await combat_logic.resolve_ability_effect(
+            caster=character,
+            target_ref=target_id,
+            target_type_str=target_obj_type_str,
+            ability_data=ability_data,
+            world=world
+        )
     
     base_rt = ability_data.get("roundtime", 1.0)
-    rt_penalty = character.get_total_av(world) * 0.05
-    character.roundtime = base_rt + rt_penalty
+    rt_penalty = character.get_total_av() * 0.05
+    character.roundtime = base_rt + rt_penalty + character.slow_penalty
     if rt_penalty > 0:
         await character.send(f"Your armor slightly hinders your action (+{rt_penalty:.1f}s).")
 

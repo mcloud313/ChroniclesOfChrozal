@@ -142,7 +142,25 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
             "room": "{caster_name} swings their weapon in a wide arc, striking multiple foes!"
         }
     },
-
+    "defensive stance": {
+        "name": "Defensive Stance",
+        "type": "ABILITY",
+        "class_req": ["warrior"],
+        "level_req": 18,
+        "cost": 10, # Essence cost to enter the stance
+        "target_type": TARGET_SELF,
+        "effect_type": EFFECT_BUFF,
+        "effect_details": {
+            "is_stance": True,
+            # This "meta-effect" will apply two separate effects
+            "effects_to_apply": [
+                {"name": "DefStanceAV", "type": "buff", "stat_affected": "bonus_av", "amount": 25, "duration": -1},
+                {"name": "DefStanceMAR", "type": "debuff", "stat_affected": "bonus_mar", "amount": -15, "duration": -1}
+            ]
+        },
+        "roundtime": 1.5,
+        "description": "Assume a defensive posture, greatly increasing armor at the cost of accuracy. Use the ability again to exit the stance."
+    },
     # == MAGE ==
     "magic missile": {
         "name": "Magic Missile", "type": "SPELL", "class_req": ["mage"], "level_req": 1,
