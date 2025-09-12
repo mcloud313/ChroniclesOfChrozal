@@ -16,23 +16,51 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-async def cmd_look(character: 'Character', world: ' World', args_str: str) -> bool:
-    """Handles looking at the room, characters, mobs or other objects."""
+async def cmd_look(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Handles looking at the room, characters, mobs, or other objects."""
     if not character.location:
-        await character.send("You are floating in an endless void...somehow.")
+        await character.send("You are floating in an endless void... somehow.")
         return True
     
+    # --- NEW: Handle "look in <container>" ---
+    if args_str.lower().startswith("in "):
+        container_name = args_str[3:].strip()
+        
+        # Search for the container in the character's inventory/equipment first
+        container = character.find_container_by_name(container_name)
+        
+        # If not found, search for a container in the room
+        if not container:
+            container = character.location.get_item_instance_by_name(container_name, world)
+            if container and container.capacity <= 0: # Make sure it's actually a container
+                container = None
+
+        if not container:
+            await character.send(f"You don't see a '{container_name}' here to look inside.")
+            return True
+        
+        if not container.is_open:
+            await character.send(f"The {container.name} is closed.")
+            return True
+        
+        # Display the contents
+        if not container.contents:
+            await character.send(f"The {container.name} is empty.")
+        else:
+            contents_list = ", ".join(item.name for item in container.contents.values())
+            await character.send(f"The {container.name} contains: {contents_list}.")
+        return True
+
+    # --- Original look logic, with one addition for container state ---
     target_name = args_str.strip().lower()
 
     # Case 1: Look at the room (no arguments)
     if not target_name or target_name == "here":
-        # This part is updated to use the new item instance system
         room_desc = character.location.get_look_string(character, world)
         await character.send(room_desc)
 
         ground_items_output = []
         item_counts = {}
-        #Count item instances by their template name
         for item_id in character.location.item_instance_ids:
             item_obj = world.get_item_object(item_id)
             if item_obj:
@@ -52,23 +80,14 @@ async def cmd_look(character: 'Character', world: ' World', args_str: str) -> bo
     # Case 2: Look at a specific target
     target_char = character.location.get_character_by_name(target_name)
     if target_char:
-        # --- Enhanced player look description ---
         output = []
-
-        # 1. Show the character's description
         description = target_char.description.strip()
         if not description:
             description = f"{target_char.name} looks rather ordinary."
         output.append(description)
-
-        # 2. Show the descriptive health status
         output.append(utils.get_health_desc(target_char))
-
-        # 3. Show the equipment list
         output.append(f"\n\r{target_char.first_name} is using:")
-
         equipped_items_desc = []
-        # Iterate through the canonical list of slots for a consistent order
         for slot in slots.ALL_SLOTS:
             item = target_char._equipped_items.get(slot)
             if item:
@@ -83,7 +102,6 @@ async def cmd_look(character: 'Character', world: ' World', args_str: str) -> bo
         await character.send("\n\r".join(output))
         return True
     
-    # Case 3: Look at mobs, objects, or items (mostly unchanged)
     target_mob = character.location.get_mob_by_name(target_name)
     if target_mob:
         await character.send(f"\n\r{target_mob.description}")
@@ -94,12 +112,10 @@ async def cmd_look(character: 'Character', world: ' World', args_str: str) -> bo
         await character.send(f"\n\r{target_obj_data.get('description', 'It looks unremarkable.')}")
         return True
     
-    # Check for item in room or inventory
     item_to_examine = (character.location.get_item_instance_by_name(target_name, world) or
                        character.find_item_in_inventory_by_name(target_name))
     
     if item_to_examine:
-        # Use the logic from the examine command
         uuid_str = f"{{i({item_to_examine.id}){{x"
         examine_output = [
             f"\n\r--- {item_to_examine.name} {uuid_str} ---",
@@ -107,6 +123,11 @@ async def cmd_look(character: 'Character', world: ' World', args_str: str) -> bo
             utils.get_condition_desc(item_to_examine.condition),
             f"Type: {item_to_examine.item_type.capitalize()}, Weight: {item_to_examine.weight} stones"
         ]
+        
+        # --- NEW: Add open/closed state to description ---
+        if item_to_examine.capacity > 0:
+            examine_output.append("It is open." if item_to_examine.is_open else "It is closed.")
+
         await character.send("\n\r".join(examine_output))
         return True
 

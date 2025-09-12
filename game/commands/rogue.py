@@ -44,3 +44,56 @@ async def cmd_hide(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send("You slip into the shadows.")
 
     return True
+
+async def cmd_lockpick(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Attempts to pick the lock on a door or container."""
+    if not args_str:
+        await character.send("What do you want to lockpick?")
+        return True
+    
+    target_name = args_str.lower()
+    
+    #  --- Try to find a locked door (exit) ---
+    for exit_name, exit_data in character.location.exits.items():
+        if target_name in exit_name.lower() and isinstance(exit_data, dict):
+            if not exit_data.get('is_locked'):
+                await character.send("That is already unlocked.")
+                return True
+            
+            dc = exit_data.get('lockpick_dc')
+            if dc is None:
+                await character.send("That lock cannot be picked.")
+                return True
+            
+            # Perform the skill check
+            check_result = utils.skill_check(character, "lockpicking", dc)
+            if check_result['success']:
+                exit_data['is_locked'] = False # unlock in memory
+                await world.db_manager.update_room_exits(character.location.dbid, character.location.exits) # Save to DB
+                await character.send(f"{{gSuccess! You pick the lock on the {exit_name}.{{x")
+            else:
+                await character.send(f"{{rYou fail to pick the lock on the {exit_name}.{{x")
+            character.roundtime = 10.0 # Lockpicking takes time
+            return True
+    
+    # --- If not a door, try to find a locked item (chest) ---
+    target_item = character.location.get_item_instance_by_name(target_name, world)
+    if target_item and target_item.instance_stats.get('is_locked'):
+        dc = target_item.instance_stats.get('lockpick_dc')
+        if dc is None:
+            await character.send("That lock cannot be picked.")
+            return True
+        
+        # Perform the skill check
+        check_result = utils.skill_check(character, "lockpicking", dc)
+        if check_result['success']:
+            target_item.instance_stats['is_locked'] = False
+            await world.db_manager.update_item_instance_stats(target_item.id, target_item.instance_stats) # Save to DB
+            await character.send(f"{{gSuccess! You pick the lock on the {target_item.name}.{{x")
+        else:
+            await character.send(f"{{rYou fail to pick the lock on the {target_item.name}.{{x")
+        character.roundtime = 3.0
+        return True
+
+    await character.send("You don't see that here to lockpick.")
+    return True

@@ -21,6 +21,7 @@ from . import magic as magic_cmds
 from . import abilities as ability_cmds
 from . import trade as trade_cmds
 from . import social as social_cmds
+from . import rogue as rogue_cmds
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +56,9 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "attack": combat_cmds.cmd_attack, "a": combat_cmds.cmd_attack, "kill": combat_cmds.cmd_attack,
     "cast": magic_cmds.cmd_cast,
     "use": ability_cmds.cmd_use,
+    "lockpick": rogue_cmds.cmd_lockpick,
+    "hide": rogue_cmds.cmd_hide,
+    
 
     # Item Commands
     "inventory": item_cmds.cmd_inventory, "inv": item_cmds.cmd_inventory, "i": item_cmds.cmd_inventory,
@@ -65,14 +69,18 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "drop": item_cmds.cmd_drop,
     "put": item_cmds.cmd_put,
     "examine": item_cmds.cmd_examine, "exa": item_cmds.cmd_examine,
+    "open": item_cmds.cmd_open,
+    "close": item_cmds.cmd_close,
+    "unlock": item_cmds.cmd_unlock,
+    "lock": item_cmds.cmd_lock,
     "list": trade_cmds.cmd_list,
-    "buy": trade_cmds.cmd_list,
-    "sell": trade_cmds.cmd_list,
-    "give": trade_cmds.cmd_list,
-    "accept": trade_cmds.cmd_list,
-    "decline": trade_cmds.cmd_list,
-    "balance": trade_cmds.cmd_list,
-    "deposit": trade_cmds.cmd_list,
+    "buy": trade_cmds.cmd_buy,
+    "sell": trade_cmds.cmd_sell,
+    "give": trade_cmds.cmd_give,
+    "accept": trade_cmds.cmd_accept,
+    "decline": trade_cmds.cmd_decline,
+    "balance": trade_cmds.cmd_balance,
+    "deposit": trade_cmds.cmd_deposit,
     "withdraw": trade_cmds.cmd_withdraw,
     "repair": item_cmds.cmd_repair,
     "drink": item_cmds.cmd_drink,
