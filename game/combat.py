@@ -102,7 +102,7 @@ async def resolve_physical_attack(
 
     # --- 5. Resolve Miss or Fumble ---
     if not is_hit:
-        attacker.roundtime = wpn_speed
+        attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
         await attacker.send(f"You try to {attk_name} {target_name}, but miss.")
         if isinstance(target, Character):
             await target.send(f"{attacker_name} tries to {attk_name} you, but misses.")
@@ -114,7 +114,7 @@ async def resolve_physical_attack(
         shield_skill_rank = target.get_skill_rank("shield usage")
         block_chance = shield.block_chance + (math.floor(shield_skill_rank / 10) * 0.01)
         if random.random() < block_chance:
-            attacker.roundtime = wpn_speed
+            attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty 
             await attacker.send(f"{{y{target_name} blocks your {attk_name} with their shield!{{x")
             await target.send(f"{{gYou block {attacker_name}'s {attk_name} with your shield!{{x")
             await attacker_loc.broadcast(f"\r\n{target_name} blocks {attacker_name}'s attack.\r\n", exclude={attacker, target})
@@ -196,7 +196,7 @@ async def resolve_physical_attack(
     rt_penalty = 0.0
     if isinstance(attacker, Character):
         rt_penalty = attacker.get_total_av() * 0.05
-    attacker.roundtime = wpn_speed + rt_penalty
+    attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
     
     # --- 11. Check for Defeat ---
     if target.hp <= 0:
@@ -542,9 +542,19 @@ async def apply_effect(caster: Character, target: Union[Character, Mob], effect_
         "ends_at": time.monotonic() + duration,
         "amount": amount,
         "stat": stat,
+        "type": effect_details.get('type'),
         "caster_id": caster.dbid
     }
     log.info("Applied effect '%s' to %s for %.1f seconds.", effect_name, target.name, duration)
+
+    # Check for and apply instant effects like stun
+    if effect_details.get('type') == 'stun':
+        stun_duration = effect_details.get('potency', 0.0)
+        target.roundtime += stun_duration
+        if isinstance(target, Character):
+            await target.send("{RYou are stunned!{x")
+        if target.location:
+            await target.location.broadcast(f"\r\n{target.name.capitalize()} is stunned!\r\n", exclude={target})
 
     # --- Messaging ---
     caster_name = caster.name.capitalize()

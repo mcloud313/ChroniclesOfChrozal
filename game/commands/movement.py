@@ -35,7 +35,7 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
     base_rt = 1.0
     # The leader's armor penalty affects the whole group's base move time
     leader_penalty = character.get_total_av() * 0.05
-    move_rt = base_rt + leader_penalty
+    move_rt = base_rt + leader_penalty + character.slow_penalty
     
     # Final roundtime is the greater of the move time or anyone's current roundtime
     final_rt = move_rt

@@ -66,6 +66,14 @@ class Mob:
                    effect_data.get("stat") == ability_defs.STAT_BARRIER_VALUE:
                     total_bv += effect_data.get("amount", 0)
         return max(0, total_bv)
+    
+    @property
+    def slow_penalty(self) -> float:
+        """Returns the roundtime penalty from any active 'slow' effects."""
+        for effect in self.effects.values():
+            if effect.get('type') == 'slow' and effect.get('ends_at', 0) > time.monotonic():
+                return effect.get('potency', 0.0)
+            return 0.0
 
     def __init__(self, template_data: Dict[str, Any], current_room: 'Room'):
         """Initializes a Mob instance from template data, applying variance."""
