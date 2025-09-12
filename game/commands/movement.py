@@ -100,6 +100,37 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
         if leader_penalty > 0 and char == character:
             await character.send(f"Your armor slows your movement (+{leader_penalty:.1f}s).")
 
+async def _perform_drag(dragger: 'Character', target_corpse: 'Character', target_room: 'Room', exit_name: str):
+    """Handles the logic of dragging a corpse to another room."""
+    current_room = dragger.location
+    
+    # 1. Apply the heavy roundtime to the dragger
+    dragger.roundtime = 10.0
+    await dragger.send(f"You begin dragging {target_corpse.name}'s corpse...")
+
+    # 2. Announce Departure
+    await current_room.broadcast(
+        f"\r\n{dragger.name} drags the corpse of {target_corpse.name} {exit_name}.\r\n",
+        exclude={dragger} # Exclude the dragger, who gets their own message
+    )
+
+    # 3. Update State for Both Characters
+    current_room.remove_character(dragger)
+    current_room.remove_character(target_corpse)
+    dragger.update_location(target_room)
+    target_corpse.update_location(target_room)
+    target_room.add_character(dragger)
+    target_room.add_character(target_corpse)
+
+    # 4. Announce Arrival
+    opposite_direction = utils.get_opposite_direction(exit_name)
+    arrival_msg = f"\r\n{dragger.name} arrives, dragging the body of {target_corpse.name} from the {opposite_direction}.\r\n"
+    await target_room.broadcast(arrival_msg, exclude={dragger})
+
+    # 5. Send new room info to the dragger
+    look_string = target_room.get_look_string(dragger, dragger.world)
+    await dragger.send(look_string)
+
 async def cmd_move(character: 'Character', world: 'World', direction: str) -> bool:
     """Handles all cardinal/ordinal directional movement commands."""
     if not character.location:
@@ -131,7 +162,6 @@ async def cmd_move(character: 'Character', world: 'World', direction: str) -> bo
 
     await _perform_move(character, world, target_room, direction)
     return True
-
 
 async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'go <target>' command for complex, named exits that may require skill checks."""

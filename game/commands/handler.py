@@ -95,6 +95,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
 
     # Movement Command
     "go": movement_cmds.cmd_go,
+    "drag": social_cmds.cmd_drag,
 
     # Admin Commands (Reduced Set for In-Game Use)
     "@teleport": admin_cmds.cmd_teleport,

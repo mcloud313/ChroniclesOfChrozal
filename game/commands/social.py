@@ -1,6 +1,7 @@
 #game/commands/social.py
 import logging
 from typing import TYPE_CHECKING
+from . import movement as movement_logic
 from ..group import Group
 
 if TYPE_CHECKING:
@@ -8,6 +9,44 @@ if TYPE_CHECKING:
     from ..world import World
 
 log = logging.getLogger(__name__)
+
+async def cmd_drag(character: 'Character', world: 'World', args_str: str) -> bool:
+    """drags a corpse to an adjacent room."""
+    if not args_str:
+        await character.send("Who do you want to drag and where? (e.g. drag frodo).")
+        return True
+    
+    try:
+        target_name, exit_name = args_str.strip().split(" ", 1)
+    except ValueError:
+        await character.send("Invalid syntax. (e.g., drag frodo north)")
+        return True
+    
+    #Find the target corpse in the room
+    target_corpse = None
+    for char in character.location.characters:
+        if target_name.lower() in char.name.lower() and char.status == "DEAD" or char.status == "DYING":
+            target_corpse = char
+            break
+
+    if not target_corpse:
+        await character.send("You don't see that body here.")
+        return True
+    
+    # Find the exit this logic is similar to the move command
+    exit_data = character.location.exits.get(exit_name.lower())
+    if not isinstance(exit_data, int):
+        await character.send("You can't drag a body that way.")
+        return True
+    
+    target_room = world.get_room(exit_data)
+    if not target_room:
+        await character.send("The path seems to vanish into nothingness.")
+        return True
+    
+    # Call the new helper function to perform the move
+    await movement_logic._perform_drag(character, target_corpse, target_room, exit_name)
+    return True
 
 async def cmd_group(character: 'Character', world: 'World', args_str: str) -> bool:
     """Forms or joins a group with another creature."""
