@@ -61,7 +61,7 @@ class World:
                 self.db_manager.fetch_all("SELECT * FROM item_templates ORDER BY id"),
                 self.db_manager.fetch_all("SELECT * FROM mob_templates ORDER BY id"),
                 self.db_manager.fetch_all("SELECT * FROM rooms ORDER BY id"),
-                self.db_manager.fetch_all("SELECT * FROM shop_inventories ORDER BY room_id")
+                self.db_manager.fetch_all("SELECT * FROM shop_inventories ORDER BY room_id"),
                 self.db_manager.fetch_all("SELECT * FROM ability_templates")
             )
             area_rows, race_rows, class_rows, item_rows, mob_rows, room_rows, shop_rows, ability_rows = results
