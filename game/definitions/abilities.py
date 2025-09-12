@@ -6,6 +6,7 @@ Keys in ABILITIES_DATA are lowerecase internal names used in commands/storage.
 import logging
 from typing import Dict, List, Any, Optional
 from ..definitions import abilities as ability_defs
+from ..world import World
 
 log = logging.getLogger(__name__)
 
@@ -424,9 +425,6 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
 }
 
 # Helper function to get data safely
-def get_ability_data(name: str) -> Optional[Dict[str, Any]]:
-    """
-    Gets the data dictionary for a given spell/ability name (case-insensitive).
-    Returns None if not found.
-    """
-    return ABILITIES_DATA.get(name.lower())
+def get_ability_data(world: 'World', name: str) -> Optional[Dict[str, Any]]:
+    """Gets ability data from the world cache."""
+    return world.abilities.get(name.lower())
