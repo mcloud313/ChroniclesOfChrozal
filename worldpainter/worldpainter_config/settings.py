@@ -73,9 +73,13 @@ WSGI_APPLICATION = "worldpainter_config.wsgi.application"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'chrozaldb',
+        'USER': 'chrozal',
+        'PASSWORD': 'timcp313',
+        'HOST': 'db',  # This is the service name from your docker-compose.yml
+        'PORT': '5432',
     }
 }
 

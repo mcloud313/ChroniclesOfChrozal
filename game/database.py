@@ -135,7 +135,24 @@ class DatabaseManager:
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
                 """)
-
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS ability_templates (
+                        id SERIAL PRIMARY KEY,
+                        internal_name TEXT UNIQUE NOT NULL,
+                        name TEXT NOT NULL,
+                        ability_type TEXT NOT NULL,
+                        class_req JSONB DEFAULT '[]'::jsonb,
+                        level_req INTEGER DEFAULT 1,
+                        cost INTEGER DEFAULT 0,
+                        target_type TEXT,
+                        effect_type TEXT,
+                        effect_details JSONB DEFAULT '{}'::jsonb,
+                        cast_time REAL DEFAULT 0.0,
+                        roundtime REAL DEFAULT 1.0,
+                        messages JSONB DEFAULT '{}'::jsonb,
+                        description TEXT
+                    )
+                """)
                 # --- Lookup & Entity Tables ---
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS races (
