@@ -450,6 +450,24 @@ async def resolve_ability_effect(
 
         await world.broadcast(f"{{Y{caster.name}'s divine intervention brings {target.name} back from the dead!{{x")
 
+    elif effect_type == "CURE":
+        cure_type = effect_details.get("cure_type")
+        if not cure_type: return
+
+        # Find and remove all effects of the specified type
+        effects_to_remove = [k for k, v in target.effects.items() if v.get('type') == cure_type]
+        
+        if not effects_to_remove:
+            await caster.send(f"{target.name} is not afflicted by {cure_type}.")
+            return
+
+        for key in effects_to_remove:
+            del target.effects[key]
+        
+        await caster.send(f"You cure the {cure_type} afflicting {target.name}.")
+        if isinstance(target, Character) and target != caster:
+            await target.send(f"{caster.name} has cured your {cure_type}!")
+
     elif effect_type == ability_defs.EFFECT_STUN_ATTEMPT:
         if effect_details.get("requires_shield", False) and not caster.get_shield(world):
             await caster.send("You need a shield equipped for that!")

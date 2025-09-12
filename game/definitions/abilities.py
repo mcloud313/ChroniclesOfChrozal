@@ -264,6 +264,57 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "roundtime": 2.0, # RT applied AFTER spell fires
         "description": "Calls down divine energy to strike your foe."
     },
+     "bless": {
+        "name": "Bless",
+        "type": "SPELL",
+        "class_req": ["cleric"],
+        "level_req": 5,
+        "cost": 12,
+        "target_type": TARGET_CHAR_OR_MOB,
+        "cast_time": 2.0,
+        "effect_type": EFFECT_BUFF,
+        "effect_details": {
+            "effects_to_apply": [
+                {"name": "BlessMAR", "type": "buff", "stat_affected": "bonus_mar", "amount": 5, "duration": 120.0},
+                {"name": "BlessRAR", "type": "buff", "stat_affected": "bonus_rar", "amount": 5, "duration": 120.0}
+            ]
+        },
+        "roundtime": 2.0,
+        "description": "Fills an ally with divine favor, increasing their accuracy in combat.",
+        "apply_msg_target": "{yYou feel blessed!{x"
+    },
+    "cure poison": {
+        "name": "Cure Poison",
+        "type": "SPELL",
+        "class_req": ["cleric"],
+        "level_req": 10,
+        "cost": 15,
+        "target_type": TARGET_CHAR_OR_MOB,
+        "cast_time": 1.5,
+        "effect_type": "CURE", # A new custom type for our logic
+        "effect_details": {
+            "cure_type": "poison" # Specifies what kind of effect to remove
+        },
+        "roundtime": 2.0,
+        "description": "Neutralizes common poisons afflicting the target."
+    },
+    "circle of healing": {
+        "name": "Circle of Healing",
+        "type": "SPELL",
+        "class_req": ["cleric"],
+        "level_req": 16,
+        "cost": 35,
+        "target_type": TARGET_AREA,
+        "cast_time": 3.0,
+        "effect_type": EFFECT_HEAL,
+        "effect_details": {
+            "aoe_target_scope": "allies", # Heals all group members in the room
+            "heal_base": 15,
+            "heal_rng": 10
+        },
+        "roundtime": 4.0,
+        "description": "A circle of golden light washes over your allies, mending their wounds."
+    },
     "resurrect": {
         "name": "Resurrect",
         "type": "SPELL",
