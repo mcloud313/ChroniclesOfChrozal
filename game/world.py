@@ -6,6 +6,8 @@ from __future__ import annotations
 import time
 import logging
 import asyncio
+import config
+import random   
 from typing import Dict, Any, Optional, List, Union, TYPE_CHECKING
 from itertools import groupby
 from operator import itemgetter
@@ -15,7 +17,8 @@ from .mob import Mob
 from .item import Item
 from .definitions import abilities as ability_defs
 from . import combat
-import config
+from . import utils
+
 
 if TYPE_CHECKING:
     from .database import DatabaseManager
@@ -267,25 +270,44 @@ class World:
         await character.send("\r\n{WYou feel yourself drawn back to the mortal plane...{x")
         await character.send(respawn_room.get_look_string(character, self))
 
+    # In game/world.py, replace the existing update_effects function with this:
+
     async def update_effects(self, dt: float):
-        """Ticker: Checks for and removes expired effects on all participants."""
+        """Ticker: Processes ongoing effects and removes expired ones."""
         current_time = time.monotonic()
         all_mobs = [mob for room in self.rooms.values() for mob in room.mobs]
         participants = self.get_active_characters_list() + all_mobs
 
         for p in participants:
             if not p.effects: continue
-            expired_keys = [key for key, data in p.effects.items() if data.get("ends_at", 0) <= current_time]
             
+            expired_keys = []
+            # Create a copy of items to avoid issues with modifying the dict while iterating
+            active_effects = list(p.effects.items())
+
+            for key, data in active_effects:
+                # First, process ongoing effects for this tick
+                effect_type = data.get('type')
+                if effect_type in ('poison', 'bleed'):
+                    await combat.apply_dot_damage(p, data, self)
+                # We'll add other effect types like regen here later
+
+                # Then, check if the effect has expired
+                if data.get("ends_at", 0) <= current_time:
+                    expired_keys.append(key)
+            
+            # Remove all expired effects
             for key in expired_keys:
-                ability_data = ability_defs.get_ability_data(key)
-                del p.effects[key]
-                if ability_data and p.location:
-                    target_name = p.name.capitalize()
-                    if isinstance(p, Character) and (msg := ability_data.get('expire_msg_self')):
-                        await p.send(msg.format(target_name=target_name))
-                    if msg_room := ability_data.get('expire_msg_room'):
-                        await p.location.broadcast(f"\r\n{msg_room.format(target_name=target_name)}\r\n", exclude={p})
+                # Use .get() to safely access the effect in case it was removed by death
+                if p.effects.get(key): 
+                    ability_data = ability_defs.get_ability_data(key)
+                    del p.effects[key]
+                    if ability_data and p.location:
+                        target_name = p.name.capitalize()
+                        if isinstance(p, Character) and (msg := ability_data.get('expire_msg_self')):
+                            await p.send(msg.format(target_name=target_name))
+                        if msg_room := ability_data.get('expire_msg_room'):
+                            await p.location.broadcast(f"\r\n{msg_room.format(target_name=target_name)}\r\n", exclude={p})
 
     async def update_xp_absorption(self, dt: float):
         """Ticker: Processes XP pool absorption for characters in node rooms."""
@@ -299,6 +321,36 @@ class World:
                     char.xp_pool = 0
                     await char.send("You feel you have absorbed all you can for now.")
     
+    async def update_stealth_checks(self, dt: float):
+        """Ticker: Periodically allows observers to detect hidden characters."""
+        # Only run this check occasionally to reduce spam and processing
+        if random.random() > 0.10: # 10 % chance per second
+            return
+        
+        hidden_chars = [c for c in self.get_active_characters_list() if c.is_hidden]
+        if not hidden_chars:
+            return
+        
+        for hidden_char in hidden_chars:
+            stealth_mod = hidden_char.get_skill_modifier("stealth")
+
+            observers = [c for c in hidden_char.location.characters if c != hidden_char] + \
+                        [m for m in hidden_char.location.mobs if m.is_alive()]
+            
+            for observer in observers:
+                # Mobs get a base perception check
+                perception_mod = observer.get_skill_modifier("perception") if isinstance(observer, Character) \
+                    else observer.level * 3
+                
+                # The hidden character's stealth is the DC for the observer's perception check
+                if utils.skill_check(observer, "perception", dc=stealth_mod)['success']:
+                    hidden_char.is_hidden = False
+                    await hidden_char.send(f"{{RYou have been spotted by {observer.name}!{{x")
+                    if isinstance(observer, Character):
+                        await observer.send(f"You spot {hidden_char.name} hiding in the shadows!")
+                    # Once spotted, break the inner loop and move to the next hidden character
+                    break 
+
     async def update_regen(self, dt: float):
         """Ticker: Calls the regeneration logic for all active characters."""
         for char in self.get_active_characters_list():

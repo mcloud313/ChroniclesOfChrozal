@@ -42,7 +42,6 @@ def roll_exploding_dice(max_roll: int) -> int:
         rolls += 1
     return total
 
-
 async def resolve_physical_attack(
     attacker: Union[Character, Mob],
     target: Union[Character, Mob],
@@ -200,7 +199,6 @@ async def resolve_physical_attack(
     if target.hp <= 0:
         await handle_defeat(attacker, target, world)
 
-
 async def resolve_magical_attack(
     caster: Union[Character, Mob], 
     target: Union[Character, Mob],
@@ -261,7 +259,6 @@ async def resolve_magical_attack(
     # --- 7. Check for Defeat ---
     if target.hp <= 0:
         await handle_defeat(caster, target, world)
-
 
 async def resolve_ability_effect(
     caster: Character,
@@ -327,6 +324,29 @@ async def resolve_ability_effect(
         else:
             await caster.location.broadcast(f"\r\n{caster.name.capitalize()} tries to bash {target.name}, but misses.\r\n", exclude={})
 
+async def apply_dot_damage(target: Union[Character, Mob], effect_data: Dict[str, Any], world: 'World'):
+    """Applies damage from a damage over time effect like poison or bleed."""
+    damage = effect_data.get('potency', 0)
+    if damage <= 0:
+        return
+    
+    effect_type = effect_data.get('type', 'damage')
+
+    # Apply Damage
+    target.hp = max(0.0, target.hp - damage)
+
+    # Send feedback if the target is a player
+    if isinstance(target, Character):
+        await target.send(f"{{rYou take {int(damage)} {effect_type} damage!{{x")
+
+    # Check if the DoT was fatal
+    if target.hp <= 0:
+        # Create a simple object to represent the effect as the attacker
+        class EffectAttacker:
+            name = f"the {effect_type}"
+            location = target.location
+
+        await handle_defeat(EffectAttacker(), target, world)
 
 async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character, Mob], world: 'World'):
     """Handles logic for when a target's HP reaches 0, with group reward sharing."""
@@ -441,7 +461,6 @@ def determine_loot(loot_table: Dict[str, Any]) -> Tuple[int, List[int]]:
     
     return dropped_coinage, dropped_item_ids
 
-
 async def award_xp_to_character(character: Character, xp_amount: int):
     """Awards a specific amount of XP to a character's XP Pool."""
     if xp_amount <= 0:
@@ -468,7 +487,6 @@ def perform_hit_check(attacker: Union[Character, Mob], target: Union[Character, 
     if hit_roll == 20: return True
     return (mod_mar + hit_roll) >= target_dv
 
-
 async def apply_heal(caster: Character, target: Union[Character, Mob], effect_details: Dict[str, Any], world: 'World'):
     """Applies healing to a target."""
     if not target.is_alive():
@@ -490,7 +508,6 @@ async def apply_heal(caster: Character, target: Union[Character, Mob], effect_de
         await target.send(msg_target)
     if target.location:
         await target.location.broadcast(f"\r\n{msg_room}\r\n", exclude={caster, target})
-
 
 async def apply_effect(caster: Character, target: Union[Character, Mob], effect_details: Dict[str, Any], ability_data: Dict[str, Any], world: 'World'):
     """Applies a temporary BUFF or DEBUFF effect to the target."""
@@ -527,7 +544,6 @@ async def apply_effect(caster: Character, target: Union[Character, Mob], effect_
 
     if msg_room and target.location:
         await target.location.broadcast(f"\r\n{msg_room.format(caster_name=caster_name, target_name=target_name)}\r\n", exclude={caster, target})
-
 
 async def resolve_consumable_effect(character: Character, item_template: Dict[str, Any], world: 'World') -> bool:
     """Applies the effect of a consumable item (FOOD/DRINK)."""
