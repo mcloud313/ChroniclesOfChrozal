@@ -46,8 +46,6 @@ class RoomAdmin(admin.ModelAdmin):
 
 # --- Register all the models ---
 
-# First, un-register the default Room admin
-admin.site.unregister(Rooms)
 # Now, re-register Rooms using our custom RoomAdmin class
 admin.site.register(Rooms, RoomAdmin)
 

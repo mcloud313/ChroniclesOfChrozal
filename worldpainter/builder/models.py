@@ -307,6 +307,9 @@ class RoomObjects(models.Model):
     keywords = models.JSONField(blank=True, null=True)
     created_at = models.DateTimeField()
 
+    def __str__(self):
+        return f"[{self.id}] {self.name}"
+
     class Meta:
         managed = False
         db_table = 'room_objects'
