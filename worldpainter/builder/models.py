@@ -7,6 +7,32 @@
 # Feel free to rename the models, but don't rename db_table values or field names.
 from django.db import models
 
+class ItemTypes(models.TextChoices):
+    """Defines the available choices for an item's type."""
+    GENERAL   = 'GENERAL', 'General'
+    WEAPON    = 'WEAPON', 'Weapon'
+    ARMOR     = 'ARMOR', 'Armor'
+    CONTAINER = 'CONTAINER', 'Container'
+    POTION    = 'POTION', 'Potion'
+    FOOD      = 'FOOD', 'Food'
+    DRINK     = 'DRINK', 'Drink'
+    TREASURE  = 'TREASURE', 'Treasure'
+    COMPONENT = 'COMPONENT', 'Component'
+    KEY       = 'KEY', 'Key'
+
+class MobTypes(models.TextChoices):
+    """Defines the available choices for a mob's type."""
+    NONE      = 'NONE', 'None'
+    HUMANOID  = 'HUMANOID', 'Humanoid'
+    BEAST     = 'BEAST', 'Beast'
+    UNDEAD    = 'UNDEAD', 'Undead'
+    DRAGON    = 'DRAGON', 'Dragon'
+    ELEMENTAL = 'ELEMENTAL', 'Elemental'
+    CONSTRUCT = 'CONSTRUCT', 'Construct'
+    ABERRATION = 'ABERRATION', 'Aberration'
+    MAGICALBEAST = 'MAGICALBEAST', 'Magical Beast'
+    GIANT = 'GIANT', 'Giant'
+
 
 class AbilityTemplates(models.Model):
     internal_name = models.TextField(unique=True)
@@ -245,7 +271,8 @@ class ItemInstances(models.Model):
 class ItemTemplates(models.Model):
     name = models.TextField(unique=True)
     description = models.TextField(blank=True, null=True)
-    type = models.TextField()
+    # --- MODIFIED: This now uses our choices to create a dropdown ---
+    type = models.CharField(max_length=50, choices=ItemTypes.choices, default=ItemTypes.GENERAL)
     stats = models.JSONField(blank=True, null=True)
     flags = models.JSONField(blank=True, null=True)
     damage_type = models.TextField(blank=True, null=True)
@@ -260,9 +287,11 @@ class ItemTemplates(models.Model):
 class MobTemplates(models.Model):
     name = models.TextField(unique=True)
     description = models.TextField(blank=True, null=True)
-    mob_type = models.TextField(blank=True, null=True)
+    # --- MODIFIED: This now uses our choices to create a dropdown ---
+    mob_type = models.CharField(max_length=50, choices=MobTypes.choices, default=MobTypes.NONE, blank=True, null=True)
     level = models.IntegerField()
     stats = models.JSONField(blank=True, null=True)
+    resistances = models.JSONField(blank=True, null=True)
     max_hp = models.IntegerField()
     attacks = models.JSONField(blank=True, null=True)
     loot = models.JSONField(blank=True, null=True)
