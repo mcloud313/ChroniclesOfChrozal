@@ -1,5 +1,6 @@
 # game/commands/rogue.py
 import logging
+import random
 from typing import TYPE_CHECKING
 from .. import utils
 from .. character import Character
@@ -96,4 +97,57 @@ async def cmd_lockpick(character: 'Character', world: 'World', args_str: str) ->
         return True
 
     await character.send("You don't see that here to lockpick.")
+    return True
+
+async def cmd_disarm(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Attempts to disarm a detected trap on a door or container."""
+    if not args_str:
+        await character.send("What do you want to disarm?")
+        return True
+
+    target_name = args_str.lower()
+
+    # Find the target (door or item) and its corresponding trap_id
+    target_obj, trap_id, trap_data = None, None, None
+    for exit_name, exit_data in character.location.exits.items():
+        if target_name in exit_name.lower() and isinstance(exit_data, dict):
+            if 'trap' in exit_data:
+                target_obj, trap_id, trap_data = exit_data, f"exit_{exit_name}", exit_data['trap']
+                break
+    
+    if not target_obj:
+        item = character.location.get_item_instance_by_name(target_name, world)
+        if item and 'trap' in item.instance_stats:
+            target_obj, trap_id, trap_data = item, f"item_{item.id}", item.instance_stats['trap']
+
+    # --- Validation ---
+    if not target_obj or not trap_data or not trap_data.get('is_active'):
+        await character.send("You don't see a trap there.")
+        return True
+    if trap_id not in character.detected_traps:
+        await character.send("You must find a trap before you can disarm it.")
+        return True
+
+    # --- Skill Check ---
+    dc = trap_data.get('disarm_dc', 20)
+    check_result = utils.skill_check(character, "disable device", dc)
+    character.roundtime = 4.0 # Disarming is tricky
+
+    if check_result['success']:
+        trap_data['is_active'] = False
+        # Persist the change
+        if isinstance(target_obj, dict): # It's an exit
+            await world.db_manager.update_room_exits(character.location.dbid, character.location.exits)
+        else: # It's an item
+            await world.db_manager.update_item_instance_stats(target_obj.id, target_obj.instance_stats)
+        await character.send(f"{{gSuccess! You disarm the trap.{{x")
+    else:
+        await character.send(f"{{rYou fail to disarm the trap...{{x")
+        # 25% chance to trigger the trap on failure!
+        if random.random() < 0.25:
+            await character.send(f"{{R...and you've triggered it!{{x")
+            # Here we would resolve the trap's effect, for now, we'll just log it.
+            log.info(f"Trap {trap_id} triggered on failed disarm by {character.name}.")
+            trap_data['is_active'] = False # Trap is used up
+
     return True

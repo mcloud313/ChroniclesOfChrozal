@@ -57,6 +57,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "cast": magic_cmds.cmd_cast,
     "use": ability_cmds.cmd_use,
     "lockpick": rogue_cmds.cmd_lockpick,
+    "disarm": rogue_cmds.cmd_disarm,
     "hide": rogue_cmds.cmd_hide,
     
 

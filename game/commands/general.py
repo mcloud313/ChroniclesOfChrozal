@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-
 async def cmd_look(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles looking at the room, characters, mobs, or other objects."""
     if not character.location:
@@ -149,7 +148,6 @@ async def cmd_say(character: 'Character', world: 'World', args_str: str) -> bool
     await character.location.broadcast(f"\r\n{character.first_name} says, \"{message}\"", exclude={character})
     return True
 
-
 async def cmd_quit(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'quit' command."""
     await character.send("Farewell!")
@@ -157,7 +155,6 @@ async def cmd_quit(character: 'Character', world: 'World', args_str: str) -> boo
     # REFACTOR: Call the character's own save method.
     await character.save()
     return False
-
 
 async def cmd_who(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'who' command, listing online characters."""
@@ -180,7 +177,6 @@ async def cmd_who(character: 'Character', world: 'World', args_str: str) -> bool
     await character.send("\r\n".join(output))
     return True
 
-
 async def cmd_help(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'help' command."""
     output = ("\r\n--- Basic Commands ---\r\n"
@@ -197,7 +193,6 @@ async def cmd_help(character: 'Character', world: 'World', args_str: str) -> boo
               "----------------------")
     await character.send(output)
     return True
-
 
 async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'score' or 'stats' command."""
@@ -236,7 +231,6 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
     )
     await character.send(output)
     return True
-
 
 async def cmd_advance(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'advance' command for leveling up."""
@@ -280,7 +274,6 @@ async def cmd_advance(character: 'Character', world: 'World', args_str: str) -> 
     await character.save()
     return True
 
-
 async def cmd_skills(character: 'Character', world: 'World', args_str: str) -> bool:
     """Displays the character's known skills and ranks."""
     output = [
@@ -298,7 +291,6 @@ async def cmd_skills(character: 'Character', world: 'World', args_str: str) -> b
     output.append("==========================================")
     await character.send("\r\n".join(output))
     return True
-
 
 async def cmd_meditate(character: 'Character', world: 'World', args_str: str) -> bool:
     """Begins meditation to restore essence faster."""
@@ -318,7 +310,6 @@ async def cmd_meditate(character: 'Character', world: 'World', args_str: str) ->
             await character.location.broadcast(f"\r\n{character.name} sits down and begins meditating.", exclude={character})
     return True
 
-
 async def cmd_emote(character: 'Character', world: 'World', args_str: str) -> bool:
     """Performs an action visible to the room."""
     if not args_str:
@@ -330,7 +321,6 @@ async def cmd_emote(character: 'Character', world: 'World', args_str: str) -> bo
     if character.location:
         await character.location.broadcast(f"\r\n{character.name} {action_text}\r\n", exclude={character})
     return True
-
 
 async def cmd_tell(character: 'Character', world: 'World', args_str: str) -> bool:
     """Sends a private message to another player online."""
@@ -359,7 +349,6 @@ async def cmd_tell(character: 'Character', world: 'World', args_str: str) -> boo
     await character.send(f"\r\n[[You tell {target_char.name}]: {message}]")
     return True
 
-
 async def cmd_sit(character: 'Character', world: 'World', args_str: str) -> bool:
     """Makes the character sit down."""
     if character.stance == "Sitting":
@@ -373,7 +362,6 @@ async def cmd_sit(character: 'Character', world: 'World', args_str: str) -> bool
         if character.location:
             await character.location.broadcast(f"\r\n{character.name} sits down.\r\n", exclude={character})
     return True
-
 
 async def cmd_stand(character: 'Character', world: 'World', args_str: str) -> bool:
     """Makes the character stand up."""
@@ -394,7 +382,6 @@ async def cmd_stand(character: 'Character', world: 'World', args_str: str) -> bo
             await character.location.broadcast(f"\r\n{character.name} stands up.\r\n", exclude={character})
     return True
 
-
 async def cmd_lie(character: 'Character', world: 'World', args_str: str) -> bool:
     """Makes the character lie down."""
     if character.stance == "Lying":
@@ -408,3 +395,40 @@ async def cmd_lie(character: 'Character', world: 'World', args_str: str) -> bool
         if character.location:
             await character.location.broadcast(f"\r\n{character.name} lies down.\r\n", exclude={character})
     return True
+
+async def cmd_search(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Actively searches the room for hidden things like traps."""
+    if character.roundtime > 0:
+        await character.send("You are too busy to search right now.")
+        return True
+    
+    await character.send("You begin searching the area...")
+    character.roundtime = 10.0
+    found_anything = False
+    
+    # Search exits for traps
+    for exit_name, exit_data in character.location.exits.items():
+        if isinstance(exit_data, dict) and (trap := exit_data.get('trap')):
+            if trap.get('is_active'):
+                trap_id = f"exit_{exit_name}"
+                if trap_id not in character.detected_traps:
+                    if utils.skill_check(character, 'perception', dc=trap.get('perception_dc', 15))['success']:
+                        await character.send(f"{{yYou found a trap on the {exit_name}!{{x")
+                        character.detected_traps.add(trap_id)
+                        found_anything = True
+    # Search items (chests, etc.) in the room for traps
+    for item_obj in [world.get_item_object(iid) for iid in character.location.item_instance_ids]:
+        if item_obj and (trap := item_obj.instance_stats.get('trap')):
+            if trap.get('is_active'):
+                trap_id = f"item_{item_obj.id}"
+                if trap_id not in character.detected_traps:
+                    if utils.skill_check(character, 'perception', dc=trap.get('perception_dc', 15))['success']:
+                        await character.send(f"{{yYou found a trap on the {item_obj.name}!{{x")
+                        character.detected_traps.add(trap_id)
+                        found_anything = True
+    if not found_anything:
+        await character.send("You don't find anything unusual.")
+        
+    return True
+    
+                        
