@@ -287,8 +287,45 @@ async def resolve_ability_effect(
     effect_type = ability_data.get("effect_type")
     effect_details = ability_data.get("effect_details", {})
     ability_key = ability_data.get("name", "?").lower()
+    required_target_type = ability_data.get("target_type")
 
-    # --- 1. Find Target ---
+    # 1. --- Area of Effect (AoE) Logic ---
+    if required_target_type == ability_defs.TARGET_AREA:
+        if not caster.location: return
+
+        scope = effect_details.get("aoe_target_scope", "enemies") # Default to hitting enemies
+        
+        potential_targets = list(caster.location.characters) + list(caster.location.mobs)
+        final_targets = []
+
+        if scope == "enemies":
+            # Target all living mobs
+            final_targets = [m for m in caster.location.mobs if m.is_alive()]
+        elif scope == "allies":
+            # Target all living group members in the room, including the caster
+            if caster.group:
+                final_targets = [m for m in caster.group.members if m.location == caster.location and m.is_alive()]
+            else: # If not in a group, only target self
+                final_targets = [caster]
+        elif scope == "all":
+            # Target all living things in the room except the caster
+            final_targets = [p for p in potential_targets if p != caster and p.is_alive()]
+
+        if not final_targets:
+            await caster.send("There are no valid targets here.")
+            return
+
+        # Apply the primary effect to every target in the list
+        for target in final_targets:
+            if effect_type == ability_defs.EFFECT_DAMAGE:
+                await resolve_magical_attack(caster, target, ability_data, world)
+            elif effect_type == ability_defs.EFFECT_HEAL:
+                await apply_heal(caster, target, effect_details, world)
+            # Add other AoE effect types like DEBUFF here later
+        
+        return # AoE is fully resolved, exit the function
+
+    # --- 2. Find Target ---
     target: Optional[Union[Character, Mob]] = None
     if target_type_str == "SELF":
         target = caster
@@ -299,7 +336,7 @@ async def resolve_ability_effect(
         if caster.location:
             target = next((m for m in caster.location.mobs if m.instance_id == target_ref), None)
 
-    # --- 2. Validate Target ---
+    # --- 3. Validate Target ---
     required_target_type = ability_data.get("target_type")
     if required_target_type != ability_defs.TARGET_NONE and (
         target is None or not target.is_alive() or (target != caster and target.location != caster.location)
@@ -307,7 +344,7 @@ async def resolve_ability_effect(
         await caster.send("Your target is no longer valid.")
         return
 
-    # --- 3. Resolve Effect ---
+    # --- 4. Resolve Effect ---
     log.debug("Resolving effect '%s' for %s. Caster: %s, Target: %s",
               effect_type, ability_key, caster.name, getattr(target, 'name', 'None'))
 
@@ -367,7 +404,6 @@ async def resolve_ability_effect(
             caster.location.add_character(target)
 
         await world.broadcast(f"{{Y{caster.name}'s divine intervention brings {target.name} back from the dead!{{x")
-
 
     elif effect_type == ability_defs.EFFECT_STUN_ATTEMPT:
         if effect_details.get("requires_shield", False) and not caster.get_shield(world):
@@ -581,6 +617,7 @@ async def apply_heal(caster: Character, target: Union[Character, Mob], effect_de
         await target.send(msg_target)
     if target.location:
         await target.location.broadcast(f"\r\n{msg_room}\r\n", exclude={caster, target})
+
 async def apply_effect(caster: Character, target: Union[Character, Mob], effect_details: Dict[str, Any], ability_data: Dict[str, Any], world: 'World'):
     """Applies a temporary BUFF or DEBUFF effect to the target."""
     effect_name = effect_details.get("name", "UnknownEffect")
@@ -601,6 +638,10 @@ async def apply_effect(caster: Character, target: Union[Character, Mob], effect_
         "caster_id": caster.dbid
     }
     log.info("Applied effect '%s' to %s for %.1f seconds.", effect_name, target.name, duration)
+
+    if stat == "max_hp":
+        target.max_hp += amount
+        target.hp += amount # Also grant the current HP
 
     # Check for and apply instant effects like stun
     if effect_details.get('type') == 'stun':

@@ -72,6 +72,26 @@ STAT_PERSONA = "persona"
 ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
 
     # == WARRIOR ==
+    "rallying cry": {
+        "name": "Rallying Cry",
+        "type": "ABILITY",
+        "class_req": ["warrior"],
+        "level_req": 7,
+        "cost": 15,
+        "target_type": TARGET_AREA, # It affects an area
+        "effect_type": EFFECT_BUFF,
+        "effect_details": {
+            "name": "Rally",
+            "type": "buff",
+            "aoe_target_scope": "allies", # It only affects group members
+            "stat_affected": "max_hp", # A new type of buff!
+            "amount": 20,
+            "duration": 30.0
+        },
+        "roundtime": 3.0,
+        "description": "Unleash a powerful shout, temporarily bolstering the health of all group members in the room.",
+        "apply_msg_room": "{C{caster_name} lets out a powerful rallying cry!{x"
+    },
     "power strike": {
         "name": "Power Strike", "type": "ABILITY", "class_req": ["warrior"], "level_req": 1,
         "cost": 0, "target_type": TARGET_CHAR_OR_MOB, # Target for the attack

@@ -171,6 +171,31 @@ def calculate_modifier(stat_value: int) -> int:
 
 def xp_needed_for_level(current_level: int) -> int:
     """
+    Calculates the total XP required to reach the *next* level using a
+    tiered exponential formula.
+    """
+    max_level = getattr(config, 'MAX_LEVEL', 100)
+    if current_level >= max_level:
+        return float('inf')
+
+    target_level = current_level + 1
+    if target_level <= 1:
+        return 0
+
+    base = getattr(config, 'XP_BASE', 1000)
+    exponent = getattr(config, 'XP_EXPONENT', 1.5) # Lowered for a smoother base curve
+
+    # --- NEW: Tier multiplier makes it harder at higher levels ---
+    # Multiplier increases by 0.5 every 10 levels (e.g., 1.5x at 10, 2.0x at 20)
+    tier_multiplier = 1.0 + (math.floor((target_level - 1) / 10) * 0.5)
+
+    try:
+        required = math.floor(base * ((target_level - 1) ** exponent))
+        return int(required * tier_multiplier)
+    except (OverflowError, ValueError):
+        log.error("XP calculation overflow for target level %d", target_level)
+        return float('inf')
+    """
     Calculates the total XP required to reach the *next* level.
     Using simple linear formula for V1.
 

@@ -186,6 +186,7 @@ class World:
         ticker.subscribe(self.update_xp_absorption)
         ticker.subscribe(self.update_regen)
         ticker.subscribe(self.update_stealth_checks)
+        ticker.subscribe(self.update_room_effects)
 
     # --- Ticker Callback Functions ---
     async def update_roundtimes(self, dt: float):
@@ -310,16 +311,47 @@ class World:
             
             # Remove all expired effects
             for key in expired_keys:
-                # Use .get() to safely access the effect in case it was removed by death
-                if p.effects.get(key): 
+                if p.effects.get(key):
+                    expired_effect_data = p.effects[key] # Get data before deleting
                     ability_data = ability_defs.get_ability_data(key)
                     del p.effects[key]
+
+                    # --- NEW: Handle expiring Max HP buffs ---
+                    if expired_effect_data.get("stat_affected") == "max_hp":
+                        amount = expired_effect_data.get("amount", 0)
+                        p.max_hp -= amount
+                        p.hp = min(p.hp, p.max_hp) # Ensure current HP isn't over the new max
+
                     if ability_data and p.location:
                         target_name = p.name.capitalize()
                         if isinstance(p, Character) and (msg := ability_data.get('expire_msg_self')):
                             await p.send(msg.format(target_name=target_name))
                         if msg_room := ability_data.get('expire_msg_room'):
                             await p.location.broadcast(f"\r\n{msg_room.format(target_name=target_name)}\r\n", exclude={p})
+
+    async def update_room_effects(self, dt: float):
+        """Ticker: Applies effects from room flags to characters within them."""
+        for char in self.get_active_characters_list():
+            if not char.location or not char.is_alive():
+                continue
+
+            room_flags = char.location.flags
+
+            # --- Periodic Damage Flags ---
+            if "BLAZING" in room_flags:
+                # Example: 2 fire damage per tick
+                await combat.apply_dot_damage(char, {'potency': 2, 'type': 'fire'}, self)
+            if "ACIDIC" in room_flags:
+                # Example: 2 acid damage per tick
+                await combat.apply_dot_damage(char, {'potency': 2, 'type': 'acid'}, self)
+            if "FREEZING" in room_flags:
+                await combat.apply_dot_damage(char, {'potency': 2, 'type': 'cold'}, self)
+            # --- Chance-based Status Effect Flags ---
+            if "POISONOUS" in room_flags:
+                # Example: 10% chance per tick to be afflicted with a weak poison
+                if random.random() < 0.10 and not char.effects.get("RoomPoison"):
+                    poison_effect = {"name": "RoomPoison", "type": "poison", "duration": 10.0, "potency": 3}
+                    await combat.apply_effect(char, char, poison_effect, {"name": "a poisonous miasma"}, self)
 
     async def update_xp_absorption(self, dt: float):
         """Ticker: Processes XP pool absorption for characters in node rooms."""
