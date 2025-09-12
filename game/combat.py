@@ -358,6 +358,31 @@ async def resolve_ability_effect(
         await apply_effect(caster, target, effect_details, ability_data, world)
     
     elif effect_type == ability_defs.EFFECT_MODIFIED_ATTACK:
+        
+        if effect_details.get("is_cleave"):
+            primary_target = target # The target resolved by the block above
+            
+            # Find other potential targets in the room
+            other_mobs = [m for m in caster.location.mobs if m.is_alive() and m != primary_target]
+            random.shuffle(other_mobs) # Shuffle to hit random secondary targets
+            
+            max_targets = effect_details.get("max_cleave_targets", 1)
+            secondary_targets = other_mobs[:max_targets - 1]
+            
+            all_targets = [primary_target] + secondary_targets
+            
+            await caster.send(ability_data["messages"]["caster_self"])
+            await caster.location.broadcast(f"\r\n{ability_data['messages']['room'].format(caster_name=caster.name)}\r\n", exclude={caster})
+
+            # Get the weapon once
+            weapon = caster._equipped_items.get("WIELD_MAIN")
+            damage_mult = effect_details.get("damage_multiplier", 1.0)
+            
+            # Attack each target in the list
+            for t in all_targets:
+                await resolve_physical_attack(caster, t, weapon, world, damage_multiplier=damage_mult)
+            return # End of Cleave logic
+        
         if effect_details.get("requires_stealth_or_flank"):
             is_stealthed = caster.is_hidden
             is_flanking = (isinstance(target, Mob) and target.is_fighting and target.target != caster)

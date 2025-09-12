@@ -121,6 +121,27 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "roundtime": 2.5, # RT applied to user after attempting bash
         "description": "Attempt to daze an opponent with your shield, potentially stunning them. Less accurate than a normal attack. (Requires Shield equipped)."
     },
+    "cleave": {
+        "name": "Cleave",
+        "type": "ABILITY",
+        "class_req": ["warrior"],
+        "level_req": 12,
+        "cost": 20,
+        "target_type": TARGET_MOB, # The player must select a primary target
+        "effect_type": EFFECT_MODIFIED_ATTACK,
+        "effect_details": {
+            "is_cleave": True,
+            "max_cleave_targets": 3, # Hits the primary target + 2 others
+            # All targets hit by cleave take 75% of normal weapon damage
+            "damage_multiplier": 0.75 
+        },
+        "roundtime": 4.0,
+        "description": "A wide, sweeping attack that strikes your primary target and up to two other enemies in the room for reduced damage.",
+        "messages": {
+            "caster_self": "You swing your weapon in a wide arc, striking multiple foes!",
+            "room": "{caster_name} swings their weapon in a wide arc, striking multiple foes!"
+        }
+    },
 
     # == MAGE ==
     "magic missile": {
