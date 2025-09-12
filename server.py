@@ -7,12 +7,10 @@ import asyncio
 import logging
 import config
 from typing import Optional
-
 from game.database import db_manager # <-- Import the manager instance
 from game.world import World
 from game.handlers.connection import ConnectionHandler
 from game import ticker
-import time
 
 # --- Logging Setup ---
 log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -81,11 +79,13 @@ async def main():
         if not await world.build():
             log.critical("!!! Failed to build world state. Server cannot start.")
             return
+        
+        world.subscribe_to_ticker()
+        
         log.info("World loaded successfully.")
         
         # 3. Start background tasks
         await ticker.start_ticker(config.TICKER_INTERVAL_SECONDS)
-        # ... (ticker subscriptions remain the same)
         
         if config.AUTOSAVE_INTERVAL_SECONDS > 0:
             autosave_task = asyncio.create_task(_autosave_loop(world, config.AUTOSAVE_INTERVAL_SECONDS))

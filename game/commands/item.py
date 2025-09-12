@@ -326,3 +326,162 @@ async def cmd_eat(character: 'Character', world: 'World', args_str: str) -> bool
 async def cmd_drink(character: 'Character', world: 'World', args_str: str) -> bool:
     """Drinks a potion or beverage from inventory."""
     return await _handle_consume(character, world, args_str, "drink")
+
+async def cmd_open(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Opens a container in the room, like a chest."""
+    if not args_str:
+        await character.send("Open what?")
+        return True
+    
+    # Find a container item in the current room
+    target_item = character.location.get_item_instance_by_name(args_str, world)
+    
+    if not target_item or target_item.capacity <= 0:
+        await character.send("You don't see that here.")
+        return True
+    
+    # Check if the container is locked
+    if target_item.instance_stats.get('is_locked', False):
+        await character.send("It's locked.")
+        return True
+    
+    if target_item.is_open:
+        await character.send("It's already open.")
+        return True
+    
+    # Open the container and show its contents
+    target_item.instance_stats['is_open'] = True
+    await character.send(f"You open the {target_item.name}.")
+    
+    if not target_item.contents:
+        await character.send(f"You open the {target_item.name}.")
+        
+    if not target_item.contents:
+        await character.send(f"The {target_item.name} is empty.")
+    else:
+        contents_list = ", ".join(item.name for item in target_item.contents.values())
+        await character.send(f"The {target_item.name} contains: {contents_list}.")
+        
+    return True
+
+async def cmd_close(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Closes a container in the room."""
+    if not args_str:
+        await character.send("Close what?")
+        return True
+
+    target_item = character.location.get_item_instance_by_name(args_str, world)
+    
+    if not target_item or target_item.capacity <= 0:
+        await character.send("You don't see that here.")
+        return True
+        
+    if not target_item.is_open:
+        await character.send("It's already closed.")
+        return True
+        
+    target_item.instance_stats['is_open'] = False
+    await character.send(f"You close the {target_item.name}.")
+    return True
+
+async def cmd_unlock(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Unlocks a target object with a key from inventory."""
+    if " with " not in args_str:
+        await character.send("What do you want to unlock with that? (e.g., unlock chest with iron key)")
+        return True
+    
+    target_name, key_name = [s.strip() for s in args_str.split(" with ", 1)]
+    
+    # 1. Find the target object in the room
+    target_obj = character.location.get_item_instance_by_name(target_name, world)
+    if not target_obj:
+        await character.send(f"You don't see a '{target_name}' here.")
+        return True
+    
+    # 2. Find the key in the character's hands
+    key_obj = character.find_item_in_inventory_by_name(key_name)
+    if not key_obj:
+        await character.send(f"You aren't holding a '{key_name}'.")
+        return True
+    
+    # 3. Check if the target is actually locked
+    if not target_obj.instance_stats.get('is_locked', False):
+        await character.send(f"The {target_obj.name} is already unlocked.")
+        return True
+    
+    # 4. The unlock check
+    lock_id = target_obj.instance_stats.get('lock_id')
+    if not lock_id:
+        await character.send(f"The {target_obj.name} doesn't seem to have a keyhole.")
+        return True
+    
+    if lock_id in key_obj.unlocks:
+        #Success!
+        target_obj.instance_stats['is_locked'] = False
+        # Save the change to the database
+        await world.db_manager.update_item_instance_stats(target_obj.id, target_obj.instance_stats)
+        
+        await character.send(f"You unlock the {target_obj.name} with the {key_obj.name}.")
+    else:
+        # Failure
+        await character.send("The key doesn't seem to fit in the lock.")
+        
+    return True
+
+async def cmd_lock(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Locks a target object with a key from inventory."""
+    if " with " not in args_str:
+        await character.send("What do you want to lock with what? (e.g., lock chest with iron key)")
+        return True
+
+    target_name, key_name = [s.strip() for s in args_str.split(" with ", 1)]
+
+    # Find the key in the character's hands first
+    key_obj = character.find_item_in_inventory_by_name(key_name)
+    if not key_obj:
+        await character.send(f"You aren't holding a '{key_name}'.")
+        return True
+
+    # --- Try to find a door (exit) to lock ---
+    for exit_name, exit_data in character.location.exits.items():
+        if target_name in exit_name.lower() and isinstance(exit_data, dict):
+            if exit_data.get('is_locked'):
+                await character.send("That is already locked.")
+                return True
+            
+            lock_id = exit_data.get('lock_id')
+            if not lock_id:
+                await character.send("That cannot be locked.")
+                return True
+
+            if lock_id in key_obj.unlocks:
+                exit_data['is_locked'] = True
+                await world.db_manager.update_room_exits(character.location.dbid, character.location.exits)
+                await character.send(f"You lock the {exit_name} with the {key_obj.name}.")
+            else:
+                await character.send("The key doesn't fit that lock.")
+            return True
+    
+    # --- If not a door, try to find an item (chest) ---
+    target_item = character.location.get_item_instance_by_name(target_name, world)
+    if target_item:
+        if target_item.instance_stats.get('is_locked'):
+            await character.send("That is already locked.")
+            return True
+        
+        lock_id = target_item.instance_stats.get('lock_id')
+        if not lock_id:
+            await character.send("That cannot be locked.")
+            return True
+
+        if lock_id in key_obj.unlocks:
+            target_item.instance_stats['is_locked'] = True
+            await world.db_manager.update_item_instance_stats(target_item.id, target_item.instance_stats)
+            await character.send(f"You lock the {target_item.name} with the {key_obj.name}.")
+        else:
+            await character.send("The key doesn't fit that lock.")
+        return True
+
+    await character.send(f"You don't see a '{target_name}' here to lock.")
+    return True
+        

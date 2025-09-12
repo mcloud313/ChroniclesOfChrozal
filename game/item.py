@@ -24,6 +24,7 @@ class Item:
         self.container_id: Optional[str] = instance_data.get('container_id')
         self.condition: int = instance_data.get('condition', 100)
         self.instance_stats: Dict[str, Any] = instance_data.get('instance_stats', {})
+        self.instance_stats.setdefault('is_open', False)
 
         # --- Runtime Attributes ---
         self.contents: Dict[str, 'Item'] = {}
@@ -114,6 +115,16 @@ class Item:
     @property
     def block_chance(self) -> float:
         return self._template_stats.get("block_chance", 0.0)
+    
+    @property
+    def is_open(self) -> bool:
+        """Checks if the container instance is open."""
+        return self.instance_stats.get('is_open', False)
+    
+    @property
+    def unlocks(self) -> List[str]:
+        """A list of lock_ids this item can unlock."""
+        return self._template_stats.get("unlocks", [])
 
     def has_flag(self, flag_name: str) -> bool:
         """Check if the item has a specific flag (case-insensitive)."""
@@ -121,3 +132,4 @@ class Item:
 
     def __repr__(self) -> str:
         return f"<Item {self.id} (Template: {self.template_id})>"
+    

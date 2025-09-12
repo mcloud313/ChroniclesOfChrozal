@@ -15,24 +15,51 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-
-async def cmd_look(character: 'Character', world: ' World', args_str: str) -> bool:
-    """Handles looking at the room, characters, mobs or other objects."""
+async def cmd_look(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Handles looking at the room, characters, mobs, or other objects."""
     if not character.location:
-        await character.send("You are floating in an endless void...somehow.")
+        await character.send("You are floating in an endless void... somehow.")
         return True
     
+    # --- NEW: Handle "look in <container>" ---
+    if args_str.lower().startswith("in "):
+        container_name = args_str[3:].strip()
+        
+        # Search for the container in the character's inventory/equipment first
+        container = character.find_container_by_name(container_name)
+        
+        # If not found, search for a container in the room
+        if not container:
+            container = character.location.get_item_instance_by_name(container_name, world)
+            if container and container.capacity <= 0: # Make sure it's actually a container
+                container = None
+
+        if not container:
+            await character.send(f"You don't see a '{container_name}' here to look inside.")
+            return True
+        
+        if not container.is_open:
+            await character.send(f"The {container.name} is closed.")
+            return True
+        
+        # Display the contents
+        if not container.contents:
+            await character.send(f"The {container.name} is empty.")
+        else:
+            contents_list = ", ".join(item.name for item in container.contents.values())
+            await character.send(f"The {container.name} contains: {contents_list}.")
+        return True
+
+    # --- Original look logic, with one addition for container state ---
     target_name = args_str.strip().lower()
 
     # Case 1: Look at the room (no arguments)
     if not target_name or target_name == "here":
-        # This part is updated to use the new item instance system
         room_desc = character.location.get_look_string(character, world)
         await character.send(room_desc)
 
         ground_items_output = []
         item_counts = {}
-        #Count item instances by their template name
         for item_id in character.location.item_instance_ids:
             item_obj = world.get_item_object(item_id)
             if item_obj:
@@ -52,23 +79,14 @@ async def cmd_look(character: 'Character', world: ' World', args_str: str) -> bo
     # Case 2: Look at a specific target
     target_char = character.location.get_character_by_name(target_name)
     if target_char:
-        # --- Enhanced player look description ---
         output = []
-
-        # 1. Show the character's description
         description = target_char.description.strip()
         if not description:
             description = f"{target_char.name} looks rather ordinary."
         output.append(description)
-
-        # 2. Show the descriptive health status
         output.append(utils.get_health_desc(target_char))
-
-        # 3. Show the equipment list
         output.append(f"\n\r{target_char.first_name} is using:")
-
         equipped_items_desc = []
-        # Iterate through the canonical list of slots for a consistent order
         for slot in slots.ALL_SLOTS:
             item = target_char._equipped_items.get(slot)
             if item:
@@ -83,7 +101,6 @@ async def cmd_look(character: 'Character', world: ' World', args_str: str) -> bo
         await character.send("\n\r".join(output))
         return True
     
-    # Case 3: Look at mobs, objects, or items (mostly unchanged)
     target_mob = character.location.get_mob_by_name(target_name)
     if target_mob:
         await character.send(f"\n\r{target_mob.description}")
@@ -94,12 +111,10 @@ async def cmd_look(character: 'Character', world: ' World', args_str: str) -> bo
         await character.send(f"\n\r{target_obj_data.get('description', 'It looks unremarkable.')}")
         return True
     
-    # Check for item in room or inventory
     item_to_examine = (character.location.get_item_instance_by_name(target_name, world) or
                        character.find_item_in_inventory_by_name(target_name))
     
     if item_to_examine:
-        # Use the logic from the examine command
         uuid_str = f"{{i({item_to_examine.id}){{x"
         examine_output = [
             f"\n\r--- {item_to_examine.name} {uuid_str} ---",
@@ -107,6 +122,11 @@ async def cmd_look(character: 'Character', world: ' World', args_str: str) -> bo
             utils.get_condition_desc(item_to_examine.condition),
             f"Type: {item_to_examine.item_type.capitalize()}, Weight: {item_to_examine.weight} stones"
         ]
+        
+        # --- NEW: Add open/closed state to description ---
+        if item_to_examine.capacity > 0:
+            examine_output.append("It is open." if item_to_examine.is_open else "It is closed.")
+
         await character.send("\n\r".join(examine_output))
         return True
 
@@ -128,7 +148,6 @@ async def cmd_say(character: 'Character', world: 'World', args_str: str) -> bool
     await character.location.broadcast(f"\r\n{character.first_name} says, \"{message}\"", exclude={character})
     return True
 
-
 async def cmd_quit(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'quit' command."""
     await character.send("Farewell!")
@@ -136,7 +155,6 @@ async def cmd_quit(character: 'Character', world: 'World', args_str: str) -> boo
     # REFACTOR: Call the character's own save method.
     await character.save()
     return False
-
 
 async def cmd_who(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'who' command, listing online characters."""
@@ -159,7 +177,6 @@ async def cmd_who(character: 'Character', world: 'World', args_str: str) -> bool
     await character.send("\r\n".join(output))
     return True
 
-
 async def cmd_help(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'help' command."""
     output = ("\r\n--- Basic Commands ---\r\n"
@@ -176,7 +193,6 @@ async def cmd_help(character: 'Character', world: 'World', args_str: str) -> boo
               "----------------------")
     await character.send(output)
     return True
-
 
 async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'score' or 'stats' command."""
@@ -215,7 +231,6 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
     )
     await character.send(output)
     return True
-
 
 async def cmd_advance(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'advance' command for leveling up."""
@@ -259,7 +274,6 @@ async def cmd_advance(character: 'Character', world: 'World', args_str: str) -> 
     await character.save()
     return True
 
-
 async def cmd_skills(character: 'Character', world: 'World', args_str: str) -> bool:
     """Displays the character's known skills and ranks."""
     output = [
@@ -277,7 +291,6 @@ async def cmd_skills(character: 'Character', world: 'World', args_str: str) -> b
     output.append("==========================================")
     await character.send("\r\n".join(output))
     return True
-
 
 async def cmd_meditate(character: 'Character', world: 'World', args_str: str) -> bool:
     """Begins meditation to restore essence faster."""
@@ -297,7 +310,6 @@ async def cmd_meditate(character: 'Character', world: 'World', args_str: str) ->
             await character.location.broadcast(f"\r\n{character.name} sits down and begins meditating.", exclude={character})
     return True
 
-
 async def cmd_emote(character: 'Character', world: 'World', args_str: str) -> bool:
     """Performs an action visible to the room."""
     if not args_str:
@@ -309,7 +321,6 @@ async def cmd_emote(character: 'Character', world: 'World', args_str: str) -> bo
     if character.location:
         await character.location.broadcast(f"\r\n{character.name} {action_text}\r\n", exclude={character})
     return True
-
 
 async def cmd_tell(character: 'Character', world: 'World', args_str: str) -> bool:
     """Sends a private message to another player online."""
@@ -338,7 +349,6 @@ async def cmd_tell(character: 'Character', world: 'World', args_str: str) -> boo
     await character.send(f"\r\n[[You tell {target_char.name}]: {message}]")
     return True
 
-
 async def cmd_sit(character: 'Character', world: 'World', args_str: str) -> bool:
     """Makes the character sit down."""
     if character.stance == "Sitting":
@@ -352,7 +362,6 @@ async def cmd_sit(character: 'Character', world: 'World', args_str: str) -> bool
         if character.location:
             await character.location.broadcast(f"\r\n{character.name} sits down.\r\n", exclude={character})
     return True
-
 
 async def cmd_stand(character: 'Character', world: 'World', args_str: str) -> bool:
     """Makes the character stand up."""
@@ -373,7 +382,6 @@ async def cmd_stand(character: 'Character', world: 'World', args_str: str) -> bo
             await character.location.broadcast(f"\r\n{character.name} stands up.\r\n", exclude={character})
     return True
 
-
 async def cmd_lie(character: 'Character', world: 'World', args_str: str) -> bool:
     """Makes the character lie down."""
     if character.stance == "Lying":
@@ -387,3 +395,40 @@ async def cmd_lie(character: 'Character', world: 'World', args_str: str) -> bool
         if character.location:
             await character.location.broadcast(f"\r\n{character.name} lies down.\r\n", exclude={character})
     return True
+
+async def cmd_search(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Actively searches the room for hidden things like traps."""
+    if character.roundtime > 0:
+        await character.send("You are too busy to search right now.")
+        return True
+    
+    await character.send("You begin searching the area...")
+    character.roundtime = 10.0
+    found_anything = False
+    
+    # Search exits for traps
+    for exit_name, exit_data in character.location.exits.items():
+        if isinstance(exit_data, dict) and (trap := exit_data.get('trap')):
+            if trap.get('is_active'):
+                trap_id = f"exit_{exit_name}"
+                if trap_id not in character.detected_traps:
+                    if utils.skill_check(character, 'perception', dc=trap.get('perception_dc', 15))['success']:
+                        await character.send(f"{{yYou found a trap on the {exit_name}!{{x")
+                        character.detected_traps.add(trap_id)
+                        found_anything = True
+    # Search items (chests, etc.) in the room for traps
+    for item_obj in [world.get_item_object(iid) for iid in character.location.item_instance_ids]:
+        if item_obj and (trap := item_obj.instance_stats.get('trap')):
+            if trap.get('is_active'):
+                trap_id = f"item_{item_obj.id}"
+                if trap_id not in character.detected_traps:
+                    if utils.skill_check(character, 'perception', dc=trap.get('perception_dc', 15))['success']:
+                        await character.send(f"{{yYou found a trap on the {item_obj.name}!{{x")
+                        character.detected_traps.add(trap_id)
+                        found_anything = True
+    if not found_anything:
+        await character.send("You don't find anything unusual.")
+        
+    return True
+    
+                        

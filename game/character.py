@@ -165,6 +165,8 @@ class Character:
         self.pending_give_offer: Optional[Dict[str, Any]] = None
         self.status: str = db_data.get('status', 'ALIVE')
         self.stance: str = db_data.get('stance', 'Standing')
+        self.is_hidden: bool = False
+        self.detected_traps: set = set()
 
         # Load JSONB fields (asyncpg decodes these for us)
         self.stats: Dict[str, int] = db_data.get('stats') or {}
