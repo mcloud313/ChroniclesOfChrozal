@@ -1,27 +1,29 @@
 # game/combat.py
 """
-Handles combat calculations and resolution.
+Coordinates combat resolution by calling specialized modules.
 """
-import random
 import logging
+import random
 import math
 import time
 import json
-from typing import TYPE_CHECKING, Optional, Union, Dict, Any, Tuple, List
+from typing import Union, Dict, Any, Optional, Tuple, List, TYPE_CHECKING
 
+# The coordinator now imports all its helper modules
+from .combat import hit_resolver, damage_calculator, outcome_handler
 from .character import Character
 from .mob import Mob
 from .item import Item
-from . import utils
+from .world import World
 from .definitions import abilities as ability_defs
 
+log = logging.getLogger(__name__)
 # FIX: This is the circular import fix.
 # We only import World for type hinting, not at runtime.
 if TYPE_CHECKING:
     from .world import World
 
 log = logging.getLogger(__name__)
-
 
 def roll_exploding_dice(max_roll: int) -> int:
     """Rolls a die, exploding on the maximum result up to 10 times."""
@@ -43,163 +45,59 @@ async def resolve_physical_attack(
     ability_mods: Optional[Dict[str, Any]] = None,
     damage_multiplier: float = 1.0
 ):
-    """
-    Resolves a single physical attack round with detailed calculations and messaging.
-    """
+    """Resolves a physical attack by coordinating hit, damage, and outcome modules."""
     # --- 1. Initial Checks ---
     if not attacker.is_alive() or not target.is_alive() or attacker.location != target.location:
         return
 
-    # --- 2. Gather Attacker & Target Info ---
-    attacker_name = attacker.name.capitalize()
-    target_name = target.name.capitalize()
-    attacker_loc = attacker.location
-    
-    # --- 3. Determine Attack Variables ---
-    base_attacker_rating = attacker.mar
-    relevant_weapon_skill: Optional[str] = None
-    weapon: Optional[Item] = None
-    attk_name = "attack"
+    # --- 2. Determine Attack Variables (CRITICAL: Do this first!) ---
     wpn_speed = 2.0
-    wpn_base_dmg, wpn_rng_dmg = 1, 0
-    dmg_type = ability_defs.DAMAGE_PHYSICAL
-    base_stat_modifier = attacker.might_mod
-
-    # Apply ability modifiers if this is a special attack
-    if ability_mods:
-        base_attacker_rating = math.floor(base_attacker_rating * ability_mods.get('mar_modifier_mult', 1.0))
-
     if isinstance(attacker, Character):
         if isinstance(attack_source, Item) and attack_source.item_type == "WEAPON":
-            weapon = attack_source
-            attk_name = f"attack with {weapon.name}"
-            wpn_speed, wpn_base_dmg, wpn_rng_dmg, dmg_type = weapon.speed, weapon.damage_base, weapon.damage_rng, weapon.damage_type or "physical"
-            if dmg_type == "slash": relevant_weapon_skill = "bladed weapons"
-            elif dmg_type == "pierce": relevant_weapon_skill = "piercing weapons"
-            elif dmg_type == "bludgeon": relevant_weapon_skill = "bludgeon weapons"
-        else: # Unarmed
-            attk_name, relevant_weapon_skill, wpn_base_dmg, wpn_rng_dmg = "punch", "martial arts", 1, 2
+            wpn_speed = attack_source.speed
+        # Unarmed speed is default 2.0
     elif isinstance(attacker, Mob) and isinstance(attack_source, dict):
-        attk_name = attack_source.get("name", "strike")
         wpn_speed = attack_source.get("speed", 2.0)
-        wpn_base_dmg, wpn_rng_dmg = attack_source.get("damage_base", 1), attack_source.get("damage_rng", 0)
 
-    # --- 4. Hit Check ---
-    weapon_skill_bonus = math.floor(attacker.get_skill_rank(relevant_weapon_skill) / 10) if relevant_weapon_skill else 0
-    final_attacker_rating = base_attacker_rating + weapon_skill_bonus
-    final_target_dv = target.dv
+    # Calculate roundtime penalty once
+    rt_penalty = attacker.get_total_av * 0.05 if isinstance(attacker, Character) else 0.0
 
-    hit_roll = random.randint(1, 20)
-    is_crit, is_fumble = (hit_roll == 20), (hit_roll == 1)
-    is_hit = is_crit or (not is_fumble and (final_attacker_rating + hit_roll) >= final_target_dv)
-
-    # --- 5. Resolve Miss or Fumble ---
-    if not is_hit:
+    # --- 3. Resolve Hit/Miss ---
+    hit_result = hit_resolver.check_physical_hit(attacker, target)
+    if not hit_result.is_hit:
+        await attacker.send(f"You try to attack {target.name}, but miss.")
+        # Apply correct roundtime on a miss
         attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
-        await attacker.send(f"You try to {attk_name} {target_name}, but miss.")
-        if isinstance(target, Character):
-            await target.send(f"{attacker_name} tries to {attk_name} you, but misses.")
-        await attacker_loc.broadcast(f"\r\n{attacker_name} misses {target_name}.\r\n", exclude={attacker, target})
         return
 
-    # --- 6. Resolve Block (if hit) ---
+    # --- 4. Resolve Block ---
     if isinstance(target, Character) and (shield := target.get_shield()):
         shield_skill_rank = target.get_skill_rank("shield usage")
         block_chance = shield.block_chance + (math.floor(shield_skill_rank / 10) * 0.01)
         if random.random() < block_chance:
-            attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty 
-            await attacker.send(f"{{y{target_name} blocks your {attk_name} with their shield!{{x")
-            await target.send(f"{{gYou block {attacker_name}'s {attk_name} with your shield!{{x")
-            await attacker_loc.broadcast(f"\r\n{target_name} blocks {attacker_name}'s attack.\r\n", exclude={attacker, target})
+            await attacker.send(f"{{y{target.name} blocks your attack with their shield!{{x")
+            await target.send(f"{{gYou block {attacker.name}'s attack with your shield!{{x")
+            # Apply correct roundtime on a block
+            attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
             return
-        
-    # --- 6a. Attacker weapon durability
-    if isinstance(attacker, Character) and isinstance(attack_source, Item) and attack_source.item_type == "WEAPON":
-        if random.random() < 0.10: # 10% chance
-            attack_source.condition -= 1
-            # update the database
-            await world.db_manager.update_item_condition(attack_source.id, attack_source.condition)
 
-            if attack_source.condition <= 0:
-                await attacker.send(f"{{RYour {attack_source.name} shatters into pieces!{{x")
-                # Remove from memory
-                del attacker._equipped_items[attack_source.wear_location[0]] # Assumes single wield slot
-                del world._all_item_instances[attack_source.id]
-                # remove from database
-                await world.db_manager.delete_item_instance(attack_source.id)
-            elif attack_source.condition <= 10:
-                await attacker.send(f"{{yYour {attack_source.name} is badly damaged.{{x")
+    # --- 5. Calculate and Mitigate Damage ---
+    damage_info = damage_calculator.calculate_physical_damage(attacker, attack_source, hit_result.is_crit)
+    if damage_multiplier != 1.0:
+        damage_info.pre_mitigation_damage = int(damage_info.pre_mitigation_damage * damage_multiplier)
+    final_damage = damage_calculator.mitigate_damage(target, damage_info)
 
-    # --- 7. Calculate Damage ---
-    rng_roll_result = random.randint(1, wpn_rng_dmg) if wpn_rng_dmg > 0 else 0
-    if is_crit:
-        rng_roll_result += roll_exploding_dice(wpn_rng_dmg)
-    
-    pre_mitigation_damage = max(0, wpn_base_dmg + rng_roll_result + base_stat_modifier)
-    
-    pre_mitigation_damage = int(pre_mitigation_damage * damage_multiplier)
-    
-    # --- 8. Mitigate Damage ---
-    mit_pds = target.pds
-    mit_av = target.get_total_av()
-    mit_bv = math.floor(target.barrier_value / 2)
-    
-    final_damage = max(0, pre_mitigation_damage - mit_pds - mit_av - mit_bv)
+    # --- 6. Handle Consequences ---
+    await outcome_handler.handle_durability(attacker, target, attack_source, world)
+    outcome_handler.apply_damage(target, final_damage)
+    await outcome_handler.send_attack_messages(attacker, target, hit_result, final_damage)
 
-    # --- 8a. Target armor durability
-    if isinstance(target, Character):
-        # Get all equipped armor pieces
-        armor_pieces = [item for item in target._equipped_items.values() if item.item_type == "ARMOR"]
-        if armor_pieces and random.random() < 0.10: # 10% chance
-            # Choose a random piece of armor to damage
-            armor_hit = random.choice(armor_pieces)
-            armor_hit.condition -= 1
-            # Update the database
-            await world.db_manager.update_item_condition(armor_hit.id, armor_hit.condition)
-
-            if armor_hit.condition <= 0:
-                await target.send(f"{{RYour {armor_hit.name} is destroyed by the blow!{{x")
-                # Remove from memory
-                del target._equipped_items[armor_hit.wear_location] # Assumes single slot
-                del world._all_item_instances[armor_hit.id]
-                # Remove from database
-                await world.db_manager.delete_item_instance(armor_hit.id)
-            elif armor_hit.condition <= 10:
-                await target.send(f"{{yYour {armor_hit.name} was damaged.{{x")
-
-    #8b. Apply resistances/vulnerabilities ----
-    resistance = target.resistances.get(dmg_type, 0.0)
-    if resistance != 0:
-        multiplier = 1.0 - (resistance / 100.0)
-        final_damage = int(final_damage * multiplier)
-
-
-    # --- 9. Apply Damage & Send Messages ---
-    target.hp = max(0.0, target.hp - final_damage)
-    
-    hit_desc = "{rCRITICALLY HIT{x" if is_crit else "hit"
-    if isinstance(attacker, Character):
-        await attacker.send(f"You {hit_desc} {target_name} for {{y{int(final_damage)}{{x damage!")
-    if isinstance(target, Character):
-        await target.send(f"{{R{attacker_name} {hit_desc.upper()}S you for {{y{int(final_damage)}{{x damage!{{x ({int(target.hp)}/{int(target.max_hp)} HP)")
-    if attacker_loc:
-        await attacker_loc.broadcast(f"\r\n{attacker_name} {hit_desc}s {target_name}!\r\n", exclude={attacker, target})
-
-    if isinstance(target, Character) and target.status == "MEDITATING" and final_damage > 0:
-        target.status = "ALIVE"
-        await target.send("{RThe force of the blow shatters your concentration!{x")
-        if attacker_loc:
-            await attacker_loc.broadcast(f"\r\n{target_name} is snapped out of their meditative trance by the attack!\r\n", exclude={target})
-
-    # --- 10. Apply Roundtime ---
-    rt_penalty = 0.0
-    if isinstance(attacker, Character):
-        rt_penalty = attacker.get_total_av() * 0.05
-    attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
-    
-    # --- 11. Check for Defeat ---
+    # --- 7. Check for Defeat ---
     if target.hp <= 0:
-        await handle_defeat(attacker, target, world)
+        await outcome_handler.handle_defeat(attacker, target, world)
+
+    # --- 8. Apply Final Roundtime for a successful hit ---
+    attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
 
 async def resolve_magical_attack(
     caster: Union[Character, Mob], 
@@ -270,7 +168,7 @@ async def resolve_magical_attack(
 
     # --- 7. Check for Defeat ---
     if target.hp <= 0:
-        await handle_defeat(caster, target, world)
+        await outcome_handler.handle_defeat(caster, target, world)
 
 async def resolve_ability_effect(
     caster: Character,
@@ -518,102 +416,7 @@ async def apply_dot_damage(target: Union[Character, Mob], effect_data: Dict[str,
             name = f"the {effect_type}"
             location = target.location
 
-        await handle_defeat(EffectAttacker(), target, world)
-
-async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character, Mob], world: 'World'):
-    """Handles logic for when a target's HP reaches 0, with group reward sharing."""
-    attacker_name = getattr(attacker, 'name', 'Something').capitalize()
-    target_name = getattr(target, 'name', 'Something').capitalize()
-    target_loc = getattr(target, 'location', None)
-
-    log.info("%s has defeated %s!", attacker_name, target_name)
-
-    # --- Mob Defeat Logic ---
-    if isinstance(target, Mob):
-        if isinstance(attacker, Character):
-            await attacker.send(f"You have slain {target_name}!")
-        if target_loc:
-            await target_loc.broadcast(f"\r\n{attacker_name} has slain {target_name}!\r\n", exclude={attacker})
-        
-        target.die()
-        
-        dropped_coinage, dropped_item_ids = determine_loot(target.loot_table)
-        base_xp = 50
-        xp_gain = max(1, target.level * base_xp + random.randint(-base_xp // 2, base_xp // 2))
-        killer = attacker if isinstance(attacker, Character) else None
-
-        # Check if this was a group kill with other members present
-        is_group_kill = False
-        if killer and killer.group:
-            present_members = [m for m in killer.group.members if m.location == killer.location and m.is_alive()]
-            if len(present_members) > 1:
-                is_group_kill = True
-
-        # --- Group Kill Logic ---
-        if is_group_kill:
-            group_xp_total = int(xp_gain * 0.80) # 80% XP penalty/bonus for groups
-            xp_per_member = group_xp_total // len(present_members)
-            
-            coins_per_member = dropped_coinage // len(present_members)
-            remainder_coins = dropped_coinage % len(present_members)
-            
-            await killer.group.broadcast(f"{{yYour group receives {group_xp_total} XP and {utils.format_coinage(dropped_coinage)}!{{x")
-            
-            for member in present_members:
-                await award_xp_to_character(member, xp_per_member)
-                member.coinage += coins_per_member
-            
-            killer.group.leader.coinage += remainder_coins
-
-        # --- Solo Kill Logic ---
-        elif killer:
-            await award_xp_to_character(killer, xp_gain)
-            if dropped_coinage > 0 and target_loc:
-                await target_loc.add_coinage(dropped_coinage, world)
-                await target_loc.broadcast(f"\r\n{utils.format_coinage(dropped_coinage)} falls from {target_name}!\r\n")
-
-        # --- Item Drop Logic (Shared by Solo and Group) ---
-        if dropped_item_ids and target_loc:
-            dropped_item_names = []
-            for template_id in dropped_item_ids:
-                # Create a new unique instance of the item in the room
-                instance_data = await world.db_manager.create_item_instance(template_id, room_id=target_loc.dbid)
-                if instance_data:
-                    template = world.get_item_template(template_id)
-                    item_obj = Item(instance_data, template)
-
-                    # Add the new item to the world's in memory state
-                    world._all_item_instances[item_obj.id] = item_obj
-                    target_loc.item_instance_ids.append(item_obj.id)
-                    dropped_item_names.append(template['name'])
-            if dropped_item_names:
-                await target_loc.broadcast(f"\r\n{target_name}'s corpse drops: {', '.join(dropped_item_names)}.\r\n")
-
-    # --- Character Defeat Logic ---
-    elif isinstance(target, Character) and target.status == "ALIVE":
-        target.hp, target.status, target.stance = 0, "DYING", "Lying"
-        target.is_fighting, target.target, target.casting_info = False, None, None
-
-        target.xp_pool = 0.0
-        xp_at_start_of_level = utils.xp_needed_for_level(target.level - 1) if target.level > 1 else 0
-        xp_progress = target.xp_total - xp_at_start_of_level
-        xp_penalty = math.floor(xp_progress * 0.10)
-        target.xp_total = max(xp_at_start_of_level, target.xp_total - xp_penalty)
-        
-        await target.send("{rYou feel some of your experience drain away...{x")
-
-        timer_duration = float(target.stats.get('vitality', 10))
-        target.death_timer_ends_at = time.monotonic() + timer_duration
-        
-        coinage_to_drop = int(target.coinage * 0.10)
-        if coinage_to_drop > 0 and target_loc:
-            target.coinage -= coinage_to_drop
-            await target_loc.add_coinage(coinage_to_drop, world)
-            await target_loc.broadcast(f"\r\nSome coins fall from {target.name} as they collapse!\r\n", exclude={target})
-
-        await target.send("\r\n{r*** YOU ARE DYING! ***{x")
-        if target_loc:
-            await target_loc.broadcast(f"\r\n{target_name} collapses to the ground, dying!\r\n", exclude={target})
+        await outcome_handler.handle_defeat(EffectAttacker(), target, world)
 
 def determine_loot(loot_table: Dict[str, Any]) -> Tuple[int, List[int]]:
     """Calculates loot based on the provided loot_table dictionary."""
