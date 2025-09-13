@@ -60,6 +60,10 @@ class Areas(models.Model):
     created_at = models.DateTimeField()
     updated_at = models.DateTimeField()
 
+    # --- ADD THIS METHOD ---
+    def __str__(self):
+        return self.name
+
     class Meta:
         managed = False
         db_table = 'areas'

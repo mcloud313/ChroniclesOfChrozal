@@ -12,7 +12,7 @@ from .models import (
     ShopInventories,
     BankAccounts
 )
-from .forms import RoomAdminForm, EXIT_DIRECTIONS, MobTemplateAdminForm
+from .forms import RoomAdminForm, EXIT_DIRECTIONS, MobTemplateAdminForm, STAT_NAMES
 
 # --- Custom Admin for Rooms ---
 class RoomAdmin(admin.ModelAdmin):
@@ -22,7 +22,6 @@ class RoomAdmin(admin.ModelAdmin):
     search_fields = ('name', 'description')
 
     def save_model(self, request, obj, form, change):
-        # Build exits_json
         exits_json = {}
         for direction in EXIT_DIRECTIONS:
             target_room = form.cleaned_data.get(f'{direction}_exit')
@@ -32,17 +31,17 @@ class RoomAdmin(admin.ModelAdmin):
 
         # Build spawners_json
         spawners_json = {}
-        for i in range(1, 6):
+        for i in range(1, 6): # Loop through our 5 spawner slots
             mob_template = form.cleaned_data.get(f'spawner_mob_{i}')
             max_present = form.cleaned_data.get(f'spawner_count_{i}')
+            
             if mob_template and max_present:
                 spawners_json[str(mob_template.id)] = {"max_present": max_present}
+        
         obj.spawners = spawners_json
         
         super().save_model(request, obj, form, change)
 
-
-# --- NEW: Custom Admin for Mob Templates ---
 class MobTemplateAdmin(admin.ModelAdmin):
     form = MobTemplateAdminForm
     list_display = ('name', 'id', 'level')
@@ -77,6 +76,15 @@ class MobTemplateAdmin(admin.ModelAdmin):
         
         # Assign the newly constructed JSON to the mob's loot field
         obj.loot = loot_json
+
+        # Build flags json
+        obj.flags = form.cleaned_data.get('flags', [])
+
+        # Build stats_json
+        stats_json = {}
+        for stat_name in STAT_NAMES: 
+            stats_json[stat_name] = form.cleaned_data.get(f'stat_{stat_name}', 10)
+        obj.stats = stats_json
         
         # Call the original save method
         super().save_model(request, obj, form, change)

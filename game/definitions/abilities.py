@@ -30,20 +30,6 @@ EFFECT_MODIFIED_ATTACK = "MODIFIED_ATTACK" # For abilities like power strike
 EFFECT_STUN_ATTEMPT = "STUN_ATTEMPT"
 # Add more later: SUMMON, TELEPORT, UTILITY etc.
 
-#--- Constants for damage types
-DAMAGE_PHYSICAL = "physical"
-DAMAGE_SLASH = "slash"
-DAMAGE_PIERCE = "pierce"
-DAMAGE_BLUDGEON = "bludgeon"
-DAMAGE_FIRE = "fire"
-DAMAGE_COLD = "cold"
-DAMAGE_LIGHTNING = "lightning"
-DAMAGE_EARTH = "earth"
-DAMAGE_ARCANE = "arcane"
-DAMAGE_DIVINE = "divine"
-DAMAGE_POISON = "poison"
-DAMAGE_SONIC = "sonic"
-
 # --- Constants for Stats Affected by Buff/Debuff ---
 STAT_ARMOR_VALUE = "armor_value"
 STAT_BARRIER_VALUE = "barrier_value" # NEW: For Mage Armor / Magic defense

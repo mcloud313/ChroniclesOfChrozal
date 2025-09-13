@@ -169,6 +169,13 @@ class DatabaseManager:
                     )
                 """)
                 await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS damage_types (
+                                   id SERIAL PRIMARY KEY,
+                                   name TEXT UNIQUE NOT NULL,
+                                   is_magical BOOLEAN NOT NULL DEFAULT FALSE
+                                   )
+                                   """)
+                await conn.execute("""
                     CREATE TABLE IF NOT EXISTS characters (
                         id SERIAL PRIMARY KEY,
                         player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
@@ -284,6 +291,17 @@ class DatabaseManager:
                 # Test Players
                 await conn.execute("INSERT INTO players (username, hashed_password, email, is_admin) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING", "tester", utils.hash_password("password"), "tester@example.com", False)
                 await conn.execute("INSERT INTO players (username, hashed_password, email, is_admin) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING", "admin", utils.hash_password("password"), "admin@example.com", True)
+                # Seed Damage Types
+                damage_types_to_seed = [
+                    ('slash', False), ('pierce', False), ('bludgeon', False),
+                    ('fire', True), ('cold', True), ('lightning', True),
+                    ('earth', True), ('arcane', True), ('divine', True),
+                    ('poison', True), ('sonic', True)
+                ]
+                await conn.executemany(
+                    "INSERT INTO damage_types (name, is_magical) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING",
+                    damage_types_to_seed
+                )
                 
         log.info("--- PostgreSQL schema check complete ---")
 

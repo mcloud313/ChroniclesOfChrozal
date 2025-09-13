@@ -62,9 +62,10 @@ class World:
                 self.db_manager.fetch_all("SELECT * FROM mob_templates ORDER BY id"),
                 self.db_manager.fetch_all("SELECT * FROM rooms ORDER BY id"),
                 self.db_manager.fetch_all("SELECT * FROM shop_inventories ORDER BY room_id"),
-                self.db_manager.fetch_all("SELECT * FROM ability_templates")
+                self.db_manager.fetch_all("SELECT * FROM ability_templates"),
+                self.db_manager.fetch_all("SELECT * FROM damage_types") 
             )
-            area_rows, race_rows, class_rows, item_rows, mob_rows, room_rows, shop_rows, ability_rows = results
+            area_rows, race_rows, class_rows, item_rows, mob_rows, room_rows, shop_rows, ability_rows, damage_type_rows = results
 
             self.areas = {row['id']: dict(row) for row in area_rows or []}
             self.races = {row['id']: dict(row) for row in race_rows or []}
@@ -76,15 +77,17 @@ class World:
                      len(self.areas), len(self.races), len(self.classes), len(self.item_templates), len(self.mob_templates))
             
             if shop_rows:
-                # Group all shop items by their room_id
                 for room_id, items_in_shop in groupby(shop_rows, key=itemgetter('room_id')):
-                    # Store the list of item dictionaries for that room
                     self.shop_inventories[room_id] = [dict(item) for item in items_in_shop]
                 log.info("Loaded inventories for %d shops.", len(self.shop_inventories))
 
             if ability_rows:
                 self.abilities = {row['internal_name']: dict(row) for row in ability_rows}
                 log.info("Loaded %d abilities.", len(self.abilities))
+
+            if damage_type_rows:
+                self.damage_types = {row['name']: dict(row) for row in damage_type_rows}
+                log.info("Loaded %d damage types.", len(self.damage_types))
             
             if not room_rows:
                 log.error("Failed to load rooms or no rooms found in database.")

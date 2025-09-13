@@ -20,13 +20,6 @@ from .definitions import abilities as ability_defs
 if TYPE_CHECKING:
     from .world import World
 
-
-MAGICAL_DAMAGE_TYPES = {
-    ability_defs.DAMAGE_FIRE, ability_defs.DAMAGE_COLD, ability_defs.DAMAGE_LIGHTNING,
-    ability_defs.DAMAGE_EARTH, ability_defs.DAMAGE_ARCANE, ability_defs.DAMAGE_DIVINE,
-    ability_defs.DAMAGE_POISON, ability_defs.DAMAGE_SONIC,
-}
-
 log = logging.getLogger(__name__)
 
 

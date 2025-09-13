@@ -1,3 +1,26 @@
+import os
+
+# --- FINAL: Dynamic Host Configuration for Codespaces ---
+# Start with defaults that cover local access via VS Code or browser
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+CSRF_TRUSTED_ORIGINS = [
+    'https://localhost:8000',
+    'https://localhost:8001',
+    'http://localhost:8000',
+    'http://localhost:8001',
+]
+
+# If running in a GitHub Codespace, add its dynamic URL as well
+if 'CODESPACE_NAME' in os.environ:
+    codespace_name = os.environ['CODESPACE_NAME']
+    codespace_domain = os.environ.get('GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN', 'app.github.dev')
+    
+    for port in ['8000', '8001']:
+        codespace_url = f'{codespace_name}-{port}.{codespace_domain}'
+        ALLOWED_HOSTS.append(codespace_url)
+        CSRF_TRUSTED_ORIGINS.append(f'https://{codespace_url}')
+
+
 """
 Django settings for worldpainter_config project.
 
@@ -24,9 +47,6 @@ SECRET_KEY = "django-insecure-ik53=05dz)8aowf-vfc+lxsv_rp^utby!j$zx3c84t1k)7&=88
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
-
-ALLOWED_HOSTS = []
-
 
 # Application definition
 
@@ -79,8 +99,9 @@ DATABASES = {
         'NAME': 'chrozaldb',
         'USER': 'chrozal',
         'PASSWORD': 'timcp313',
-        'HOST': 'db',  # This is the service name from your docker-compose.yml
+        'HOST': 'db',
         'PORT': '5432',
+        'ATOMIC_REQUESTS': True,  # <-- This is the correct setting
     }
 }
 
@@ -125,3 +146,4 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
