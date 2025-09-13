@@ -117,23 +117,33 @@ class DatabaseManager:
                 """)
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS mob_templates (
-                    id SERIAL PRIMARY KEY,
-                    name TEXT UNIQUE NOT NULL,
-                    description TEXT DEFAULT 'A creature.',
-                    mob_type TEXT,
-                    level INTEGER NOT NULL DEFAULT 1,
-                    stats JSONB DEFAULT '{}'::jsonb,
-                    resistances JSONB DEFAULT '{}'::jsonb,
-                    max_hp INTEGER NOT NULL DEFAULT 10,
-                    attacks JSONB DEFAULT '[]'::jsonb,
-                    loot JSONB DEFAULT '{}'::jsonb,
-                    flags JSONB DEFAULT '[]'::jsonb,
-                    respawn_delay_seconds INTEGER DEFAULT 300,
-                    variance JSONB DEFAULT '{}'::jsonb,
-                    movement_chance REAL NOT NULL DEFAULT 0.0,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                )
+                        id SERIAL PRIMARY KEY,
+                        name TEXT UNIQUE NOT NULL,
+                        description TEXT DEFAULT 'A creature.',
+                        mob_type TEXT,
+                        level INTEGER NOT NULL DEFAULT 1,
+                        stats JSONB DEFAULT '{}'::jsonb,
+                        resistances JSONB DEFAULT '{}'::jsonb,
+                        max_hp INTEGER NOT NULL DEFAULT 10,
+                        loot JSONB DEFAULT '{}'::jsonb,
+                        flags JSONB DEFAULT '[]'::jsonb,
+                        respawn_delay_seconds INTEGER DEFAULT 300,
+                        variance JSONB DEFAULT '{}'::jsonb,
+                        movement_chance REAL NOT NULL DEFAULT 0.0,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS mob_attacks (
+                        id SERIAL PRIMARY KEY,
+                        mob_template_id INTEGER NOT NULL REFERENCES mob_templates(id) ON DELETE CASCADE,
+                        name TEXT NOT NULL,
+                        damage_base INTEGER DEFAULT 1,
+                        damage_rng INTEGER DEFAULT 0,
+                        speed REAL DEFAULT 2.0,
+                        attack_type TEXT DEFAULT 'physical'
+                    )
                 """)
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS ability_templates (

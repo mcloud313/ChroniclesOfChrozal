@@ -60,12 +60,14 @@ class World:
                 self.db_manager.fetch_all("SELECT * FROM classes ORDER BY id"),
                 self.db_manager.fetch_all("SELECT * FROM item_templates ORDER BY id"),
                 self.db_manager.fetch_all("SELECT * FROM mob_templates ORDER BY id"),
+                self.db_manager.fetch_all("SELECT * FROM mob_attacks ORDER BY mob_template_id"),
                 self.db_manager.fetch_all("SELECT * FROM rooms ORDER BY id"),
                 self.db_manager.fetch_all("SELECT * FROM shop_inventories ORDER BY room_id"),
                 self.db_manager.fetch_all("SELECT * FROM ability_templates"),
                 self.db_manager.fetch_all("SELECT * FROM damage_types") 
             )
-            area_rows, race_rows, class_rows, item_rows, mob_rows, room_rows, shop_rows, ability_rows, damage_type_rows = results
+            (area_rows, race_rows, class_rows, item_rows, mob_rows, attack_rows, room_rows, shop_rows, 
+            ability_rows, damage_type_rows) = results
 
             self.areas = {row['id']: dict(row) for row in area_rows or []}
             self.races = {row['id']: dict(row) for row in race_rows or []}
@@ -75,6 +77,9 @@ class World:
 
             log.info("Loaded %d areas, %d races, %d classes, %d item templates, %d mob templates.",
                      len(self.areas), len(self.races), len(self.classes), len(self.item_templates), len(self.mob_templates))
+            
+            for template in self.mob_templates.values():
+                template['attacks'] = []
             
             if shop_rows:
                 for room_id, items_in_shop in groupby(shop_rows, key=itemgetter('room_id')):
