@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Optional, Dict, Any
 
 from .. import utils
-from .. import combat as combat_logic
+from .. import resolver as combat_logic
 
 if TYPE_CHECKING:
     from ..character import Character

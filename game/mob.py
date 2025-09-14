@@ -225,7 +225,7 @@ class Mob:
 
     async def simple_ai_tick(self, dt: float, world: 'World'):
         """Basic AI logic called by the world ticker."""
-        from . import combat
+        from . import resolver
 
         if not self.is_alive() or self.roundtime > 0:
             return
@@ -246,10 +246,10 @@ class Mob:
                 if attack_data:
                     try:
                         damage_type = attack_data.get("damage_type", "physical").lower()
-                        if damage_type in combat.MAGICAL_DAMAGE_TYPES:
-                            await combat.resolve_magical_attack(self, self.target, attack_data, world)
+                        if damage_type in resolver.MAGICAL_DAMAGE_TYPES:
+                            await resolver.resolve_magical_attack(self, self.target, attack_data, world)
                         else:
-                            await combat.resolve_physical_attack(self, self.target, attack_data, world)
+                            await resolver.resolve_physical_attack(self, self.target, attack_data, world)
                     except Exception as e:
                         log.exception("Error during mob %s attack: %s", self.name, e)
                         self.roundtime = 1.0

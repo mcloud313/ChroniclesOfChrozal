@@ -57,7 +57,7 @@ def mitigate_damage(target: Union[Character, Mob], damage_info: DamageInfo) -> i
     
     # Base mitigation from stats and armor
     mit_pds = target.pds
-    mit_av = target.get_total_av
+    mit_av = target.total_av
     mit_bv = math.floor(target.barrier_value / 2) # Barriers are half effective vs physical
     
     post_armor_damage = max(0, pre_mitigation_damage - mit_pds - mit_av - mit_bv)

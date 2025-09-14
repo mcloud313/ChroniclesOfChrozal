@@ -7,7 +7,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from game.mob import Mob
-from game import combat
+from game import resolver
 
 # FIX 1: Use a single, async-compatible test class for all tests in this file.
 class TestMobLogic(unittest.IsolatedAsyncioTestCase):
@@ -45,7 +45,7 @@ class TestMobLogic(unittest.IsolatedAsyncioTestCase):
                 {"template_id": 102, "chance": 0.0}
             ]
         }
-        dropped_coinage, dropped_items = combat.determine_loot(loot_table)
+        dropped_coinage, dropped_items = resolver.determine_loot(loot_table)
         self.assertGreaterEqual(dropped_coinage, 0)
         self.assertIn(101, dropped_items)
         self.assertNotIn(102, dropped_items)

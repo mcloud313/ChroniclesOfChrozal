@@ -114,6 +114,8 @@ async def cmd_drop(character: 'Character', world: 'World', args_str: str) -> boo
     del character._inventory_items[item_to_drop.id]
     character.location.item_instance_ids.append(item_to_drop.id)
 
+    world.mark_room_dirty(character.location)
+
     await character.send(f"You drop {item_to_drop.name}.")
     await character.location.broadcast(f"\r\n{character.name} drops {item_to_drop.name}.\r\n", exclude={character})
     return True

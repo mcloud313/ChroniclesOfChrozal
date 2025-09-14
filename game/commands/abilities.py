@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional, Union
 from ..definitions import abilities as ability_defs
 from ..mob import Mob
 from ..character import Character
-from .. import combat as combat_logic
+from .. import resolver as combat_logic
 from .. import utils
 
 if TYPE_CHECKING:

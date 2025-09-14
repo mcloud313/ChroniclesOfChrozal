@@ -18,8 +18,6 @@ from .world import World
 from .definitions import abilities as ability_defs
 
 log = logging.getLogger(__name__)
-# FIX: This is the circular import fix.
-# We only import World for type hinting, not at runtime.
 if TYPE_CHECKING:
     from .world import World
 
@@ -60,7 +58,7 @@ async def resolve_physical_attack(
         wpn_speed = attack_source.get("speed", 2.0)
 
     # Calculate roundtime penalty once
-    rt_penalty = attacker.get_total_av * 0.05 if isinstance(attacker, Character) else 0.0
+    rt_penalty = attacker.total_av * 0.05 if isinstance(attacker, Character) else 0.0
 
     # --- 3. Resolve Hit/Miss ---
     hit_result = hit_resolver.check_physical_hit(attacker, target)

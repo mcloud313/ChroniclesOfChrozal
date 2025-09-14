@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     import aiosqlite
 
 # Import combat logic handler
-from .. import combat as combat_logic
+from .. import resolver as combat_logic
 from ..mob import Mob
 
 log = logging.getLogger(__name__)

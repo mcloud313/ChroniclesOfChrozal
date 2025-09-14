@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from .character import Character
     from .mob import Mob
     from .world import World
+    from .database import DatabaseManager
 
 log = logging.getLogger(__name__)
 
@@ -120,6 +121,16 @@ class Room:
             if mob.is_alive() and name_lower in mob.name.lower():
                 return mob
         return None
+    
+    async def save(self, db_manager: "DatabaseManager"):
+        """Saves the room's dynamic state to the database."""
+        # This is simple for now but can be expanded for other dynamic state.
+        # The main thing we care about is coinage on the ground.
+        # Item instance locations are saved separately when they move.
+        await db_manager.execute_query(
+            "UPDATE rooms SET coinage = $1 WHERE id = $2",
+            self.coinage, self.dbid
+        )
 
     async def check_respawn(self, current_time: float):
         """Checks dead mobs in the room and respawns them if their timer has elapsed."""

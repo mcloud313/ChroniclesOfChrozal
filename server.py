@@ -45,18 +45,20 @@ async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.Stream
 
 
 async def _autosave_loop(world: World, interval_seconds: int):
-    """Periodically saves all active characters."""
+    """Periodically saves the entire world state."""
     log.info("Autosave task started. Interval: %d seconds.", interval_seconds)
     while True:
         try:
             await asyncio.sleep(interval_seconds)
-            log.info("Autosave: Starting periodic save...")
-            # ... (rest of function is the same, but it will get db_manager via world)
+            log.info("Autosave: Starting periodic world state save....")
+
+            await world.save_state()
 
         except asyncio.CancelledError:
+            log.info("Autosave task cancelled.")
             break
         except Exception:
-            log.exception("Autosave: Unexpected error in autosave loop:")
+            log.exception("Autosave: Unexpected error in autosave loop.")
             await asyncio.sleep(60)
 
 
@@ -70,23 +72,21 @@ async def main():
     try:
         log.info("Starting Chronicles of Chrozal server...")
 
-        # 1. Connect to the database using our new manager
+        # 1. Connect to the database
         await db_manager.connect()
         await db_manager.init_db()
 
-        # 2. Create and build the world instance
-        world = World(db_manager) # Pass the manager to the World
+        # 2. Build the world
+        world = World(db_manager)
         if not await world.build():
             log.critical("!!! Failed to build world state. Server cannot start.")
             return
         
         world.subscribe_to_ticker()
-        
         log.info("World loaded successfully.")
         
         # 3. Start background tasks
         await ticker.start_ticker(config.TICKER_INTERVAL_SECONDS)
-        
         if config.AUTOSAVE_INTERVAL_SECONDS > 0:
             autosave_task = asyncio.create_task(_autosave_loop(world, config.AUTOSAVE_INTERVAL_SECONDS))
 
@@ -110,13 +110,12 @@ async def main():
         await ticker.stop_ticker()
         
         if world:
-            log.info("Performing final save for all active characters...")
-            for char in world.get_active_characters_list():
-                await char.save() # Will use db_manager via world
+            log.info("Performing final world state save...")
+            # FIX: Call the single, centralized save method for a complete shutdown save
+            await world.save_state()
         
         await db_manager.close()
         log.info("Server shutdown complete.")
-
 
 if __name__ == "__main__":
     try:

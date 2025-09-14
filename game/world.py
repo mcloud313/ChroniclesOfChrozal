@@ -17,7 +17,7 @@ from .character import Character
 from .mob import Mob
 from .item import Item
 from .definitions import abilities as ability_defs
-from . import combat
+from . import resolver
 from . import utils
 from . import ticker
 
@@ -44,6 +44,7 @@ class World:
         self._all_item_instances: Dict[str, Item] = {}
         self.shop_inventories: Dict[int, List[Dict]] = {}
         self.active_groups: Dict[int, 'Group'] = {}
+        self.dirty_rooms: set[int] = set() # Track ID of rooms that need saving.
         log.info("World object initialized.")
 
     async def build(self):
@@ -135,6 +136,42 @@ class World:
     def get_room(self, room_id: int) -> Optional[Room]:
         return self.rooms.get(room_id)
         
+    def mark_room_dirty(self, room: Room):
+        """Adds a room's ID to the set of rooms needing a save."""
+        if room:
+            self.dirty_rooms.add(room.dbid)
+
+    async def save_state(self):
+        """
+        Saves the state of all active characters and all dirty rooms.
+        This is the new central save function.
+        """
+        log.info("Saving world state...")
+        
+        # 1. Save all active characters (this is robust)
+        active_chars = self.get_active_characters_list()
+        if active_chars:
+            char_save_tasks = [char.save() for char in active_chars]
+            await asyncio.gather(*char_save_tasks, return_exceptions=True)
+            log.info(f"Saved {len(active_chars)} active characters.")
+
+        # 2. Save all dirty rooms
+        if self.dirty_rooms:
+            # Create a copy in case the set is modified during the save
+            rooms_to_save_ids = list(self.dirty_rooms)
+            self.dirty_rooms.clear() # Clear the set immediately
+
+            room_save_tasks = []
+            for room_id in rooms_to_save_ids:
+                if room := self.get_room(room_id):
+                    room_save_tasks.append(room.save(self.db_manager))
+            
+            if room_save_tasks:
+                await asyncio.gather(*room_save_tasks, return_exceptions=True)
+                log.info(f"Saved {len(room_save_tasks)} dirty rooms.")
+        
+        log.info("World state save complete.")
+
     def get_shop_inventory(self, room_id: int) -> Optional[List[Dict]]:
         """Returns the cached list of inventory items for a given shop room."""
         return self.shop_inventories.get(room_id)
@@ -233,7 +270,7 @@ class World:
                     if p.essence >= cost:
                         p.essence -= cost
                         try:
-                            await combat.resolve_ability_effect(p, info.get("target_id"), info.get("target_type"), ability_data, self)
+                            await resolver.resolve_ability_effect(p, info.get("target_id"), info.get("target_type"), ability_data, self)
                         except Exception:
                             log.exception("Error resolving ability effect '%s' for %s", ability_key, p.name)
                             await p.send("Something went wrong as your action finished.")
@@ -315,7 +352,7 @@ class World:
                 # First, process ongoing effects for this tick
                 effect_type = data.get('type')
                 if effect_type in ('poison', 'bleed'):
-                    await combat.apply_dot_damage(p, data, self)
+                    await resolver.apply_dot_damage(p, data, self)
                 # We'll add other effect types like regen here later
 
                 # Then, check if the effect has expired
@@ -353,18 +390,18 @@ class World:
             # --- Periodic Damage Flags ---
             if "BLAZING" in room_flags:
                 # Example: 2 fire damage per tick
-                await combat.apply_dot_damage(char, {'potency': 2, 'type': 'fire'}, self)
+                await resolver.apply_dot_damage(char, {'potency': 2, 'type': 'fire'}, self)
             if "ACIDIC" in room_flags:
                 # Example: 2 acid damage per tick
-                await combat.apply_dot_damage(char, {'potency': 2, 'type': 'acid'}, self)
+                await resolver.apply_dot_damage(char, {'potency': 2, 'type': 'acid'}, self)
             if "FREEZING" in room_flags:
-                await combat.apply_dot_damage(char, {'potency': 2, 'type': 'cold'}, self)
+                await resolver.apply_dot_damage(char, {'potency': 2, 'type': 'cold'}, self)
             # --- Chance-based Status Effect Flags ---
             if "POISONOUS" in room_flags:
                 # Example: 10% chance per tick to be afflicted with a weak poison
                 if random.random() < 0.10 and not char.effects.get("RoomPoison"):
                     poison_effect = {"name": "RoomPoison", "type": "poison", "duration": 10.0, "potency": 3}
-                    await combat.apply_effect(char, char, poison_effect, {"name": "a poisonous miasma"}, self)
+                    await resolver.apply_effect(char, char, poison_effect, {"name": "a poisonous miasma"}, self)
 
     async def update_xp_absorption(self, dt: float):
         """Ticker: Processes XP pool absorption for characters in node rooms."""

@@ -21,6 +21,15 @@ TARGET_CHAR_OR_MOB = "CHAR_OR_MOB" #Characters or mobiles
 TARGET_AREA = "AREA" #Affects others in the room *excluding self)
 TARGET_NONE = "NONE" # No target needed
 
+DAMAGE_ARCANE = "arcane"
+DAMAGE_BLUDGEON = "bludgeon"
+DAMAGE_COLD = "cold"
+DAMAGE_DIVINE = "divine"
+DAMAGE_FIRE = "fire"
+DAMAGE_PIERCE = "pierce"
+DAMAGE_SLASH = "slash"
+DAMAGE_PHYSICAL = "physical"
+
 # --- Constants for effects types ---
 EFFECT_DAMAGE = "DAMAGE"
 EFFECT_HEAL = "HEAL"

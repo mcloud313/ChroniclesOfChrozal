@@ -7,14 +7,16 @@ import random
 import math
 import logging
 import time
-from typing import Union, List, Tuple, Dict, Any
+from typing import Union, List, Tuple, Dict, Any, TYPE_CHECKING
 
 from ..character import Character
 from ..mob import Mob
 from ..item import Item
-from ..world import World
 from .. import utils
 from .hit_resolver import HitResult
+
+if TYPE_CHECKING:
+    from ..world import World
 
 log = logging.getLogger(__name__)
 
@@ -57,7 +59,7 @@ async def _award_xp_to_character(character: Character, xp_amount: int):
         await character.send("Your mind cannot hold any more raw experience right now.")
 
 
-async def handle_durability(attacker: Union[Character, Mob], target: Union[Character, Mob], attack_source: Item, world: World):
+async def handle_durability(attacker: Union[Character, Mob], target: Union[Character, Mob], attack_source: Item, world: 'World'):
     """Handles random durability loss for attacker's weapon and target's armor."""
     # Attacker weapon durability
     if isinstance(attacker, Character) and isinstance(attack_source, Item) and attack_source.item_type == "WEAPON":
@@ -202,6 +204,8 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
             target.coinage -= coinage_to_drop
             await target_loc.add_coinage(coinage_to_drop, world)
             await target_loc.broadcast(f"\r\nSome coins fall from {target.name} as they collapse!\r\n", exclude={target})
+
+            world.mark_room_dirty(target_loc)
 
         await target.send("\r\n{r*** YOU ARE DYING! ***{x")
         if target_loc:

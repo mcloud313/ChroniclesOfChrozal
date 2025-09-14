@@ -139,7 +139,7 @@ class Character:
     
     # In the Character class, replace the get_total_av method with this property
     @property
-    def get_total_av(self) -> int:
+    def total_av(self) -> int:
         """Calculates total armor value from equipment and effects."""
         base_av = 0
         for item in self._equipped_items.values():
