@@ -44,17 +44,18 @@ class World:
         self._all_item_instances: Dict[str, Item] = {}
         self.shop_inventories: Dict[int, List[Dict]] = {}
         self.active_groups: Dict[int, 'Group'] = {}
-        self.dirty_rooms: set[int] = set() # Track ID of rooms that need saving.
-        log.info("World object initialized.")
+        self.dirty_rooms: set[int] = set()
+        self.abilities: Dict[str, Dict] = {}
+        self.damage_types: Dict[str, Dict] = {}
 
     async def build(self):
         """
-        Loads all game data from the database via the db_manager to build the live world state.
+        Loads all game data from the new normalized database schema.
         """
         log.info("Building world state from PostgreSQL database...")
         
         try:
-            # Load all template data concurrently for speed
+            # Load all template and core data concurrently
             results = await asyncio.gather(
                 self.db_manager.fetch_all("SELECT * FROM areas ORDER BY id"),
                 self.db_manager.fetch_all("SELECT * FROM races ORDER BY id"),
@@ -62,68 +63,82 @@ class World:
                 self.db_manager.fetch_all("SELECT * FROM item_templates ORDER BY id"),
                 self.db_manager.fetch_all("SELECT * FROM mob_templates ORDER BY id"),
                 self.db_manager.fetch_all("SELECT * FROM mob_attacks ORDER BY mob_template_id"),
+                self.db_manager.fetch_all("SELECT * FROM mob_loot_table ORDER BY mob_template_id"),
                 self.db_manager.fetch_all("SELECT * FROM rooms ORDER BY id"),
+                self.db_manager.fetch_all("SELECT * FROM exits ORDER BY source_room_id"),
                 self.db_manager.fetch_all("SELECT * FROM shop_inventories ORDER BY room_id"),
                 self.db_manager.fetch_all("SELECT * FROM ability_templates"),
                 self.db_manager.fetch_all("SELECT * FROM damage_types") 
             )
-            (area_rows, race_rows, class_rows, item_rows, mob_rows, attack_rows, room_rows, shop_rows, 
-            ability_rows, damage_type_rows) = results
+            # FIX: The unpacking order now correctly matches the gather() calls.
+            (area_rows, race_rows, class_rows, item_rows, mob_rows, attack_rows,
+             loot_rows, room_rows, exit_rows, shop_rows, ability_rows, damage_type_rows) = results
 
+            # --- Process Template Data ---
             self.areas = {row['id']: dict(row) for row in area_rows or []}
             self.races = {row['id']: dict(row) for row in race_rows or []}
             self.classes = {row['id']: dict(row) for row in class_rows or []}
             self.item_templates = {row['id']: dict(row) for row in item_rows or []}
             self.mob_templates = {row['id']: dict(row) for row in mob_rows or []}
+            self.abilities = {row['internal_name']: dict(row) for row in ability_rows or []}
+            self.damage_types = {row['name']: dict(row) for row in damage_type_rows or []}
 
-            log.info("Loaded %d areas, %d races, %d classes, %d item templates, %d mob templates.",
-                     len(self.areas), len(self.races), len(self.classes), len(self.item_templates), len(self.mob_templates))
+            log.info("Loaded %d areas, %d races, %d classes, %d items, %d mobs, %d abilities.",
+                     len(self.areas), len(self.races), len(self.classes), 
+                     len(self.item_templates), len(self.mob_templates), len(self.abilities))
             
+            # --- Attach Relational Template Data ---
             for template in self.mob_templates.values():
                 template['attacks'] = []
+                # FIX: Initialize loot_table list for every mob template.
+                template['loot_table'] = [] 
             
-            if shop_rows:
-                for room_id, items_in_shop in groupby(shop_rows, key=itemgetter('room_id')):
-                    self.shop_inventories[room_id] = [dict(item) for item in items_in_shop]
-                log.info("Loaded inventories for %d shops.", len(self.shop_inventories))
-
-            if ability_rows:
-                self.abilities = {row['internal_name']: dict(row) for row in ability_rows}
-                log.info("Loaded %d abilities.", len(self.abilities))
-
-            if damage_type_rows:
-                self.damage_types = {row['name']: dict(row) for row in damage_type_rows}
-                log.info("Loaded %d damage types.", len(self.damage_types))
+            if attack_rows:
+                for mob_id, attacks in groupby(attack_rows, key=itemgetter('mob_template_id')):
+                    if mob_id in self.mob_templates:
+                        self.mob_templates[mob_id]['attacks'] = [dict(a) for a in attacks]
             
+            if loot_rows:
+                for mob_id, loot_items in groupby(loot_rows, key=itemgetter('mob_template_id')):
+                    if mob_id in self.mob_templates:
+                        self.mob_templates[mob_id]['loot_table'] = [dict(i) for i in loot_items]
+
+            # --- Process Rooms and Exits (Corrected Logic) ---
             if not room_rows:
-                log.error("Failed to load rooms or no rooms found in database.")
+                log.error("No rooms found in database. World build failed.")
                 return False
             
+            # FIX: Create all Room objects first and initialize their exits.
             for row_data in room_rows:
-                self.rooms[row_data['id']] = Room(dict(row_data))
+                room = Room(dict(row_data))
+                room.exits = {} # Initialize exits dictionary
+                self.rooms[room.dbid] = room
 
-            # Populate rooms with their initial state
+            # FIX: Attach exits to the now-existing Room objects.
+            if exit_rows:
+                for room_id, exits in groupby(exit_rows, key=itemgetter('source_room_id')):
+                    if room_id in self.rooms:
+                        self.rooms[room_id].exits = {
+                            exit_row['direction']: dict(exit_row) for exit_row in exits
+                        }
+
+            # --- Populate Rooms with Items, Objects, and Mobs ---
             for room in self.rooms.values():
                 instance_records = await self.db_manager.get_instances_in_room(room.dbid)
                 for record in instance_records:
-                    instance_data = dict(record)
-                    template_data = self.get_item_template(instance_data['template_id'])
+                    template_data = self.get_item_template(record['template_id'])
                     if template_data:
-                        item_obj = Item(instance_data, template_data)
+                        item_obj = Item(dict(record), template_data)
                         room.item_instance_ids.append(item_obj.id)
                         self._all_item_instances[item_obj.id] = item_obj
                         
                 object_rows = await self.db_manager.fetch_all("SELECT * FROM room_objects WHERE room_id = $1", room.dbid)
                 room.objects = [dict(r) for r in object_rows]
                 
-                # Spawn initial mobs
                 for template_id_str, spawn_info in room.spawners.items():
-                    template_id = int(template_id_str)
-                    if mob_template := self.mob_templates.get(template_id):
+                    if mob_template := self.mob_templates.get(int(template_id_str)):
                         for _ in range(spawn_info.get("max_present", 1)):
                             room.add_mob(Mob(mob_template, room))
-                    else:
-                        log.warning("Room %d spawner refers to non-existent mob template ID %d.", room.dbid, template_id)
 
             log.info("World build complete. %d rooms loaded and populated.", len(self.rooms))
             return True

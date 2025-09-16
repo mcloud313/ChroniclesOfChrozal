@@ -434,23 +434,41 @@ class DatabaseManager:
         return await self.fetch_one(query, character_id)
     
     async def create_character(self, player_id: int, first_name: str, last_name: str, sex: str,
-                               race_id: int, class_id: int, stats: dict, skills: dict,
+                               race_id: int, class_id: int, stats: dict,
                                description: str, hp: float, max_hp: float, essence: float,
-                               max_essence: float, known_spells: list, known_abilities: list) -> Optional[int]:
-        query = """
-            INSERT INTO characters (
-                player_id, first_name, last_name, sex, race_id, class_id, stats, skills,
-                description, hp, max_hp, essence, max_essence, known_spells, known_abilities
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-            RETURNING id
-        """
-        params = (
-            player_id, first_name, last_name, sex, race_id, class_id, json.dumps(stats),
-            json.dumps(skills), description, hp, max_hp, essence, max_essence,
-            json.dumps(known_spells), json.dumps(known_abilities)
-        )
-        record = await self.fetch_one(query, *params)
-        return record['id'] if record else None
+                               max_essence: float) -> Optional[int]:
+        """Creates a new character and their associated stat/equipment rows in a single transaction."""
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                # Step 1: Insert into the main characters table
+                char_query = """
+                    INSERT INTO characters (
+                        player_id, first_name, last_name, sex, race_id, class_id, description,
+                        hp, max_hp, essence, max_essence
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    RETURNING id
+                """
+                char_params = (player_id, first_name, last_name, sex, race_id, class_id,
+                            description, hp, max_hp, essence, max_essence)
+                record = await conn.fetchrow(char_query, *char_params)
+                if not record:
+                    return None
+                new_char_id = record['id']
+
+                # Step 2: Insert the initial stats record
+                stats_query = """
+                    INSERT INTO character_stats (character_id, might, vitality, agility, intellect, aura, persona)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                """
+                await conn.execute(stats_query, new_char_id, stats.get('might', 10),
+                                stats.get('vitality', 10), stats.get('agility', 10),
+                                stats.get('intellect', 10), stats.get('aura', 10),
+                                stats.get('persona', 10))
+
+                # Step 3: Insert a blank equipment record
+                await conn.execute("INSERT INTO character_equipment (character_id) VALUES ($1)", new_char_id)
+                
+                return new_char_id
     
     async def save_character_data(self, character_id: int, data: dict) -> str:
         """Dynamically updates character data."""
@@ -461,6 +479,21 @@ class DatabaseManager:
         params.append(character_id)
         query = f"UPDATE characters SET {', '.join(set_clauses)}, last_saved = NOW() WHERE id = ${len(params)}"
         return await self.execute_query(query, *params)
+    
+    async def get_character_stats(self, character_id: int) -> Optional[asyncpg.Record]:
+        """Fetches the core stats for a character."""
+        query = "SELECT * FROM character_stats WHERE character_id = $1"
+        return await self.fetch_one(query, character_id)
+
+    async def get_character_skills(self, character_id: int) -> List[asyncpg.Record]:
+        """Fetches all skills for a character."""
+        query = "SELECT skill_name, rank FROM character_skills WHERE character_id = $1"
+        return await self.fetch_all(query, character_id)
+
+    async def get_character_equipment(self, character_id: int) -> Optional[asyncpg.Record]:
+        """Fetches the equipment for a character."""
+        query = "SELECT * FROM character_equipment WHERE character_id = $1"
+        return await self.fetch_one(query, character_id)
     
     async def update_character_playtime(self, character_id: int, session_seconds: int) -> str:
         """Adds the session duration to the character's total playtime."""

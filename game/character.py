@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 
 class Character:
     """Represents a character, now aware of unique item instances."""
+    
     @property
     def might_mod(self) -> int:
         base_might = self.stats.get("might", 10)
@@ -60,7 +61,6 @@ class Character:
         bonus_persona = self.get_stat_bonus_from_equipment("bonus_persona")
         return utils.calculate_modifier(base_persona + bonus_persona)
 
-    # Derived Combat Stats
     @property
     def mar(self) -> int:
         base_mar = self.might_mod + (self.agi_mod // 2)
@@ -137,7 +137,6 @@ class Character:
                 return effect.get('potency', 0.0)
         return 0.0
     
-    # In the Character class, replace the get_total_av method with this property
     @property
     def total_av(self) -> int:
         """Calculates total armor value from equipment and effects."""
@@ -147,22 +146,22 @@ class Character:
 
         bonus_av = self.get_stat_bonus_from_effects("bonus_av")
         return base_av + bonus_av
-
+    
     def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any], world: 'World', player_is_admin: bool = False):
         self.writer: asyncio.StreamWriter = writer
         self.is_admin: bool = player_is_admin
-        self.world: 'World' = world # NEW: Store a reference to the world
+        self.world: 'World' = world
 
-        # Data loaded from DB
+        # --- Data loaded directly from the 'characters' table row ---
         self.dbid: int = db_data['id']
         self.player_id: int = db_data['player_id']
         self.first_name: str = db_data['first_name']
         self.last_name: str = db_data['last_name']
-        self.name: str = f"{self.first_name} {self.last_name}"
         self.sex: str = db_data['sex']
         self.race_id: Optional[int] = db_data['race_id']
         self.class_id: Optional[int] = db_data['class_id']
         self.level: int = db_data['level']
+        self.description: str = db_data['description']
         self.hp: float = float(db_data['hp'])
         self.max_hp: float = float(db_data['max_hp'])
         self.essence: float = float(db_data['essence'])
@@ -171,88 +170,86 @@ class Character:
         self.xp_total: float = db_data['xp_total']
         self.unspent_skill_points: int = db_data['unspent_skill_points']
         self.unspent_attribute_points: int = db_data['unspent_attribute_points']
-        self.spiritual_tether: int = db_data['spiritual_tether']
-        self.description: str = db_data['description']
+        self.spiritual_tether: int = db_data.get('spiritual_tether', 10) # Default if not in db
         self.coinage: int = db_data['coinage']
         self.location_id: int = db_data['location_id']
         self.total_playtime_seconds: int = db_data['total_playtime_seconds']
-
-        # Runtime State
+        self.status: str = db_data.get('status', 'ALIVE')
+        self.stance: str = db_data.get('stance', 'Standing')
+        
+        # --- Runtime State Attributes (not in the database) ---
         self.name: str = f"{self.first_name} {self.last_name}"
         self.location: Optional['Room'] = None
         self.target: Optional[Union['Character', 'Mob']] = None
-        self.is_fighting: bool = False
-        self.casting_info: Optional[Dict[str, Any]] = None
-        self.effects: Dict[str, Dict[str, Any]] = {}
-        self.roundtime: float = 0.0
-        self.death_timer_ends_at: Optional[float] = None
-        self.login_timestamp: Optional[float] = None # NEW: For tracking session playtime
         self.group: Optional['Group'] = None
+        self.effects: Dict[str, Dict[str, Any]] = {}
+        self.resistances: Dict[str, float] = {} # Can be populated by effects/items
+        self.casting_info: Optional[Dict[str, Any]] = None
         self.pending_give_offer: Optional[Dict[str, Any]] = None
-        self.status: str = db_data.get('status', 'ALIVE')
-        self.stance: str = db_data.get('stance', 'Standing')
+        self.login_timestamp: Optional[float] = None
+        self.death_timer_ends_at: Optional[float] = None
+        self.roundtime: float = 0.0
+        self.is_fighting: bool = False
         self.is_hidden: bool = False
         self.detected_traps: set = set()
 
-        # Load JSONB fields (asyncpg decodes these for us)
-        self.stats: Dict[str, int] = db_data.get('stats') or {}
-        self.known_spells: List[str] = db_data.get('known_spells') or []
-        self.known_abilities: List[str] = db_data.get('known_abilities') or []
-        self.skills: Dict[str, int] = db_data.get('skills') or {}
-        self.inventory: List[str] = db_data.get('inventory') or []
-        self.equipment: Dict[str, str] = db_data.get('equipment') or {}
-        self.resistances: Dict[str, float] = {}
-        
-        # --- NEW: Runtime caches for loaded Item objects ---
+        # --- Data Structures to be populated by load_related_data() ---
+        self.stats: Dict[str, int] = {}
+        self.skills: Dict[str, int] = {}
         self._inventory_items: Dict[str, Item] = {}
         self._equipped_items: Dict[str, Item] = {}
 
-        # Clamp loaded HP/Essence
+        # Clamp loaded HP/Essence to max values
         self.hp = min(self.hp, self.max_hp)
         self.essence = min(self.essence, self.max_essence)
         if self.status in ["DYING", "DEAD"]:
             self.hp = 0.0
 
-    async def load_instances(self):
+    async def load_related_data(self):
         """
-        Fetches all item instances from the DB and populates runtime caches,
-        correctly placing items inside their containers.
+        Fetches all related character data (stats, skills, items, equipment)
+        and populates the character object.
         """
-        instance_records = await self.world.db_manager.get_instances_for_character(self.dbid)
-        if not instance_records:
-            return
+        # Load stats, skills, equipment, and item instances concurrently
+        results = await asyncio.gather(
+            self.world.db_manager.get_character_stats(self.dbid),
+            self.world.db_manager.get_character_skills(self.dbid),
+            self.world.db_manager.get_character_equipment(self.dbid),
+            self.world.db_manager.get_instances_for_character(self.dbid)
+        )
+        stats_record, skills_records, equipment_record, instance_records = results
 
-        # --- First Pass: Create all Item objects ---
-        # Create a temporary dictionary to hold all items owned by the character.
-        all_owned_items: Dict[str, Item] = {}
-        for inst_record in instance_records:
-            instance_data = dict(inst_record)
-            template_data = self.world.get_item_template(instance_data['template_id'])
-            if template_data:
-                item_obj = Item(instance_data, template_data)
-                all_owned_items[item_obj.id] = item_obj
-
-        # --- Second Pass: Place items into containers or inventory/equipment ---
-        for item_id, item_obj in all_owned_items.items():
-            # Check if the item is inside a container
-            if item_obj.container_id and item_obj.container_id in all_owned_items:
-                # Find the container object and add this item to its contents
-                container_obj = all_owned_items[item_obj.container_id]
-                container_obj.contents[item_id] = item_obj
-            # Check if the item is equipped
-            elif item_id in self.equipment.values():
-                # Find which slot this item ID belongs to and place it
-                for slot, equipped_id in self.equipment.items():
-                    if equipped_id == item_id:
-                        self._equipped_items[slot] = item_obj
-                        break
-            # Otherwise, the item is in the top-level inventory
-            else:
-                self._inventory_items[item_id] = item_obj
+        # Populate stats from the character_stats table
+        if stats_record:
+            # Exclude character_id from the dictionary
+            self.stats = {k: v for k, v in dict(stats_record).items() if k != 'character_id'}
         
-        log.debug("Loaded instances for %s: %d equipped, %d in inventory.",
-                  self.name, len(self._equipped_items), len(self._inventory_items))
-    
+        # Populate skills from the character_skills table
+        if skills_records:
+            self.skills = {record['skill_name']: record['rank'] for record in skills_records}
+
+        # --- Item and Equipment Loading ---
+        all_owned_items: Dict[str, Item] = {}
+        if instance_records:
+            for inst_record in instance_records:
+                template_data = self.world.get_item_template(inst_record['template_id'])
+                if template_data:
+                    item_obj = Item(dict(inst_record), template_data)
+                    all_owned_items[item_obj.id] = item_obj
+
+        # Populate equipped items from the new character_equipment table
+        if equipment_record:
+            for slot, item_id in dict(equipment_record).items():
+                if slot != 'character_id' and item_id and item_id in all_owned_items:
+                    self._equipped_items[slot] = all_owned_items[item_id]
+
+        # Populate top-level inventory (items not equipped or in a container)
+        for item in all_owned_items.values():
+            if not item.is_equipped(self) and not item.is_in_container():
+                self._inventory_items[item.id] = item
+
+        log.debug("Loaded related data for %s.", self.name)
+
     async def send(self, message: str, add_newline: bool = True):
         """Safely sends a message to this character's client."""
         if self.writer.is_closing(): return
@@ -266,37 +263,32 @@ class Character:
             log.warning("Connection lost for %s during write.", self.name)
 
     async def save(self):
-        """Gathers character data, updates playtime, and saves to the database."""
-        # --- 1. Update Playtime ---
+        """Gathers character data and saves it to the normalized database tables."""
         if self.login_timestamp:
             session_duration = int(time.monotonic() - self.login_timestamp)
             if session_duration > 0:
                 self.total_playtime_seconds += session_duration
-                await self.world.db_manager.update_character_playtime(self.dbid, session_duration)
-            self.login_timestamp = time.monotonic() # Reset timer for the next save interval
+            self.login_timestamp = time.monotonic()
 
-        # --- 2. Gather Data for Main Save ---
-        data_to_save = {
+        core_data = {
             "location_id": self.location_id, "hp": self.hp, "essence": self.essence,
             "xp_pool": self.xp_pool, "xp_total": self.xp_total, "level": self.level,
             "unspent_skill_points": self.unspent_skill_points,
             "unspent_attribute_points": self.unspent_attribute_points,
-            "spiritual_tether": self.spiritual_tether, "status": self.status,
-            "stance": self.stance, "stats": self.stats, "skills": self.skills,
-            "known_spells": self.known_spells, "known_abilities": self.known_abilities,
-            "inventory": list(self._inventory_items.keys()),
-            "equipment": {slot: item.id for slot, item in self._equipped_items.items()},
-            "coinage": self.coinage,
-            "max_hp": self.max_hp, "max_essence": self.max_essence,
+            "status": self.status, "stance": self.stance, "coinage": self.coinage,
+            "total_playtime_seconds": self.total_playtime_seconds
         }
         
+        equipment_data = {slot.lower(): item.id for slot, item in self._equipped_items.items()}
+
         try:
-            status_str = await self.world.db_manager.save_character_data(self.dbid, data_to_save)
-            if "UPDATE 1" in status_str:
-                log.info("Successfully saved character %s (ID: %s).", self.name, self.dbid)
-            else:
-                log.warning("Save for character %s (ID: %s) reported an issue: %s",
-                            self.name, self.dbid, status_str)
+            await asyncio.gather(
+                self.world.db_manager.save_character_core(self.dbid, core_data),
+                self.world.db_manager.save_character_stats(self.dbid, self.stats),
+                self.world.db_manager.save_character_skills(self.dbid, self.skills),
+                self.world.db_manager.save_character_equipment(self.dbid, equipment_data)
+            )
+            log.info("Successfully saved character %s (ID: %s).", self.name, self.dbid)
         except Exception:
             log.exception("Unexpected error saving character %s (ID: %s):", self.name, self.dbid)
 
@@ -388,15 +380,6 @@ class Character:
 
     def is_alive(self) -> bool:
         return self.hp > 0 and self.status != "DEAD"
-
-    # def get_total_av(self) -> int:
-    #     """Calculates total armor value from all equipped items."""
-    #     total_av = 0
-    #     for item in self._equipped_items.values():
-    #         # The item object has an 'armor' property that gets the value
-    #         # from the template's stats.
-    #         total_av += item.armor
-    #     return total_av
 
     def get_shield(self) -> Optional[Item]:
         shield_item = self._equipped_items.get("WIELD_OFF")
