@@ -87,18 +87,18 @@ class DatabaseManager:
                     )
                 """)
                 await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS rooms (
-                        id SERIAL PRIMARY KEY,
-                        area_id INTEGER NOT NULL REFERENCES areas(id) ON DELETE RESTRICT,
-                        name TEXT NOT NULL,
-                        description TEXT DEFAULT 'You see nothing special.',
-                        exits JSONB DEFAULT '{}'::jsonb,
-                        flags JSONB DEFAULT '[]'::jsonb,
-                        spawners JSONB DEFAULT '{}'::jsonb,
-                        coinage INTEGER NOT NULL DEFAULT 0,
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                    )
+                CREATE TABLE IF NOT EXISTS rooms (
+                    id SERIAL PRIMARY KEY,
+                    area_id INTEGER NOT NULL REFERENCES areas(id) ON DELETE RESTRICT,
+                    name TEXT NOT NULL,
+                    description TEXT DEFAULT 'You see nothing special.',
+                    -- spawners and flags are still JSONB for now, can be normalized later
+                    spawners JSONB DEFAULT '{}'::jsonb,
+                    flags JSONB DEFAULT '[]'::jsonb,
+                    coinage INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
                 """)
                 
                 # --- Template Tables ---
@@ -116,23 +116,23 @@ class DatabaseManager:
                     )
                 """)
                 await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS mob_templates (
-                        id SERIAL PRIMARY KEY,
-                        name TEXT UNIQUE NOT NULL,
-                        description TEXT DEFAULT 'A creature.',
-                        mob_type TEXT,
-                        level INTEGER NOT NULL DEFAULT 1,
-                        stats JSONB DEFAULT '{}'::jsonb,
-                        resistances JSONB DEFAULT '{}'::jsonb,
-                        max_hp INTEGER NOT NULL DEFAULT 10,
-                        loot JSONB DEFAULT '{}'::jsonb,
-                        flags JSONB DEFAULT '[]'::jsonb,
-                        respawn_delay_seconds INTEGER DEFAULT 300,
-                        variance JSONB DEFAULT '{}'::jsonb,
-                        movement_chance REAL NOT NULL DEFAULT 0.0,
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                    )
+                CREATE TABLE IF NOT EXISTS mob_templates (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT DEFAULT 'A creature.',
+                    mob_type TEXT,
+                    level INTEGER NOT NULL DEFAULT 1,
+                    stats JSONB DEFAULT '{}'::jsonb,
+                    resistances JSONB DEFAULT '{}'::jsonb,
+                    max_hp INTEGER NOT NULL DEFAULT 10,
+                    max_coinage INTEGER NOT NULL DEFAULT 0, -- Replaces coinage in loot
+                    flags JSONB DEFAULT '[]'::jsonb,
+                    respawn_delay_seconds INTEGER DEFAULT 300,
+                    variance JSONB DEFAULT '{}'::jsonb,
+                    movement_chance REAL NOT NULL DEFAULT 0.0,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
                 """)
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS mob_attacks (
@@ -207,19 +207,44 @@ class DatabaseManager:
                         stance TEXT NOT NULL DEFAULT 'Standing',
                         unspent_skill_points INTEGER NOT NULL DEFAULT 0,
                         unspent_attribute_points INTEGER NOT NULL DEFAULT 0,
-                        stats JSONB DEFAULT '{}'::jsonb,
-                        skills JSONB DEFAULT '{}'::jsonb,
-                        known_spells JSONB DEFAULT '[]'::jsonb,
-                        known_abilities JSONB DEFAULT '[]'::jsonb,
                         location_id INTEGER DEFAULT 1,
-                        inventory JSONB DEFAULT '[]'::jsonb,
-                        equipment JSONB DEFAULT '{}'::jsonb,
                         coinage INTEGER NOT NULL DEFAULT 0,
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         last_saved TIMESTAMPTZ,
                         total_playtime_seconds INTEGER NOT NULL DEFAULT 0,
                         UNIQUE (player_id, first_name, last_name)
                     )
+                """)
+                await conn.execute("""
+                CREATE TABLE IF NOT EXISTS character_stats (
+                    character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+                    might INTEGER NOT NULL DEFAULT 10,
+                    vitality INTEGER NOT NULL DEFAULT 10,
+                    agility INTEGER NOT NULL DEFAULT 10,
+                    intellect INTEGER NOT NULL DEFAULT 10,
+                    aura INTEGER NOT NULL DEFAULT 10,
+                    persona INTEGER NOT NULL DEFAULT 10,
+                    PRIMARY KEY (character_id)
+                )
+                """)
+                await conn.execute("""
+                CREATE TABLE IF NOT EXISTS character_skills (
+                    id SERIAL PRIMARY KEY,
+                    character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+                    skill_name TEXT NOT NULL, -- e.g., 'bladed weapons'
+                    rank INTEGER NOT NULL DEFAULT 0,
+                    UNIQUE (character_id, skill_name)
+                )
+                """)
+                await conn.execute("""
+                CREATE TABLE IF NOT EXISTS exits (
+                    id SERIAL PRIMARY KEY,
+                    source_room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                    direction TEXT NOT NULL, -- e.g., 'north', 'south'
+                    destination_room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                    is_hidden BOOLEAN NOT NULL DEFAULT FALSE,
+                    UNIQUE (source_room_id, direction)
+                )
                 """)
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS item_instances (
@@ -237,6 +262,29 @@ class DatabaseManager:
                              (owner_char_id IS NULL AND room_id IS NULL AND container_id IS NOT NULL)    -- Inside another container
                         )
                     )
+                """)
+                await conn.execute("""
+                CREATE TABLE IF NOT EXISTS mob_loot_table (
+                    id SERIAL PRIMARY KEY,
+                    mob_template_id INTEGER NOT NULL REFERENCES mob_templates(id) ON DELETE CASCADE,
+                    item_template_id INTEGER NOT NULL REFERENCES item_templates(id) ON DELETE CASCADE,
+                    drop_chance REAL NOT NULL DEFAULT 1.0, -- e.g., 0.1 for 10%
+                    min_quantity INTEGER NOT NULL DEFAULT 1,
+                    max_quantity INTEGER NOT NULL DEFAULT 1
+                )
+                """)
+                await conn.execute("""
+                CREATE TABLE IF NOT EXISTS character_equipment (
+                    character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE PRIMARY KEY,
+                    head UUID REFERENCES item_instances(id) ON DELETE SET NULL,
+                    torso UUID REFERENCES item_instances(id) ON DELETE SET NULL,
+                    legs UUID REFERENCES item_instances(id) ON DELETE SET NULL,
+                    feet UUID REFERENCES item_instances(id) ON DELETE SET NULL,
+                    hands UUID REFERENCES item_instances(id) ON DELETE SET NULL,
+                    main_hand UUID REFERENCES item_instances(id) ON DELETE SET NULL,
+                    off_hand UUID REFERENCES item_instances(id) ON DELETE SET NULL
+                    -- Add other slots as needed
+                )
                 """)
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS bank_accounts (
