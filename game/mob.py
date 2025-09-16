@@ -68,12 +68,25 @@ class Mob:
         return max(0, total_bv)
     
     @property
+    def total_av(self) -> int:
+        """Calculates total Armor Value (AV) from base stats and active effects."""
+        total_av = self.stats.get("base_armor_value", 0)
+        current_time = time.monotonic()
+        if self.effects:
+            for effect_data in list(self.effects.values()):
+                if effect_data.get("ends_at", 0) > current_time and \
+                   effect_data.get("stat") == "bonus_av":
+                    total_av += effect_data.get("amount", 0)
+        return max(0, total_av)
+
+
+    @property
     def slow_penalty(self) -> float:
         """Returns the roundtime penalty from any active 'slow' effects."""
         for effect in self.effects.values():
             if effect.get('type') == 'slow' and effect.get('ends_at', 0) > time.monotonic():
                 return effect.get('potency', 0.0)
-            return 0.0
+        return 0.0
 
     def __init__(self, template_data: Dict[str, Any], current_room: 'Room'):
         """Initializes a Mob instance from template data, applying variance."""
@@ -246,7 +259,7 @@ class Mob:
                 if attack_data:
                     try:
                         damage_type = attack_data.get("damage_type", "physical").lower()
-                        if damage_type in resolver.MAGICAL_DAMAGE_TYPES:
+                        if damage_type in ability_defs.MAGICAL_DAMAGE_TYPES:
                             await resolver.resolve_magical_attack(self, self.target, attack_data, world)
                         else:
                             await resolver.resolve_physical_attack(self, self.target, attack_data, world)

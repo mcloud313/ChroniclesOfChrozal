@@ -14,7 +14,6 @@ from .combat import hit_resolver, damage_calculator, outcome_handler
 from .character import Character
 from .mob import Mob
 from .item import Item
-from .world import World
 from .definitions import abilities as ability_defs
 
 log = logging.getLogger(__name__)

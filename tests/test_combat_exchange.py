@@ -39,6 +39,7 @@ class TestCombatExchange(unittest.IsolatedAsyncioTestCase):
 
         mob_template = self.world.get_mob_template(1)
         self.mob = Mob(mob_template, self.room)
+        self.mob.stats = {"might": 12, "agility": 12, "vitality": 10, "intellect": 10, "aura": 10, "persona": 10}
 
         self.room.add_character(self.character)
         self.character.update_location(self.room)

@@ -65,6 +65,7 @@ class TestCombatMechanics(unittest.IsolatedAsyncioTestCase):
         mock_calc_damage.return_value = DamageInfo(pre_mitigation_damage=16, damage_type="bludgeon", is_crit=False)
 
         mock_attacker = MagicMock(spec=Character, name="Attacker")
+        mock_attacker.name = "Attacker"
         mock_attacker.is_alive.return_value = True
         mock_attacker.slow_penalty = 0.0
         mock_attacker.total_av = 0 
@@ -98,16 +99,21 @@ class TestCombatMechanics(unittest.IsolatedAsyncioTestCase):
         mock_random.random.return_value = 0.05 # Force durability check to pass
 
         # FIX: Use a real Character object instead of a complex mock to prevent TypeErrors.
-        attacker_data = { "id": 3, "player_id": 1, "first_name": "Durable", "last_name": "Hitter", "sex": "Male", "race_id": 1, "class_id": 1, "level": 1, "hp": 50, "max_hp": 50, "essence": 50, "max_essence": 50, "xp_pool": 0, "xp_total": 0, "unspent_skill_points": 0, "unspent_attribute_points": 0, "spiritual_tether": 1, "description": "", "coinage": 0, "location_id": 1, "total_playtime_seconds": 0, "status": "ALIVE", "stance": "Standing", "stats": {"might": 15}, "skills": {}, "inventory": [], "equipment": {}, "known_spells": [], "known_abilities": [] }
+        attacker_data = { "id": 3, "player_id": 1, "first_name": "Durable", "last_name": "Hitter", "name": "Durable Hitter", "sex": "Male", "race_id": 1, "class_id": 1, "level": 1, "hp": 50, "max_hp": 50, "essence": 50, "max_essence": 50, "xp_pool": 0, "xp_total": 0, "unspent_skill_points": 0, "unspent_attribute_points": 0, "spiritual_tether": 1, "description": "", "coinage": 0, "location_id": 1, "total_playtime_seconds": 0, "status": "ALIVE", "stance": "Standing", "stats": {"might": 15}, "skills": {}, "inventory": [], "equipment": {}, "known_spells": [], "known_abilities": [] }
         attacker_char = Character(self.mock_writer, attacker_data, self.mock_world)
 
         target_mob = MagicMock(spec=Mob, name="Target", hp=50, max_hp=50)
         target_mob.is_alive.return_value = True
         target_mob.resistances = {} # Ensure resistances attribute exists
-        
+        target_mob.total_av = 0
+        target_mob.dv = 10
         mock_room = Mock(broadcast=AsyncMock())
         attacker_char.location = mock_room
         target_mob.location = mock_room
+        target_mob.pds = 0
+        target_mob.total_av = 0
+        target_mob.barrier_value = 0
+        target_mob.name = "target_mob"
         
         weapon_template = self.mock_world.get_item_template(100)
         weapon_instance = Item({'id': 'weapon-uuid-1', 'template_id': 100, 'condition': 100}, weapon_template)

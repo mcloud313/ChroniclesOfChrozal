@@ -21,6 +21,9 @@ TARGET_CHAR_OR_MOB = "CHAR_OR_MOB" #Characters or mobiles
 TARGET_AREA = "AREA" #Affects others in the room *excluding self)
 TARGET_NONE = "NONE" # No target needed
 
+MAGICAL_DAMAGE_TYPES = {"fire", "cold", "lightning", "earth", "arcane", "divine", "poison", "sonic"}
+
+
 DAMAGE_ARCANE = "arcane"
 DAMAGE_BLUDGEON = "bludgeon"
 DAMAGE_COLD = "cold"
