@@ -83,7 +83,6 @@ async def resolve_physical_attack(
     if damage_multiplier != 1.0:
         damage_info.pre_mitigation_damage = int(damage_info.pre_mitigation_damage * damage_multiplier)
     final_damage = damage_calculator.mitigate_damage(target, damage_info)
-
     # --- 6. Handle Consequences ---
     await outcome_handler.handle_durability(attacker, target, attack_source, world)
     outcome_handler.apply_damage(target, final_damage)

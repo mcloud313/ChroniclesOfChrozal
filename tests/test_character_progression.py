@@ -58,6 +58,7 @@ class TestCharacterProgression(unittest.TestCase):
         }
         
         self.character = Character(mock_writer, self.char_data, mock_world)
+        self.character.stats = self.char_data["stats"]
 
     def test_apply_level_up_gains(self):
         """Tests the direct level up gain calculation."""

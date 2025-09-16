@@ -72,6 +72,7 @@ class TestCombatMechanics(unittest.IsolatedAsyncioTestCase):
         
         char_data = { "id": 2, "player_id": 1, "first_name": "Target", "last_name": "Test", "sex": "Male", "race_id": 1, "class_id": 1, "level": 1, "hp": 50.0, "max_hp": 50.0, "essence": 50.0, "max_essence": 50.0, "xp_pool": 0, "xp_total": 0, "unspent_skill_points": 0, "unspent_attribute_points": 0, "spiritual_tether": 1, "description": "", "coinage": 0, "location_id": 1, "total_playtime_seconds": 0, "status": "ALIVE", "stance": "Standing", "stats": {"vitality": 12}, "skills": {}, "inventory": [], "equipment": {}, "known_spells": [], "known_abilities": [] }
         target_character = Character(self.mock_writer, char_data, self.mock_world)
+        target_character.stats = char_data["stats"]
         
         cap_instance = Item({'id': 'cap-uuid-2', 'template_id': 10}, self.mock_world.get_item_template(10))
         tunic_instance = Item({'id': 'tunic-uuid-2', 'template_id': 11}, self.mock_world.get_item_template(11))

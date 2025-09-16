@@ -130,8 +130,15 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
             await target_loc.broadcast(f"\r\n{attacker_name} has slain {target_name}!\r\n", exclude={attacker})
         
         target.die()
+
+        dropped_coinage, dropped_item_ids = 0, []
+        mob_template = world.get_mob_template(target.template_id)
         
-        dropped_coinage, dropped_item_ids = _determine_loot(target.loot_table)
+        if mob_template:
+            dropped_coinage, dropped_item_ids = _determine_loot(mob_template)
+        else:
+            dropped_coinage, dropped_item_ids = 0, []
+
         base_xp = 50
         xp_gain = max(1, target.level * base_xp + random.randint(-base_xp // 2, base_xp // 2))
         killer = attacker if isinstance(attacker, Character) else None

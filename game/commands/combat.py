@@ -48,7 +48,7 @@ async def cmd_attack(character: 'Character', world: 'World', args_str: str) -> b
 
     await character.send(f"You attack {target.name}!")
 
-    weapon = character._equipped_items.get("WIELD_MAIN")
+    weapon = character._equipped_items.get("main_hand")
     if weapon and weapon.item_type != "WEAPON":
         weapon = None
     
