@@ -11,6 +11,7 @@ import config
 from typing import Optional, Dict, Any, List
 
 from . import utils
+from .definitions import skills as skill_defs
 
 log = logging.getLogger(__name__)
 
@@ -434,10 +435,10 @@ class DatabaseManager:
         return await self.fetch_one(query, character_id)
     
     async def create_character(self, player_id: int, first_name: str, last_name: str, sex: str,
-                               race_id: int, class_id: int, stats: dict,
-                               description: str, hp: float, max_hp: float, essence: float,
-                               max_essence: float) -> Optional[int]:
-        """Creates a new character and their associated stat/equipment rows in a single transaction."""
+                           race_id: int, class_id: int, stats: dict,
+                           description: str, hp: float, max_hp: float, essence: float,
+                           max_essence: float) -> Optional[int]:
+        """Creates a new character and all associated relational data in a single transaction."""
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 # Step 1: Insert into the main characters table
@@ -467,6 +468,15 @@ class DatabaseManager:
 
                 # Step 3: Insert a blank equipment record
                 await conn.execute("INSERT INTO character_equipment (character_id) VALUES ($1)", new_char_id)
+
+                # FIX: Step 4: Insert the initial set of skills with a rank of 0
+                initial_skill_data = [(new_char_id, skill_name, 0) for skill_name in skill_defs.INITIAL_SKILLS]
+                if initial_skill_data:
+                    await conn.copy_records_to_table(
+                    'character_skills',
+                    columns=['character_id', 'skill_name', 'rank'],
+                    records=initial_skill_data
+                )
                 
                 return new_char_id
     

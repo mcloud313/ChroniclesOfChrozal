@@ -436,6 +436,26 @@ class Character:
         """Checks if the character knows a specific ability by its internal key."""
         return ability_key.lower() in self.known_abilities
     
+    def _get_item_weight_recursively(self, item: Item) -> float:
+        """Helper to calculate the weight of an item and its contents."""
+        total_weight = item.weight
+        if item.contents:
+            for content_item in item.contents.values():
+                total_weight += self._get_item_weight_recursively(content_item)
+        return total_weight
+
+    def get_current_weight(self) -> float:
+        """Calculates the total weight of all carried and equipped items."""
+        total_weight = 0.0
+        # Add weight of items in top-level inventory
+        for item in self._inventory_items.values():
+            total_weight += self._get_item_weight_recursively(item)
+        # Add weight of equipped items
+        for item in self._equipped_items.values():
+            total_weight += self._get_item_weight_recursively(item)
+        
+        return round(total_weight, 2)
+
     def get_stat_bonus_from_effects(self, stat_name: str) -> int:
         """
         Calculates the total bonus for a given stat from all active effects.

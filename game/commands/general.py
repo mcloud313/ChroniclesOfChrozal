@@ -13,6 +13,47 @@ if TYPE_CHECKING:
     from ..character import Character
     from ..world import World
 
+HELP_TOPICS = {
+    "GENERAL": {
+        "look": "LOOK [target|in container]\n\r  Look at your surroundings, a person, an item, or inside a container.",
+        "score": "SCORE\n\r  Display your character's vital statistics, attributes, and status.",
+        "skills": "SKILLS\n\r  Show a list of your skills and their current ranks.",
+        "who": "WHO\n\r  See a list of all players currently online.",
+        "quit": "QUIT\n\r  Log out of the game safely, saving your character.",
+        "help": "HELP [topic]\n\r  Shows a list of help topics, or detailed help for a specific topic."
+    },
+    "COMMUNICATION": {
+        "say": "SAY <message>\n\r  Speak to everyone in your current room.",
+        "tell": "TELL <player> <message>\n\r  Send a private message to another player.",
+        "emote": "EMOTE <action>\n\r  Perform an action that others can see (e.g., emote smiles.)."
+    },
+    "MOVEMENT": {
+        "north": "NORTH (n), SOUTH (s), EAST (e), WEST (w), UP (u), DOWN (d)\n\r  Move in a cardinal direction.",
+        "go": "GO <exit>\n\r  Use a named exit, like 'go hole' or 'go path'.",
+        "drag": "DRAG <corpse> <direction>\n\r  Drag a dead or dying character to an adjacent room."
+    },
+    "INVENTORY": {
+        "inventory": "INVENTORY (i, inv)\n\r  See what items you are carrying and wearing.",
+        "get": "GET <item> [from container]\n\r  Pick up an item from the ground or take it from a container.",
+        "drop": "DROP <item>\n\r  Drop an item from your inventory onto the ground.",
+        "put": "PUT <item> in <container>\n\r  Place an item from your inventory into a container you are holding.",
+        "wear": "WEAR <item>\n\r  Equip a piece of armor or a weapon from your inventory.",
+        "remove": "REMOVE <item>\n\r  Unequip an item you are currently wearing.",
+        "examine": "EXAMINE <item>\n\r  Look closely at an item in your inventory or on the ground."
+    },
+    "COMBAT": {
+        "attack": "ATTACK <target>\n\r  Initiate combat with a creature.",
+        "cast": "CAST <spell> [target]\n\r  Cast a magical spell you have learned.",
+        "use": "USE <ability> [target]\n\r  Use a special class ability."
+    },
+    "SOCIAL": {
+        "group": "GROUP [player]\n\r  With no target, shows your group. With a target, invites them to a group.",
+        "disband": "DISBAND\n\r  If you are the leader, disbands your current group.",
+        "leave": "LEAVE\n\r  Leave your current group.",
+        "kick": "KICK <player>\n\r  If you are the leader, removes a player from your group."
+    }
+}
+
 log = logging.getLogger(__name__)
 
 async def cmd_look(character: 'Character', world: 'World', args_str: str) -> bool:
@@ -178,20 +219,39 @@ async def cmd_who(character: 'Character', world: 'World', args_str: str) -> bool
     return True
 
 async def cmd_help(character: 'Character', world: 'World', args_str: str) -> bool:
-    """Handles the 'help' command."""
-    output = ("\r\n--- Basic Commands ---\r\n"
-              " look              - Look around the room.\r\n"
-              " north, south, etc - Move in a direction.\r\n"
-              " say <message>     - Speak to others in the room.\r\n"
-              " who               - List players currently online.\r\n"
-              " score             - Display your character sheet.\r\n"
-              " inventory         - Display your inventory and equipment.\r\n"
-              " get, drop <item>  - Interact with items.\r\n"
-              " attack <target>   - Initiate combat.\r\n"
-              " help              - Show this help message.\r\n"
-              " quit              - Leave the game.\r\n"
-              "----------------------")
-    await character.send(output)
+    """Handles the dynamic 'help' command."""
+    topic = args_str.strip().lower()
+
+    # Case 1: No topic provided, show all categories
+    if not topic:
+        output = ["\r\n{C--- Help Categories ---{x"]
+        for category in HELP_TOPICS:
+            output.append(f"  {category.title()}")
+        output.append("\r\nType 'help <category>' or 'help <command>' for more information.")
+        await character.send("\r\n".join(output))
+        return True
+
+    # Case 2: Topic is a category, show all commands in it
+    if topic.upper() in HELP_TOPICS:
+        category_name = topic.upper()
+        output = [f"\r\n{{C--- Help: {category_name.title()} ---{{x"]
+        for command, description in HELP_TOPICS[category_name].items():
+            # Show only the first line of the description for the category list
+            summary = description.split('\n\r')[0]
+            output.append(f"  {command:<15} - {summary}")
+        await character.send("\r\n".join(output))
+        return True
+
+    # Case 3: Topic is a specific command, show its full entry
+    for category_data in HELP_TOPICS.values():
+        if topic in category_data:
+            full_description = category_data[topic]
+            output = [f"\r\n{{C--- Help: {topic.title()} ---{{x", f"  {full_description}"]
+            await character.send("\r\n".join(output))
+            return True
+
+    # Case 4: Topic not found
+    await character.send(f"Sorry, no help topic found for '{topic}'.")
     return True
 
 async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bool:
@@ -205,7 +265,7 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
         modifier = utils.calculate_modifier(value)
         attributes_display.append(f" {stat_name.capitalize():<10}: {value:>2} [{modifier:+}]")
 
-    total_av = character.get_total_av(world)
+    total_av = character.total_av
     armor_training_rank = character.get_skill_rank("armor training")
     effective_av = math.floor(total_av * (0.20 + (armor_training_rank * 0.01)))
     
@@ -215,7 +275,7 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
         f"\r\n Race : {world.get_race_name(character.race_id):<28} Class: {world.get_class_name(character.class_id)}"
         f"\r\n Level: {character.level:<31}"
         f"\r\n=================================================="
-        f"\r\n HP   : {int(character.hp):>4}/{int(character.max_hp):<28} Carry: {character.get_current_weight(world):>2}/{character.get_max_weight():<3} stones"
+        f"\r\n HP   : {int(character.hp):>4}/{int(character.max_hp):<28} Carry: {character.get_current_weight():>2}/{character.get_max_weight():<3} stones"
         f"\r\n Armor: {effective_av:>4}/{total_av:<28} (Effective/Total)"
         f"\r\n Barrier: {character.barrier_value:<28} "
         f"\r\n Essn : {int(character.essence):>4}/{int(character.max_essence):<31}"
