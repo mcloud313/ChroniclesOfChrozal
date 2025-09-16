@@ -145,20 +145,21 @@ async def cmd_move(character: 'Character', world: 'World', direction: str) -> bo
 
     exit_data = character.location.exits.get(direction.lower())
 
-    # This command now only handles simple, direct exits (where the exit data is an integer).
-    # Complex exits with skill checks must be used with the 'go' command.
-    if not isinstance(exit_data, int):
+    if not exit_data:
         await character.send("You can't go that way.")
         return True
 
-    target_room_id = exit_data
-    target_room = world.get_room(target_room_id)
+    # For now, cmd_move only handles simple, non-hidden exits.
+    # We can add checks for 'is_hidden' or door states here later.
+    target_room_id = exit_data.get('destination_room_id')
 
-    if target_room is None:
-        log.error("Exit '%s' in room %d points to non-existent room %d!",
-                direction, character.location.dbid, target_room_id)
+    if target_room_id is None:
+        log.error("Exit '%s' in room %d is missing a destination_room_id!",
+                  direction, character.location.dbid)
         await character.send("The path ahead seems to vanish into nothingness.")
         return True
+
+    target_room = world.get_room(target_room_id)
 
     await _perform_move(character, world, target_room, direction)
     return True
@@ -180,29 +181,24 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
         await character.send("Go where? (e.g., go hole, go climb rope)")
         return True
 
+    # --- FIX: Simplified Exit Data Parsing ---
     exit_data = character.location.exits.get(exit_name)
-    if exit_data is None:
-        await character.send(f"You see no exit like '{exit_name}' here.")
+    if not exit_data:
+        # Also check cardinal directions in case the user types "go north"
+        exit_data = character.location.exits.get(utils.get_canonical_direction(exit_name))
+
+    if not exit_data:
+        await character.send(f"You see no way to go '{exit_name}' here.")
         return True
 
-    target_room_id: Optional[int] = None
-    skill_check_data: Optional[Dict[str, Any]] = None
+    target_room_id = exit_data.get('destination_room_id')
 
-    # --- Parse Exit Data ---
-    if isinstance(exit_data, int):
-        target_room_id = exit_data
-    elif isinstance(exit_data, dict):
-        target_room_id = exit_data.get('target')
-        skill_check_data = exit_data.get('skill_check')
-    else:
-        log.error("Room %d exit '%s' has invalid data type: %r", character.location.dbid, exit_name, exit_data)
-        await character.send("The way forward seems confused.")
-        return True
-
-    if not isinstance(target_room_id, int):
-        log.error("Room %d exit '%s' has invalid target ID: %r", character.location.dbid, exit_name, target_room_id)
+    if target_room_id is None:
+        log.error("Room %d exit '%s' has an invalid target ID.", character.location.dbid, exit_name)
         await character.send("The way forward seems broken.")
         return True
+
+    skill_check_data: Optional[Dict[str, Any]] = None
 
     # --- Perform Skill Check if Required ---
     if skill_check_data:
@@ -239,7 +235,7 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
     target_room = world.get_room(target_room_id)
     if target_room is None:
         log.error("Exit '%s' in room %d points to non-existent room %d!",
-                exit_name, character.location.dbid, target_room_id)
+                  exit_name, character.location.dbid, target_room_id)
         await character.send(f"You try to go '{exit_name}', but the way seems to vanish.")
         return True
 

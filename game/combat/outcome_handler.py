@@ -25,21 +25,21 @@ def apply_damage(target: Union[Character, Mob], final_damage: int):
     """Applies the final calculated damage to the target's HP."""
     target.hp = max(0.0, target.hp - final_damage)
 
-def _determine_loot(loot_table: Dict[str, Any]) -> Tuple[int, List[int]]:
-    """Calculates loot based on the provided loot_table dictionary."""
+def _determine_loot(mob_template: Dict[str, Any]) -> Tuple[int, List[int]]:
+    """Calculates loot from a normalized mob template."""
     dropped_coinage = 0
     dropped_item_ids = []
 
-    if (max_coinage := loot_table.get("coinage_max", 0)) and isinstance(max_coinage, int):
+    # Get coinage directly from the template
+    if max_coinage := mob_template.get("max_coinage", 0):
         dropped_coinage = random.randint(0, max_coinage)
 
-    if (item_list := loot_table.get("items", [])) and isinstance(item_list, list):
-        for item_info in item_list:
-            if isinstance(item_info, dict):
-                if (template_id := item_info.get("template_id")) and \
-                   (chance := item_info.get("chance", 0.0)) and \
-                   (random.random() < chance):
-                    dropped_item_ids.append(template_id)
+    # Roll for each item in the loot table
+    if item_list := mob_template.get("loot_table", []):
+        for item_rule in item_list:
+            if random.random() < item_rule.get('drop_chance', 0.0):
+                # For now, we'll just drop one. We can add min/max quantity later.
+                dropped_item_ids.append(item_rule['item_template_id'])
     
     return dropped_coinage, dropped_item_ids
 
