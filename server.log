@@ -1,0 +1,98 @@
+2025-09-17 21:59:36,529 [INFO] __main__: Starting Chronicles of Chrozal server...
+2025-09-17 21:59:36,533 [ERROR] game.database: !!! Failed to connect to PostgreSQL database. Server cannot start.
+Traceback (most recent call last):
+  File "/workspaces/ChroniclesOfChrozal/game/database.py", line 34, in connect
+    self.pool = await asyncpg.create_pool(**DB_CONFIG)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/pool.py", line 418, in _async__init__
+    await self._initialize()
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/pool.py", line 445, in _initialize
+    await first_ch.connect()
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/pool.py", line 132, in connect
+    self._con = await self._pool._get_new_connection()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/pool.py", line 517, in _get_new_connection
+    con = await self._connect(
+          ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 2421, in connect
+    return await connect_utils._connect(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connect_utils.py", line 1075, in _connect
+    raise last_error or exceptions.TargetServerAttributeNotMatched(
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connect_utils.py", line 1049, in _connect
+    conn = await _connect_addr(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connect_utils.py", line 886, in _connect_addr
+    return await __connect_addr(params, True, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connect_utils.py", line 931, in __connect_addr
+    tr, pr = await connector
+             ^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connect_utils.py", line 802, in _create_ssl_connection
+    tr, pr = await loop.create_connection(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/asyncio/base_events.py", line 1093, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('127.0.0.1', 5432), [Errno 99] Cannot assign requested address
+2025-09-17 21:59:36,538 [ERROR] __main__: A critical error occurred in the main server function.
+Traceback (most recent call last):
+  File "/workspaces/ChroniclesOfChrozal/server.py", line 76, in main
+    await db_manager.connect()
+  File "/workspaces/ChroniclesOfChrozal/game/database.py", line 34, in connect
+    self.pool = await asyncpg.create_pool(**DB_CONFIG)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/pool.py", line 418, in _async__init__
+    await self._initialize()
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/pool.py", line 445, in _initialize
+    await first_ch.connect()
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/pool.py", line 132, in connect
+    self._con = await self._pool._get_new_connection()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/pool.py", line 517, in _get_new_connection
+    con = await self._connect(
+          ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connection.py", line 2421, in connect
+    return await connect_utils._connect(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connect_utils.py", line 1075, in _connect
+    raise last_error or exceptions.TargetServerAttributeNotMatched(
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connect_utils.py", line 1049, in _connect
+    conn = await _connect_addr(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connect_utils.py", line 886, in _connect_addr
+    return await __connect_addr(params, True, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connect_utils.py", line 931, in __connect_addr
+    tr, pr = await connector
+             ^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asyncpg/connect_utils.py", line 802, in _create_ssl_connection
+    tr, pr = await loop.create_connection(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/asyncio/base_events.py", line 1093, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('127.0.0.1', 5432), [Errno 99] Cannot assign requested address
+2025-09-17 21:59:36,539 [INFO] __main__: Shutting down server...
+2025-09-17 21:59:36,539 [INFO] game.ticker: Ticker task is not running or already stopped.
+2025-09-17 21:59:36,539 [INFO] __main__: Server shutdown complete.
+2025-09-17 22:03:24,782 [INFO] __main__: Starting Chronicles of Chrozal server...
+2025-09-17 22:03:25,018 [INFO] game.database: Successfully connected to PostgreSQL and created connection pool.
+2025-09-17 22:03:25,018 [INFO] game.database: --- Initializing PostgreSQL database schema ---
+2025-09-17 22:03:26,470 [INFO] game.database: --- PostgreSQL schema check complete ---
+2025-09-17 22:03:26,471 [INFO] game.world: Building world state from PostgreSQL database...
+2025-09-17 22:03:26,487 [INFO] game.world: Loaded 1 areas, 5 races, 4 classes, 0 items, 0 mobs, 0 abilities.
+2025-09-17 22:03:26,489 [INFO] game.world: World build complete. 1 rooms loaded and populated.
+2025-09-17 22:03:26,490 [INFO] game.world: Subscribing world systems to the game ticker...
+2025-09-17 22:03:26,490 [INFO] __main__: World loaded successfully.
+2025-09-17 22:03:26,490 [INFO] game.ticker: Starting global game ticker with interval: 1.00 seconds.
+2025-09-17 22:03:26,490 [INFO] __main__: Autosave task started. Interval: 300 seconds.
+2025-09-17 22:03:26,490 [INFO] __main__: Server listening on 0.0.0.0:4000
+2025-09-17 22:03:30,015 [INFO] __main__: Shutting down server...
+2025-09-17 22:03:30,015 [INFO] game.ticker: Stopping global game ticker...
+2025-09-17 22:03:30,015 [INFO] __main__: Autosave task cancelled.
+2025-09-17 22:03:30,016 [INFO] game.ticker: Ticker loop cancelled.
+2025-09-17 22:03:30,016 [INFO] __main__: Performing final world state save...
+2025-09-17 22:03:30,017 [INFO] game.world: Saving world state...
+2025-09-17 22:03:30,017 [INFO] game.world: World state save complete.
+2025-09-17 22:03:30,032 [INFO] game.database: PostgreSQL connection pool closed.
+2025-09-17 22:03:30,032 [INFO] __main__: Server shutdown complete.
+2025-09-17 22:03:30,033 [INFO] __main__: Server stopped manually.
