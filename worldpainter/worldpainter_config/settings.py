@@ -158,7 +158,7 @@ JAZZMIN_SETTINGS = {
         {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},
     ],
     "theme": "darkly", # A good base theme to build on
-    "custom_css": None,
+    "custom_css": "builder/css/custom.css",
     "custom_js": None,
 }
 

@@ -3,6 +3,18 @@
 from django.db import models
 from django.contrib.auth.models import User # For linking to Django's built-in user
 
+
+ITEM_TYPE_CHOICES = [
+    ("GENERAL", "General"), ("WEAPON", "Weapon"), ("ARMOR", "Armor"),
+    ("CONTAINER", "Container"), ("QUEST", "Quest"), ("FOOD", "Food"),
+    ("KEY", "Key"), ("LIGHT", "Light Source"),
+]
+
+MOB_TYPE_CHOICES = [
+    ("BEAST", "Beast"), ("HUMANOID", "Humanoid"), ("UNDEAD", "Undead"),
+    ("ELEMENTAL", "Elemental"), ("GIANT", "Giant"), ("DRAGON", "Dragon"),
+]
+
 # --- Core Template Models ---
 
 class Areas(models.Model):
@@ -58,9 +70,9 @@ class DamageTypes(models.Model):
 class ItemTemplates(models.Model):
     name = models.TextField(unique=True)
     description = models.TextField(blank=True, null=True)
-    type = models.TextField()
-    stats = models.JSONField(blank=True, null=True)
-    flags = models.JSONField(blank=True, null=True)
+    type = models.CharField(max_length=20, choices=ITEM_TYPE_CHOICES, default="GENERAL")
+    stats = models.JSONField(blank=True, null=True, help_text='Ex: {"might": 5, "value": 100, "damage_base": 10}')
+    flags = models.JSONField(blank=True, null=True, help_text='Ex: ["GLOWS", "NO_DROP"]')
     damage_type = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -73,15 +85,15 @@ class ItemTemplates(models.Model):
         db_table = 'item_templates'
 
 class MobTemplates(models.Model):
-    name = models.TextField(unique=True)
+    name = models.CharField(unique=True, max_length=100)
     description = models.TextField(blank=True, null=True)
-    mob_type = models.TextField(blank=True, null=True)
+    mob_type = models.CharField(max_length=20, choices=MOB_TYPE_CHOICES, blank=True, null=True)
     level = models.IntegerField()
-    stats = models.JSONField(blank=True, null=True)
-    resistances = models.JSONField(blank=True, null=True)
+    stats = models.JSONField(blank=True, null=True, help_text='Ex: {"might": 15, "agility": 12}')
+    resistances = models.JSONField(blank=True, null=True, help_text='Ex: {"fire": 0.5, "cold": -0.25}')
     max_hp = models.IntegerField()
     max_coinage = models.IntegerField()
-    flags = models.JSONField(blank=True, null=True)
+    flags = models.JSONField(blank=True, null=True, help_text='Ex: ["AGGRESSIVE", "SENTINEL"]')
     respawn_delay_seconds = models.IntegerField(blank=True, null=True)
     variance = models.JSONField(blank=True, null=True)
     movement_chance = models.FloatField()
@@ -123,7 +135,8 @@ class Rooms(models.Model):
     area = models.ForeignKey(Areas, on_delete=models.PROTECT)
     name = models.TextField()
     description = models.TextField(blank=True, null=True)
-    spawners = models.JSONField(blank=True, null=True) # Will be deprecated
+    spawners = models.JSONField(blank=True, null=True) # {"MOB_TEMPLATE_ID": {"max_present": COUNT}}
+    # {"101": {"max_present": 3}, "102": {"max_present": 1}}
     flags = models.JSONField(blank=True, null=True)
     coinage = models.IntegerField()
     created_at = models.DateTimeField(auto_now_add=True)

@@ -70,7 +70,7 @@ class RoomAdmin(admin.ModelAdmin):
     list_filter = ('area',)
     search_fields = ('name', 'description')
     inlines = [ExitsInline, RoomObjectsInline]  # <-- RoomObjectsInline is now included!
-    exclude = ('exits', 'spawners')
+    exclude = ('exits')
 
 @admin.register(MobTemplates)
 class MobTemplateAdmin(admin.ModelAdmin):

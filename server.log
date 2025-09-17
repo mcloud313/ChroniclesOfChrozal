@@ -96,3 +96,47 @@ OSError: Multiple exceptions: [Errno 111] Connect call failed ('127.0.0.1', 5432
 2025-09-17 22:03:30,032 [INFO] game.database: PostgreSQL connection pool closed.
 2025-09-17 22:03:30,032 [INFO] __main__: Server shutdown complete.
 2025-09-17 22:03:30,033 [INFO] __main__: Server stopped manually.
+2025-09-17 22:30:32,986 [INFO] __main__: Starting Chronicles of Chrozal server...
+2025-09-17 22:30:33,405 [INFO] game.database: Successfully connected to PostgreSQL and created connection pool.
+2025-09-17 22:30:33,405 [INFO] game.database: --- Initializing PostgreSQL database schema ---
+2025-09-17 22:30:33,911 [INFO] game.database: --- PostgreSQL schema check complete ---
+2025-09-17 22:30:33,911 [INFO] game.world: Building world state from PostgreSQL database...
+2025-09-17 22:30:33,922 [INFO] game.world: Loaded 1 areas, 5 races, 4 classes, 0 items, 0 mobs, 0 abilities.
+2025-09-17 22:30:33,925 [INFO] game.world: World build complete. 1 rooms loaded and populated.
+2025-09-17 22:30:33,925 [INFO] game.world: Subscribing world systems to the game ticker...
+2025-09-17 22:30:33,925 [INFO] __main__: World loaded successfully.
+2025-09-17 22:30:33,925 [INFO] game.ticker: Starting global game ticker with interval: 1.00 seconds.
+2025-09-17 22:30:33,925 [INFO] __main__: Autosave task started. Interval: 300 seconds.
+2025-09-17 22:30:33,926 [INFO] __main__: Server listening on 0.0.0.0:4000
+2025-09-17 22:30:36,848 [INFO] __main__: Shutting down server...
+2025-09-17 22:30:36,848 [INFO] game.ticker: Stopping global game ticker...
+2025-09-17 22:30:36,848 [INFO] __main__: Autosave task cancelled.
+2025-09-17 22:30:36,849 [INFO] game.ticker: Ticker loop cancelled.
+2025-09-17 22:30:36,849 [INFO] __main__: Performing final world state save...
+2025-09-17 22:30:36,849 [INFO] game.world: Saving world state...
+2025-09-17 22:30:36,849 [INFO] game.world: World state save complete.
+2025-09-17 22:30:36,866 [INFO] game.database: PostgreSQL connection pool closed.
+2025-09-17 22:30:36,866 [INFO] __main__: Server shutdown complete.
+2025-09-17 22:30:36,867 [INFO] __main__: Server stopped manually.
+2025-09-17 22:30:42,191 [INFO] __main__: Starting Chronicles of Chrozal server...
+2025-09-17 22:30:42,472 [INFO] game.database: Successfully connected to PostgreSQL and created connection pool.
+2025-09-17 22:30:42,472 [INFO] game.database: --- Initializing PostgreSQL database schema ---
+2025-09-17 22:30:42,710 [INFO] game.database: --- PostgreSQL schema check complete ---
+2025-09-17 22:30:42,710 [INFO] game.world: Building world state from PostgreSQL database...
+2025-09-17 22:30:42,720 [INFO] game.world: Loaded 1 areas, 5 races, 4 classes, 0 items, 0 mobs, 0 abilities.
+2025-09-17 22:30:42,723 [INFO] game.world: World build complete. 1 rooms loaded and populated.
+2025-09-17 22:30:42,723 [INFO] game.world: Subscribing world systems to the game ticker...
+2025-09-17 22:30:42,723 [INFO] __main__: World loaded successfully.
+2025-09-17 22:30:42,723 [INFO] game.ticker: Starting global game ticker with interval: 1.00 seconds.
+2025-09-17 22:30:42,723 [INFO] __main__: Autosave task started. Interval: 300 seconds.
+2025-09-17 22:30:42,724 [INFO] __main__: Server listening on 0.0.0.0:4000
+2025-09-17 22:30:45,489 [INFO] __main__: Shutting down server...
+2025-09-17 22:30:45,489 [INFO] game.ticker: Stopping global game ticker...
+2025-09-17 22:30:45,489 [INFO] __main__: Autosave task cancelled.
+2025-09-17 22:30:45,489 [INFO] game.ticker: Ticker loop cancelled.
+2025-09-17 22:30:45,489 [INFO] __main__: Performing final world state save...
+2025-09-17 22:30:45,490 [INFO] game.world: Saving world state...
+2025-09-17 22:30:45,490 [INFO] game.world: World state save complete.
+2025-09-17 22:30:45,507 [INFO] game.database: PostgreSQL connection pool closed.
+2025-09-17 22:30:45,507 [INFO] __main__: Server shutdown complete.
+2025-09-17 22:30:45,508 [INFO] __main__: Server stopped manually.

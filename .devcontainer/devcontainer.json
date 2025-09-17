@@ -1,13 +1,20 @@
 {
-	"name": "Chronicles of Chrozal CDE",
-	"dockerComposeFile": "../docker-compose.yml",
-	"service": "app",
-	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-	"customizations": {
-		"vscode": {
-			"extensions": [
-				"ms-python.python"
-			]
-		}
-	}
+    "name": "Chronicles of Chrozal CDE",
+    "dockerComposeFile": "../docker-compose.yml",
+    "service": "app",
+    "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+    
+    // --- ADD THIS "FEATURES" SECTION ---
+    "features": {
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    },
+    // ------------------------------------
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python"
+            ]
+        }
+    }
 }
