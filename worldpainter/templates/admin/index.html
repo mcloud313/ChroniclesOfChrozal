@@ -1,0 +1,58 @@
+{% extends "admin/index.html" %}
+{% load static %}
+
+{% block content %}
+<div id="content-main">
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">World Statistics</h3>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Total Areas
+                            <span class="badge badge-primary badge-pill">{{ area_count }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Total Rooms
+                            <span class="badge badge-primary badge-pill">{{ room_count }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Mob Templates
+                            <span class="badge badge-info badge-pill">{{ mob_template_count }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            Item Templates
+                            <span class="badge badge-info badge-pill">{{ item_template_count }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">World Health Checks</h3>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <a href="{% url 'admin:builder_rooms_changelist' %}?no_exits=true">Rooms with no exits</a>
+                            <span class="badge badge-warning badge-pill">{{ rooms_with_no_exits }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                             <a href="{% url 'admin:builder_mobtemplates_changelist' %}?no_loot=true">Mobs with no loot</a>
+                            <span class="badge badge-warning badge-pill">{{ mobs_with_no_loot }}</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{ block.super }}
+</div>
+{% endblock %}
