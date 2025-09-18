@@ -1,3 +1,5 @@
 aiosqlite
 argon2-cffi
 asyncpg
+gunicorn
+psycopg2-binary
