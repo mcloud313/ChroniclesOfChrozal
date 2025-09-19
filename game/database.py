@@ -19,7 +19,7 @@ DB_CONFIG = {
     "user": "chrozal",
     "password": "timcp313", 
     "database": "chrozaldb",
-    "host": "db"
+    "host": "localhost"
 }
 
 class DatabaseManager:

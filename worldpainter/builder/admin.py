@@ -27,12 +27,30 @@ class RoomObjectsInline(admin.TabularInline):
     model = RoomObjects
     extra = 1
 
-# ... (all other Inline classes remain the same) ...
-class MobAttacksInline(admin.TabularInline): model = MobAttacks; extra = 1
-class MobLootTableInline(admin.TabularInline): model = MobLootTable; extra = 1
-class CharacterStatsInline(admin.StackedInline): model = CharacterStats; can_delete = False; readonly_fields = [f.name for f in CharacterStats._meta.get_fields() if f.name != 'character']
-class CharacterSkillsInline(admin.TabularInline): model = CharacterSkills; extra = 0; can_delete = False; readonly_fields = ('skill_name', 'rank')
-class CharacterEquipmentInline(admin.StackedInline): model = CharacterEquipment; can_delete = False; readonly_fields = [f.name for f in CharacterEquipment._meta.get_fields() if f.name != 'character']
+class MobAttacksInline(admin.TabularInline):
+    model = MobAttacks
+    extra = 1
+
+class MobLootTableInline(admin.TabularInline):
+    model = MobLootTable
+    extra = 1
+
+class CharacterStatsInline(admin.StackedInline):
+    model = CharacterStats
+    can_delete = False
+    readonly_fields = [f.name for f in CharacterStats._meta.get_fields() if f.name != 'character']
+
+class CharacterSkillsInline(admin.TabularInline):
+    model = CharacterSkills
+    extra = 0
+    can_delete = False
+    readonly_fields = ('skill_name', 'rank')
+
+class CharacterEquipmentInline(admin.StackedInline):
+    model = CharacterEquipment
+    can_delete = False
+    readonly_fields = [f.name for f in CharacterEquipment._meta.get_fields() if f.name != 'character']
+
 
 # --- Main Model Admin Configurations ---
 @admin.register(Areas)
@@ -57,7 +75,12 @@ class RoomAdmin(admin.ModelAdmin):
                 exit_instance = f.instance
                 opposite_dir = OPPOSITE_DIRECTIONS.get(exit_instance.direction.lower())
                 if opposite_dir and not Exits.objects.filter(source_room=exit_instance.destination_room, direction=opposite_dir).exists():
-                    Exits.objects.create(source_room=exit_instance.destination_room, direction=opposite_dir, destination_room=exit_instance.source_room)
+                    Exits.objects.create(
+                        source_room=exit_instance.destination_room,
+                        direction=opposite_dir,
+                        destination_room=exit_instance.source_room,
+                        is_hidden=False
+                    )
 
 @admin.register(MobTemplates)
 class MobTemplateAdmin(admin.ModelAdmin):
@@ -90,5 +113,5 @@ admin.site.register(DamageTypes)
 admin.site.register(ItemInstances)
 admin.site.register(ShopInventories)
 admin.site.register(BankAccounts)
-admin.site.register(RoomObjects)
+# We don't register RoomObjects here because it's handled by an Inline
 admin.site.register(AbilityTemplates)
