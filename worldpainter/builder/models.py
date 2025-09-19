@@ -133,12 +133,12 @@ class AbilityTemplates(models.Model):
 
 class Rooms(models.Model):
     area = models.ForeignKey(Areas, on_delete=models.PROTECT)
-    name = models.TextField()
+    name = models.CharField(unique=True, max_length=100)
     description = models.TextField(blank=True, null=True)
     spawners = models.JSONField(blank=True, null=True) # {"MOB_TEMPLATE_ID": {"max_present": COUNT}}
     # {"101": {"max_present": 3}, "102": {"max_present": 1}}
     flags = models.JSONField(blank=True, null=True)
-    coinage = models.IntegerField()
+    coinage = models.IntegerField(default=0, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

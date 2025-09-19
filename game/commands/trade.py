@@ -146,6 +146,11 @@ async def cmd_sell(character: 'Character', world: 'World', args_str: str) -> boo
     if "SHOP" not in character.location.flags:
         await character.send("This is not a shop.")
         return True
+
+     # --- NEW: Check for the NO_SELL flag ---
+    if "NO_SELL" in character.location.flags:
+        await character.send("The shopkeeper isn't interested in buying anything today.")
+        return True
     
     # 2. Find the item in the character's top level inventory (hands)
     item_to_sell = character.find_item_in_inventory_by_name(args_str)
