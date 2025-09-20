@@ -48,13 +48,10 @@ async def resolve_physical_attack(
         return
 
     # --- 2. Determine Attack Variables (CRITICAL: Do this first!) ---
-    wpn_speed = 2.0
+    wpn_speed = 2.0 # Default for unarmed
     if isinstance(attacker, Character):
         if isinstance(attack_source, Item) and attack_source.item_type == "WEAPON":
             wpn_speed = attack_source.speed
-        # Unarmed speed is default 2.0
-    elif isinstance(attacker, Mob) and isinstance(attack_source, dict):
-        wpn_speed = attack_source.get("speed", 2.0)
 
     # Calculate roundtime penalty once
     rt_penalty = attacker.total_av * 0.05 if isinstance(attacker, Character) else 0.0
@@ -107,63 +104,56 @@ async def resolve_magical_attack(
     caster_name = caster.name.capitalize()
     target_name = target.name.capitalize()
 
-    # --- 1. Get Power and Defense ---
-    caster_rating = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr
-    final_target_dv = target.dv
+    # --- 1. Get Power and Defense Ratings ---
+    school = effect_details.get("school", "Arcane")
+    rating_name = "APR" if school == "Arcane" else "DPR"
 
-    # --- 2. Hit Check ---
-    hit_roll = random.randint(1, 20)
-    is_crit, is_fumble = (hit_roll == 20), (hit_roll == 1)
-    is_hit = is_crit or (not is_fumble and (caster_rating + hit_roll) >= final_target_dv)
+    hit_result = hit_resolver.check_magical_hit(caster, target, school)
 
-    # --- 3. Resolve Miss ---
-    if not is_hit:
-        await caster.send(f"Your {spell_data['name']} misses {target_name}.")
+    if not hit_result.is_hit:
+        if isinstance(caster, Character):
+            await caster.send(f"Your {spell_data['name']} misses {target_name}.")
+        # No miss message for target to reduce spam
         return
 
-    # --- 4. Calculate Damage ---
-    base_dmg = effect_details.get("damage_base", 0)
-    rng_dmg = effect_details.get("damage_rng", 0)
-    rng_roll_result = random.randint(1, rng_dmg) if rng_dmg > 0 else 0
-    if is_crit:
-        rng_roll_result += roll_exploding_dice(rng_dmg)
+    # --- 2. Calculate Damage ---
+    damage_info = damage_calculator.calculate_magical_damage(caster, spell_data, hit_result.is_crit)
+    final_damage = damage_calculator.mitigate_magical_damage(target, damage_info)
+
+    # --- 3. Apply Damage & Send Messages ---
+    outcome_handler.apply_damage(target, final_damage)
+
+    # --- Create verbose combat messages ---
+    hit_desc = "{rCRITICALLY HITS{x" if hit_result.is_crit else "hits"
+    roll_details = (
+        f"{{i[Roll: {hit_result.roll} + {rating_name}: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]"
+        f" -> Damage: {final_damage}{{x"
+    )
     
-    stat_modifier = caster.apr if effect_details.get("school") == "Arcane" else caster.dpr
-    pre_mitigation_damage = max(0, base_dmg + rng_roll_result + stat_modifier)
-
-    # --- 5. Mitigate Damage ---
-    mit_sds = target.sds
-    mit_bv = target.barrier_value
-    final_damage = max(0, pre_mitigation_damage - mit_sds - mit_bv)
-
-    dmg_type = effect_details.get("damage_type")
-    if dmg_type:
-        resistance = target.resistances.get(dmg_type, 0.0)
-        if resistance != 0:
-            multiplier = 1.0 - (resistance / 100.0)
-            final_damage = int(final_damage * multiplier)
-
-    # --- 6. Apply Damage & Send Messages ---
-    target.hp = max(0.0, target.hp - final_damage)
-    
-    hit_desc = "{rCRITICALLY HITS{x" if is_crit else "hits"
     if isinstance(caster, Character):
-        await caster.send(f"Your {spell_data['name']} {hit_desc} {target_name} for {{y{int(final_damage)}{{x damage!")
-    if isinstance(target, Character):
-        await target.send(f"{{R{caster_name}'s {spell_data['name']} {hit_desc} you for {{y{int(final_damage)}{{x damage!{{x ({int(target.hp)}/{int(target.max_hp)} HP)")
-    if caster.location:
-        await caster.location.broadcast(f"\r\n{caster_name}'s {spell_data['name']} {hit_desc} {target_name}!\r\n", exclude={caster, target})
+        await caster.send(f"Your {spell_data['name']} {hit_desc.lower()} {target_name} for {{y{final_damage}{{x damage! {roll_details}")
 
+    if isinstance(target, Character):
+        mit_details = f"{{i[Mitigation: {target.sds}(SDS) + {target.barrier_value}(Barrier)]{{x"
+        await target.send(f"{{R{caster_name}'s {spell_data['name']} {hit_desc} you for {{y{final_damage}{{x damage!{mit_details} ({int(target.hp)}/{int(target.max_hp)} HP)")
+
+    # --- 4. Send Room Message ---
+    if caster.location:
+        room_msg_hit_desc = "critically hits" if hit_result.is_crit else "hits"
+        await caster.location.broadcast(f"\r\n{caster_name}'s {spell_data['name']} {room_msg_hit_desc} {target_name}!\r\n", exclude={caster, target})
+
+    # --- 5. Handle Post-Damage Effects ---
     if isinstance(target, Character) and target.status == "MEDITATING" and final_damage > 0:
         target.status = "ALIVE"
         await target.send("{RThe magical assault disrupts your meditation!{x")
         if caster.location:
             await caster.location.broadcast(f"\r\n{target_name} is snapped out of their meditative trance by the attack!\r\n", exclude={target})
 
-    if is_hit and (rider_effect := effect_details.get("applies_effect")):
+    # Apply any rider effects (e.g., a stun that accompanies the damage)
+    if hit_result.is_hit and (rider_effect := effect_details.get("applies_effect")):
         await apply_effect(caster, target, rider_effect, spell_data, world)
 
-    # --- 7. Check for Defeat ---
+    # --- 6. Check for Defeat ---
     if target.hp <= 0:
         await outcome_handler.handle_defeat(caster, target, world)
 

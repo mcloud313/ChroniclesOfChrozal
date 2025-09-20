@@ -27,6 +27,20 @@ def check_physical_hit(attacker: Union[Character, Mob], target: Union[Character,
         A hitresult object with the outcome
     """
     attacker_rating = attacker.mar
+
+    if isinstance(attacker, Character) and (weapon := attacker._equipped_items.get('main_hand')):
+        # This is a placeholder for a more detailed skill system
+        if weapon.damage_type == 'slash' or weapon.damage_type == 'pierce':
+            attacker_rating += attacker.get_skill_rank("bladed weapons")
+        elif weapon.damage_type == 'bludgeon':
+            attacker_rating += attacker.get_skill_rank("bludgeoning weapons")
+            
+    # FIX: Apply armor penalty to target's dodge value
+    target_dv = target.dv
+    if isinstance(target, Character):
+        target_dv -= target.total_av # Heavy armor makes you easier to hit
+
+
     target_dv = target.dv
     roll = random.randint(1, 20)
 
