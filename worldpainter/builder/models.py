@@ -334,13 +334,13 @@ class ItemInstances(models.Model):
 
 class CharacterEquipment(models.Model):
     character = models.OneToOneField(Characters, on_delete=models.CASCADE, primary_key=True, related_name='equipment')
-    head = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+')
-    torso = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+')
-    legs = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+')
-    feet = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+')
-    hands = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+')
-    main_hand = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+')
-    off_hand = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+')
+    head = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+', db_column='head')
+    torso = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+', db_column='torso')
+    legs = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+', db_column='legs')
+    feet = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+', db_column='feet')
+    hands = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+', db_column='hands')
+    main_hand = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+', db_column='main_hand')
+    off_hand = models.ForeignKey(ItemInstances, on_delete=models.SET_NULL, blank=True, null=True, related_name='+', db_column='off_hand')
 
     def __str__(self):
         return f"Equipment for {self.character}"

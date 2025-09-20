@@ -122,6 +122,11 @@ class World:
                             exit_row['direction']: dict(exit_row) for exit_row in exits
                         }
 
+            if shop_rows:
+                for room_id, items in groupby(shop_rows, key=itemgetter('room_id')):
+                    if room_id in self.rooms:
+                        self.shop_inventories[room_id] = [dict(i) for i in items]
+
             # --- Populate Rooms with Items, Objects, and Mobs ---
             for room in self.rooms.values():
                 instance_records = await self.db_manager.get_instances_in_room(room.dbid)
