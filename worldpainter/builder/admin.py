@@ -95,9 +95,15 @@ class CharacterAdmin(admin.ModelAdmin):
     list_display = ('first_name', 'last_name', 'player', 'level')
     search_fields = ('first_name', 'last_name', 'player__username')
     inlines = [CharacterStatsInline, CharacterSkillsInline, CharacterEquipmentInline]
-    def has_add_permission(self, request): return False
-    def has_change_permission(self, request, obj=None): return False
-    def has_delete_permission(self, request, obj=None): return False
+
+    # Make most fields read-only, but leave some editable for GM tasks
+    readonly_fields = ('player', 'first_name', 'last_name', 'sex', 'race', 
+                       'class_field', 'description', 'created_at', 'last_saved', 
+                       'total_playtime_seconds')
+
+    # This prevents new characters from being created here
+    def has_add_permission(self, request):
+        return False
 
 @admin.register(ItemTemplates)
 class ItemTemplateAdmin(admin.ModelAdmin):

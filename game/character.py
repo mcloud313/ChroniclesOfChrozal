@@ -381,6 +381,12 @@ class Character:
     def is_alive(self) -> bool:
         return self.hp > 0 and self.status != "DEAD"
 
+    def get_max_weight(self) -> float:
+        """Calculates the maximum weight the character can carry."""
+        base_carry = config.BASE_CARRY_WEIGHT
+        might_bonus = self.stats.get("might", 10) * config.CARRY_WEIGHT_MIGHT_MULTIPLIER
+        return base_carry + might_bonus
+
     def get_shield(self) -> Optional[Item]:
         shield_item = self._equipped_items.get("WIELD_OFF")
         if shield_item and shield_item.item_type == "SHIELD":

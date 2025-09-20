@@ -132,13 +132,30 @@ class Room:
             self.coinage, self.dbid
         )
 
-    async def check_respawn(self, current_time: float):
-        """Checks dead mobs in the room and respawns them if their timer has elapsed."""
-        for mob in self.mobs:
-            if not mob.is_alive() and mob.time_of_death and (current_time - mob.time_of_death) >= mob.respawn_delay:
-                mob.respawn()
-                await self.broadcast(f"\r\nA {mob.name} suddenly appears!\r\n")
-    
+    async def check_respawn(self, world: "World"):
+        """
+        Checks mob population against spawners and respawns mobs as needed
+        to meet the 'max_present' count.
+        """
+        if not self.spawners:
+            return
+
+        for template_id, spawn_info in self.spawners.items():
+            max_present = spawn_info.get("max_present", 1)
+
+            # Count how many mobs of this template are currently alive in the room
+            current_count = sum(1 for mob in self.mobs if mob.is_alive() and mob.template_id == template_id)
+
+            # Calculate how many new mobs we need to spawn
+            needed = max_present - current_count
+            if needed > 0:
+                mob_template = world.get_mob_template(template_id)
+                if mob_template:
+                    for _ in range(needed):
+                        new_mob = Mob(mob_template, self)
+                        self.add_mob(new_mob)
+                        await self.broadcast(f"\r\nA {new_mob.name} appears!\r\n")
+                        
     async def mob_ai_tick(self, dt: float, world: 'World'):
         """Calls the AI tick method for all living mobs in the room."""
         living_mobs = [mob for mob in self.mobs if mob.is_alive()]

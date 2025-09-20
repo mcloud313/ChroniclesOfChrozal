@@ -108,13 +108,11 @@ class World:
                 log.error("No rooms found in database. World build failed.")
                 return False
             
-            # FIX: Create all Room objects first and initialize their exits.
             for row_data in room_rows:
                 room = Room(dict(row_data))
                 room.exits = {} # Initialize exits dictionary
                 self.rooms[room.dbid] = room
 
-            # FIX: Attach exits to the now-existing Room objects.
             if exit_rows:
                 for room_id, exits in groupby(exit_rows, key=itemgetter('source_room_id')):
                     if room_id in self.rooms:
@@ -310,7 +308,7 @@ class World:
     async def update_respawns(self, dt: float):
         """Ticker: Checks for and processes mob respawns."""
         current_time = time.monotonic()
-        tasks = [room.check_respawn(current_time) for room in self.rooms.values()]
+        tasks = [room.check_respawn(self) for room in self.rooms.values()]
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
