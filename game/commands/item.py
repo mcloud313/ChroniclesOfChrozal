@@ -121,29 +121,55 @@ async def cmd_drop(character: 'Character', world: 'World', args_str: str) -> boo
     return True
 
 async def cmd_wear(character: 'Character', world: 'World', args_str: str) -> bool:
-    item_to_wear = character.find_item_in_inventory_by_name(args_str)
-    if not item_to_wear:
+    """Handles wearing armor and wielding weapons."""
+    if not args_str:
+        await character.send("Wear or wield what?")
+        return True
+
+    item_to_equip = character.find_item_in_inventory_by_name(args_str)
+    if not item_to_equip:
         await character.send("You aren't carrying that.")
         return True
-    
-    target_slots = item_to_wear.wear_location
+
+    # Determine the correct slots for the item
+    target_slots = item_to_equip.wear_location
     if not target_slots:
-        await character.send("You can't wear that.")
+        await character.send("You can't equip that.")
         return True
-    
-    if isinstance(target_slots, str): target_slots = [target_slots]
-    
+
+    # Ensure target_slots is a list
+    if isinstance(target_slots, str):
+        target_slots = [target_slots]
+
+    # Check if slots are already occupied
     for slot in target_slots:
         if slot in character._equipped_items:
-            await character.send(f"You are already wearing something on your {slot.lower()}.")
+            # A special case for wielding a two-handed weapon
+            if "main_hand" in target_slots and slot == "off_hand" and character._equipped_items.get(slot) is None:
+                continue
+            await character.send(f"You are already using your {slot.replace('_', ' ')}.")
             return True
-            
-    del character._inventory_items[item_to_wear.id]
+
+    # For two-handed weapons, ensure off-hand is also free
+    if "main_hand" in target_slots and "off_hand" in target_slots:
+        if character._equipped_items.get("off_hand"):
+            await character.send("You need your off hand free to wield that.")
+            return True
+
+    # --- FIX: LOGIC UPDATE ---
+    # 1. Remove item from in-memory inventory
+    del character._inventory_items[item_to_equip.id]
+
+    # 2. Add item to in-memory equipment dictionary for all its slots
     for slot in target_slots:
-        character._equipped_items[slot] = item_to_wear
-    
-    await character.send(f"You wear {item_to_wear.name}.")
-    await character.location.broadcast(f"\r\n{character.name} wears {item_to_wear.name}.\r\n", exclude={character})
+        character._equipped_items[slot] = item_to_equip
+
+    # --- FIX: MESSAGING UPDATE ---
+    # 3. Determine the correct verb (wear vs. wield)
+    verb = "wield" if item_to_equip.item_type == "WEAPON" else "wear"
+
+    await character.send(f"You {verb} {item_to_equip.name}.")
+    await character.location.broadcast(f"\r\n{character.name} {verb}s {item_to_equip.name}.\r\n", exclude={character})
     return True
 
 async def cmd_remove(character: 'Character', world: 'World', args_str: str) -> bool:

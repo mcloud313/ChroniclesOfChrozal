@@ -263,20 +263,52 @@ class CreationHandler:
             await self._send("Invalid input. Please enter a number.")
 
     def _build_description_string(self) -> str:
-        """Builds the character description paragraph from selected traits."""
+        """Builds a detailed character description paragraph from selected traits."""
         traits = self.creation_data.get("description_traits", {})
         race_name = self.creation_data.get("race_name", "Unknown")
-        class_name = self.creation_data.get("class_name", "Unknown")
-        char_name = f"{self.creation_data.get('first_name','')} {self.creation_data.get('last_name','')}".strip()
         sex = self.creation_data.get("sex", "They/Them")
         defaults = trait_defs.get_default_traits(race_name)
-        subj, _, poss, verb_is, _ = utils.get_pronouns(sex)
+        subj, obj, poss, verb_is, verb_has = utils.get_pronouns(sex)
+
+        # Helper to get a trait or its default value
+        def get_trait(key):
+            return traits.get(key, defaults.get(key, "")).lower()
+
+        # --- Build Sentences ---
+        # Sentence 1: Core identity
+        height = get_trait("Height")
+        build = get_trait("Build")
+        s1 = f"You see {self.creation_data['first_name']}, a {height} {race_name} with a {build} build."
+
+        # Sentence 2: Skin/Shell/Fur
+        s2_parts = []
+        if skin_tone := get_trait("Skin Tone"): s2_parts.append(f"{skin_tone} skin")
+        if skin_pattern := get_trait("Skin Pattern"): s2_parts.append(f"a {skin_pattern} pattern")
+        if shell_color := get_trait("Shell Color"): s2_parts.append(f"a {shell_color} shell")
+        if s2_parts:
+            s2 = f"{subj} {verb_has} " + " and ".join(s2_parts) + "."
+        else:
+            s2 = ""
+
+        # Sentence 3: Head and Face
+        s3_parts = []
+        if head_shape := get_trait("Head Shape"): s3_parts.append(f"a {head_shape} head")
+        if hair_style := get_trait("Hair Style"): s3_parts.append(f"{hair_style} {get_trait('Hair Color')} hair")
+        if eye_color := get_trait("Eye Color"): s3_parts.append(f"{eye_color} eyes")
+        if ear_shape := get_trait("Ear Shape"): s3_parts.append(f"{poss.lower()} ears are {ear_shape}")
+        if nose_type := get_trait("Nose Type"): s3_parts.append(f"a {nose_type} nose")
+        if beard_style := get_trait("Beard Style"): s3_parts.append(f"a {beard_style} beard")
         
-        height = traits.get("Height", defaults.get("Height", "average"))
-        build = traits.get("Build", defaults.get("Build", "average"))
-        
-        description_parts = [f"You see {char_name}, a {height.lower()} {race_name} {class_name} with a {build.lower()} build."]
-        return " ".join(description_parts)
+        if s3_parts:
+            s3 = f"{poss} face is framed by " + ", ".join(s3_parts) + "." if "hair" in " ".join(s3_parts) else \
+                 f"{poss} features include " + ", ".join(s3_parts) + "."
+            s3 = s3.replace("  ", " ").capitalize()
+        else:
+            s3 = ""
+            
+        # Combine all parts into a single paragraph
+        full_description = " ".join(filter(None, [s1, s2, s3]))
+        return full_description
 
     async def _handle_finalize(self):
         class_name = self.creation_data.get('class_name', '')

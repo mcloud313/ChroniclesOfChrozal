@@ -66,56 +66,46 @@ async def main():
     """Main server entry point."""
     global world
 
-    server: Optional[asyncio.AbstractServer] = None
-    autosave_task: Optional[asyncio.Task] = None
+    log.info("Starting Chronicles of Chrozal server...")
 
+    # 1. Connect to the database and build the world
+    await db_manager.connect()
+    await db_manager.init_db()
+    world = World(db_manager)
+    if not await world.build():
+        log.critical("!!! Failed to build world state. Server cannot start.")
+        return
+    world.subscribe_to_ticker()
+    log.info("World loaded successfully.")
+
+    # 2. Start the network server to listen for connections
+    server = await asyncio.start_server(handle_connection, config.HOST, config.PORT)
+    addr = server.sockets[0].getsockname()
+    log.info(f"Server listening on {addr[0]}:{addr[1]}")
+
+    # 3. Start background tasks AFTER the server is ready
+    ticker_task = asyncio.create_task(ticker.start_ticker(config.TICKER_INTERVAL_SECONDS))
+    autosave_task = None
+    if config.AUTOSAVE_INTERVAL_SECONDS > 0:
+        autosave_task = asyncio.create_task(_autosave_loop(world, config.AUTOSAVE_INTERVAL_SECONDS))
+
+    # This block ensures graceful shutdown
     try:
-        log.info("Starting Chronicles of Chrozal server...")
-
-        # 1. Connect to the database
-        await db_manager.connect()
-        await db_manager.init_db()
-
-        # 2. Build the world
-        world = World(db_manager)
-        if not await world.build():
-            log.critical("!!! Failed to build world state. Server cannot start.")
-            return
-        
-        world.subscribe_to_ticker()
-        log.info("World loaded successfully.")
-        
-        # 3. Start background tasks
-        await ticker.start_ticker(config.TICKER_INTERVAL_SECONDS)
-        if config.AUTOSAVE_INTERVAL_SECONDS > 0:
-            autosave_task = asyncio.create_task(_autosave_loop(world, config.AUTOSAVE_INTERVAL_SECONDS))
-
-        # 4. Start the network server
-        server = await asyncio.start_server(handle_connection, config.HOST, config.PORT)
-        addr = server.sockets[0].getsockname()
-        log.info(f"Server listening on {addr[0]}:{addr[1]}")
-
-        async with server:
-            await server.serve_forever()
-
-    except Exception:
-        log.exception("A critical error occurred in the main server function.")
+        await server.serve_forever()
+    except asyncio.CancelledError:
+        log.info("Main server task cancelled.")
     finally:
         log.info("Shutting down server...")
-        if server:
-            server.close()
-            await server.wait_closed()
-        if autosave_task:
-            autosave_task.cancel()
-        await ticker.stop_ticker()
-        
+        if ticker_task: ticker_task.cancel()
+        if autosave_task: autosave_task.cancel()
+        server.close()
+        await server.wait_closed()
         if world:
             log.info("Performing final world state save...")
-            # FIX: Call the single, centralized save method for a complete shutdown save
             await world.save_state()
-        
         await db_manager.close()
         log.info("Server shutdown complete.")
+
 
 if __name__ == "__main__":
     try:
