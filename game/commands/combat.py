@@ -1,44 +1,47 @@
 # game/commands/combat.py
 """
-Combat related commands like attack.
+Combat related commands like attack and shoot.
 """
 import logging
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from ..character import Character
-    from ..world import World
-    import aiosqlite
-
-# Import combat logic handler
-from .. import resolver as combat_logic
-from ..mob import Mob
+# Cleaned imports
+from .. import resolver
+from ..character import Character
+from ..world import World
+from ..definitions import item_defs
 
 log = logging.getLogger(__name__)
 
 
-async def cmd_attack(character: 'Character', world: 'World', args_str: str) -> bool:
+async def cmd_attack(character: Character, world: World, args_str: str) -> bool:
     """Handles the 'attack <target>' command."""
     if character.stance != "Standing":
         await character.send("You must be standing to attack.")
         return True
+    
     if not args_str:
         await character.send("Attack whom?")
         return True
-    
+        
     if not character.location:
-        await character.send("You cannot attack from the void.")
+        # This case should ideally never happen, but it's a good safeguard.
         return True
-    
-    target_name = args_str.strip().lower()
-    target = character.location.get_mob_by_name(target_name)
+        
+    target = character.location.get_mob_by_name(args_str)
 
     if not target:
-        await character.send(f"You don't see '{target_name}' here to attack.")
+        await character.send(f"You don't see '{args_str}' here to attack.")
         return True
     
+    weapon = character._equipped_items.get("main_hand")
+    if weapon and weapon.item_type == item_defs.RANGED_WEAPON:
+        await character.send(f"You can't attack with {weapon.name}, you should try to <shoot> it instead.")
+        return True
+        
     log.info("%s is initiating combat with %s.", character.name, target.name)
 
+    # Set combat states for both character and mob
     character.target = target
     character.is_fighting = True
 
@@ -48,9 +51,89 @@ async def cmd_attack(character: 'Character', world: 'World', args_str: str) -> b
 
     await character.send(f"You attack {target.name}!")
 
+    # Determine if the character is using a weapon or is unarmed
     weapon = character._equipped_items.get("main_hand")
     if weapon and weapon.item_type != "WEAPON":
-        weapon = None
-    
-    await combat_logic.resolve_physical_attack(character, target, weapon, world)
+        weapon = None # Not a valid melee weapon, treat as unarmed
+        
+    # Call the resolver with the correct, direct import
+    await resolver.resolve_physical_attack(character, target, weapon, world)
+    return True
+
+async def cmd_shoot(character: Character, world: World, args: str) -> bool:
+    """Initiates a ranged attack against a target."""
+    # Added stance check for consistency
+    if character.stance != "Standing":
+        await character.send("You must be standing to shoot.")
+        return True
+
+    if not args:
+        await character.send("Who do you want to shoot at?")
+        return True
+
+    if not character.location:
+        return True
+
+    target = character.location.get_mob_by_name(args)
+    if not target:
+        await character.send("You don't see them here.")
+        return True
+        
+    # 1. Check for Ranged Weapon
+    weapon = character._equipped_items.get("main_hand")
+    if not weapon or weapon.item_type != "RANGED_WEAPON":
+        await character.send("You aren't wielding a ranged weapon.")
+        return True
+
+    # 2. Find a suitable quiver
+    required_ammo_type = weapon.stats.get("uses_ammo_type")
+    if not required_ammo_type:
+        await character.send(f"Your {weapon.name} doesn't seem to use any ammunition.")
+        return True
+
+    quiver = None
+    # Check equipped items first, then inventory
+    search_locations = list(character._equipped_items.values()) + list(character._inventory_items.values())
+    for item in search_locations:
+        if item and item.item_type == "QUIVER" and item.stats.get("holds_ammo_type") == required_ammo_type:
+            quiver = item
+            break
+            
+    if not quiver:
+        await character.send(f"You need a quiver that holds {required_ammo_type}s.")
+        return True
+
+    # 3. Find ammunition in the quiver
+    ammo_stack = None
+    for item in quiver.contents.values():
+        if item.item_type == "AMMO" and item.instance_stats.get("ammo_type") == required_ammo_type:
+            ammo_stack = item
+            break
+
+    if not ammo_stack or ammo_stack.instance_stats.get("quantity", 0) <= 0:
+        await character.send(f"You don't have any {required_ammo_type}s in your {quiver.name}.")
+        return True
+
+    # 4. We have a weapon, quiver, and ammo. Resolve the attack.
+    character.target = target
+    character.is_fighting = True
+    # Call the resolver with the correct, direct import
+    await resolver.resolve_ranged_attack(character, target, weapon, ammo_stack, world)
+
+    # 5. Consume ammunition
+    current_quantity = ammo_stack.instance_stats.get("quantity", 1)
+    ammo_stack.instance_stats["quantity"] = current_quantity - 1
+
+    if ammo_stack.instance_stats["quantity"] <= 0:
+        await character.send(f"You have used your last {required_ammo_type}.")
+        # Remove from quiver and world
+        del quiver.contents[ammo_stack.id]
+        if ammo_stack.id in world._all_item_instances:
+            del world._all_item_instances[ammo_stack.id]
+        # Persist deletion in DB
+        await world.db_manager.delete_item_instance(ammo_stack.id)
+    else:
+        # Persist quantity change
+        await world.db_manager.update_item_instance_stats(ammo_stack.id, ammo_stack.instance_stats)
+
     return True

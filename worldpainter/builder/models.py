@@ -3,13 +3,7 @@
 from django.db import models
 from django.contrib.auth.models import User # For linking to Django's built-in user
 import uuid
-
-
-ITEM_TYPE_CHOICES = [
-    ("GENERAL", "General"), ("WEAPON", "Weapon"), ("ARMOR", "Armor"),
-    ("CONTAINER", "Container"), ("QUEST", "Quest"), ("FOOD", "Food"),
-    ("KEY", "Key"), ("LIGHT", "Light Source"),
-]
+from game.definitions.item_defs import ITEM_TYPE_CHOICES, GENERAL
 
 MOB_TYPE_CHOICES = [
     ("BEAST", "Beast"), ("HUMANOID", "Humanoid"), ("UNDEAD", "Undead"),
@@ -71,7 +65,7 @@ class DamageTypes(models.Model):
 class ItemTemplates(models.Model):
     name = models.TextField(unique=True)
     description = models.TextField(blank=True, null=True)
-    type = models.CharField(max_length=20, choices=ITEM_TYPE_CHOICES, default="GENERAL")
+    type = models.CharField(max_length=20, choices=ITEM_TYPE_CHOICES, default=GENERAL)
     stats = models.JSONField(blank=True, null=True, help_text='Ex: {"might": 5, "value": 100, "damage_base": 10}')
     flags = models.JSONField(blank=True, null=True, help_text='Ex: ["GLOWS", "NO_DROP"]')
     damage_type = models.TextField(blank=True, null=True)

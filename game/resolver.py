@@ -120,6 +120,55 @@ async def resolve_physical_attack(
         f"Armor Penalty: {rt_penalty:.2f}s, Slow Penalty: {attacker.slow_penalty:.2f}s)"
     )
 
+async def resolve_ranged_attack(
+    attacker: Union[Character, Mob],
+    target: Union[Character, Mob],
+    weapon: Item,
+    ammo: Item,
+    world: 'World'
+):
+    """Resolves a ranged attack by coordinating hit, damage, and outcome modules."""
+    if not attacker.is_alive() or not target.is_alive() or attacker.location != target.location:
+        return
+
+    # --- Set Attacker Roundtime ---
+    wpn_speed = weapon.speed
+    rt_penalty = attacker.total_av * 0.05 if isinstance(attacker, Character) else 0.0
+    attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
+
+    # --- Resolve Hit/Miss (using RAR instead of MAR) ---
+    hit_result = hit_resolver.check_physical_hit(attacker, target, use_rar=True) # We will add this flag
+
+    if not hit_result.is_hit:
+        roll_details = f"{{i[Roll: {hit_result.roll} + RAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]{{x"
+        if isinstance(attacker, Character):
+            await attacker.send(f"Your {utils.strip_article(ammo.name)} misses {target.name}. {roll_details}")
+        if isinstance(target, Character):
+            await target.send(f"{attacker.name.capitalize()}'s {ammo.name} flies past you.")
+        await attacker.location.broadcast(f"\r\n{attacker.name.capitalize()}'s shot goes wide of {target.name}!\r\n", {attacker, target})
+        return
+        
+    # Ranged attacks cannot be parried or blocked by default. This can be changed later.
+
+    # --- Calculate and Mitigate Damage ---
+    # Damage is primarily from the weapon, with a possible bonus from ammo
+    damage_info = damage_calculator.calculate_physical_damage(attacker, weapon, hit_result.is_crit)
+    
+    # Add bonus from ammo
+    ammo_bonus = ammo.instance_stats.get("damage_bonus", 0)
+    damage_info.pre_mitigation_damage += ammo_bonus
+    
+    damage_info.attack_name = ammo.name # The projectile is what hits
+    final_damage = damage_calculator.mitigate_damage(target, damage_info)
+
+    # --- Handle Consequences ---
+    outcome_handler.apply_damage(target, final_damage)
+    # We need a ranged-specific message handler
+    await outcome_handler.send_ranged_attack_messages(attacker, target, hit_result, damage_info, final_damage)
+
+    if target.hp <= 0:
+        await outcome_handler.handle_defeat(attacker, target, world)
+
 async def resolve_magical_attack(
     caster: Union[Character, Mob], 
     target: Union[Character, Mob],

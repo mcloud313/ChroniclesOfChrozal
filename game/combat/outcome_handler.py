@@ -148,6 +148,33 @@ async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Ch
             exclude={attacker, target}
         )
 
+async def send_ranged_attack_messages(attacker, target, hit_result, damage_info, final_damage):
+    """Sends tailored messages for a ranged attack outcome."""
+    hit_desc = "{rCRITICALLY STRIKE{x" if hit_result.is_crit else "strike"
+    attack_name = utils.strip_article(damage_info.attack_name)
+
+    roll_details_attacker = (
+        f"{{i[Roll: {hit_result.roll} + RAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]"
+        f" -> Damage: {final_damage}{{x"
+    )
+    roll_details_target = f"({int(target.hp)}/{int(target.max_hp)} HP)"
+
+    # Attacker message
+    if isinstance(attacker, Character):
+        msg = (f"Your {attack_name} {hit_desc.lower()}s {target.name} for {{y{final_damage}{{x damage! {roll_details_attacker}")
+        await attacker.send(msg)
+
+    # Target message
+    if isinstance(target, Character):
+        msg = (f"{{R{attacker.name.capitalize()}'s {attack_name} {hit_desc}s you for {{y{final_damage}{{x damage! {roll_details_target}")
+        await target.send(msg)
+
+    # Room message
+    room_hit_desc = "critically strikes" if hit_result.is_crit else "strikes"
+    if attacker.location:
+        msg = f"\r\n{attacker.name.capitalize()}'s {attack_name} {room_hit_desc} {target.name}!\r\n"
+        await attacker.location.broadcast(msg, exclude={attacker, target})
+
 async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character, Mob], world: 'World'):
     """Handles logic for when a target's HP reaches 0, with group reward sharing."""
     attacker_name = getattr(attacker, 'name', 'Something').capitalize()
@@ -173,7 +200,7 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
         else:
             dropped_coinage, dropped_item_ids = 0, []
 
-        base_xp = 50
+        base_xp = 25
         xp_gain = max(1, target.level * base_xp + random.randint(-base_xp // 2, base_xp // 2))
         killer = attacker if isinstance(attacker, Character) else None
 

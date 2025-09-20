@@ -19,14 +19,14 @@ class HitResult:
     attacker_rating: int
     target_dv: int
 
-def check_physical_hit(attacker: Union[Character, Mob], target: Union[Character, Mob]) -> HitResult:
+def check_physical_hit(attacker: Union[Character, Mob], target: Union[Character, Mob], use_rar: bool = False) -> HitResult:
     """
     Performs a physical hit check (d20 + MAR vs DV).
 
     Returns:
         A hitresult object with the outcome
     """
-    attacker_rating = attacker.mar
+    attacker_rating = attacker.rar if use_rar else attacker.mar
 
     if isinstance(attacker, Character):
         weapon = attacker._equipped_items.get('main_hand')

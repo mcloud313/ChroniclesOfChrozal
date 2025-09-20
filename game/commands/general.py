@@ -7,7 +7,6 @@ import logging
 import config
 from typing import TYPE_CHECKING
 from .. import utils
-from ..definitions import slots
 from ..definitions import slots, skills as skill_defs
 
 if TYPE_CHECKING:

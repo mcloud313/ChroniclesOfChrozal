@@ -283,11 +283,19 @@ class Character:
             self.login_timestamp = time.monotonic()
 
         core_data = {
-            "location_id": self.location_id, "hp": self.hp, "essence": self.essence,
-            "xp_pool": self.xp_pool, "xp_total": self.xp_total, "level": self.level,
+            "location_id": self.location_id,
+            "hp": self.hp,
+            "max_hp": self.max_hp, # <-- ADD THIS LINE
+            "essence": self.essence,
+            "max_essence": self.max_essence, # <-- ADD THIS LINE
+            "xp_pool": self.xp_pool,
+            "xp_total": self.xp_total,
+            "level": self.level,
             "unspent_skill_points": self.unspent_skill_points,
             "unspent_attribute_points": self.unspent_attribute_points,
-            "status": self.status, "stance": self.stance, "coinage": self.coinage,
+            "status": self.status,
+            "stance": self.stance,
+            "coinage": self.coinage,
             "total_playtime_seconds": self.total_playtime_seconds
         }
 
@@ -435,6 +443,15 @@ class Character:
                 return item
         return None
     
+    def find_item_in_equipment_by_name(self, item_name: str) -> Optional[Item]:
+        """Finds the first item instance in equipment matching a name."""
+        name_lower = item_name.lower()
+        for item in self._equipped_items.values():
+            # Check 'if item' to handle potential empty slots
+            if item and name_lower in item.name.lower():
+                return item
+        return None
+
     def find_container_by_name(self, name: str) -> Optional[Item]:
         """Finds a container item in the character's top-level inventory or equipment."""
         name_lower = name.lower()

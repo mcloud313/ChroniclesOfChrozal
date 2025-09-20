@@ -55,7 +55,8 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "leave": social_cmds.cmd_leave,
 
     # Combat & Ability Commands
-    "attack": combat_cmds.cmd_attack, "a": combat_cmds.cmd_attack, "kill": combat_cmds.cmd_attack,
+    "attack": combat_cmds.cmd_attack,
+    "shoot": combat_cmds.cmd_shoot,
     "cast": magic_cmds.cmd_cast,
     "use": ability_cmds.cmd_use,
     "lockpick": rogue_cmds.cmd_lockpick,
