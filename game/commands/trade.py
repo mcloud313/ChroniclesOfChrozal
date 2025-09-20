@@ -96,6 +96,13 @@ async def cmd_buy(character: 'Character', world: 'World', args_str: str) -> bool
 
     price = int(base_value * item_to_buy['buy_price_modifier'])
 
+    # --- NEW: Apply Bartering Skill Discount ---
+    bartering_rank = character.get_skill_rank("bartering")
+    discount_mod = bartering_rank // 25  # 1% discount per 25 ranks
+    if discount_mod > 0:
+        price = int(price * (1.0 - (discount_mod / 100.0)))
+    # ----------------------------------------
+
     if character.coinage < price:
         await character.send("You can't afford that.")
         return True
@@ -191,6 +198,12 @@ async def cmd_sell(character: 'Character', world: 'World', args_str: str) -> boo
     if price <= 0:
         await character.send("The shopkeeper offers you nothing for that.")
         return True
+    
+    # --- NEW: Apply Bartering Skill Bonus ---
+    bartering_rank = character.get_skill_rank("bartering")
+    profit_mod = bartering_rank // 25 # 1% profit bonus per 25 ranks
+    if profit_mod > 0:
+        price = int(price * (1.0 + (profit_mod / 100.0)))
     
     # 5. Perform the transaction
     # First, modify the database

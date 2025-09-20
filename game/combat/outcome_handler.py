@@ -4,6 +4,7 @@ Handles the consequences of combat actions: applying damage, durability,
 messaging, and processing defeat.
 """
 import random
+import asyncio
 import math
 import logging
 import time
@@ -25,6 +26,16 @@ log = logging.getLogger(__name__)
 
 def apply_damage(target: Union[Character, Mob], final_damage: int):
     """Applies the final calculated damage to the target's HP."""
+    # --- NEW: Concentration Check ---
+    if isinstance(target, Character) and target.casting_info:
+        concentration_dc = 10 + (final_damage // 2)
+        check_result = utils.skill_check(target, "concentration", dc=concentration_dc)
+        if not check_result['success']:
+            spell_name = target.casting_info.get("name", "their spell")
+            target.casting_info = None # Interrupt the spell
+            asyncio.create_task(target.send(f"{{RThe pain causes you to lose concentration on {spell_name}!{{x"))
+    # ----------------------------
+    
     target.hp = max(0.0, target.hp - final_damage)
 
 def _determine_loot(mob_template: Dict[str, Any]) -> Tuple[int, List[int]]:

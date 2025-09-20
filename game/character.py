@@ -73,21 +73,25 @@ class Character:
         base_rar = self.agi_mod + (self.might_mod // 2)
         item_bonus = self.get_stat_bonus_from_equipment("bonus_rar")
         effect_bonus = self.get_stat_bonus_from_effects("bonus_rar")
-        return base_rar + item_bonus + effect_bonus
+        skill_bonus = self.get_skill_rank("projectile weapons") // 25
+        return base_rar + item_bonus + effect_bonus + skill_bonus
 
     @property
     def apr(self) -> int:
         base_apr = self.int_mod + (self.aura_mod // 2)
         item_bonus = self.get_stat_bonus_from_equipment("bonus_apr")
         effect_bonus = self.get_stat_bonus_from_effects("bonus_apr")
-        return base_apr + item_bonus + effect_bonus
+        skill_bonus = self.get_skill_rank("spellcraft") // 25
+        return base_apr + item_bonus + effect_bonus + skill_bonus
 
     @property
     def dpr(self) -> int:
         base_dpr = self.aura_mod + (self.pers_mod // 2)
         item_bonus = self.get_stat_bonus_from_equipment("bonus_dpr")
         effect_bonus = self.get_stat_bonus_from_effects("bonus_dpr")
-        return base_dpr + item_bonus + effect_bonus
+        skill_bonus = self.get_skill_rank("piety") // 25
+        return base_dpr + item_bonus + effect_bonus + skill_bonus
+
 
     @property
     def pds(self) -> int:
@@ -141,13 +145,19 @@ class Character:
     
     @property
     def total_av(self) -> int:
-        """Calculates total armor value from equipment and effects."""
-        base_av = 0
-        for item in self._equipped_items.values():
-            base_av += item.armor
-
+        """Calculates effective armor value based on skill."""
+        base_av = sum(item.armor for item in self._equipped_items.values() if item)
         bonus_av = self.get_stat_bonus_from_effects("bonus_av")
-        return base_av + bonus_av
+        
+        armor_training_rank = self.get_skill_rank("armor training")
+        if armor_training_rank < 50:
+            # Penalty for untrained users
+            av_percentage = 0.5 + (armor_training_rank * 0.01) # 50% at rank 0, up to 100% at rank 50
+            return int((base_av * av_percentage) + bonus_av)
+        else:
+            # Bonus for trained users
+            skill_bonus = (armor_training_rank - 50) // 10
+            return base_av + bonus_av + skill_bonus
     
     def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any], world: 'World', player_is_admin: bool = False):
         self.writer: asyncio.StreamWriter = writer
