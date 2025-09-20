@@ -193,3 +193,8 @@ JAZZMIN_UI_TWEAKS = {
         "success": "btn-success"
     }
 }
+
+try:
+    from .local_settings import *
+except ImportError:
+    pass

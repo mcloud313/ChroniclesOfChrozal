@@ -16,3 +16,5 @@ Thumbs.db
 chrozal.db-shm
 chrozal.db-wal
 chrozal.db-shm
+
+worldpainter/worldpainter_config/local_settings.py
