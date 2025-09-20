@@ -270,7 +270,6 @@ class World:
         if tasks: await asyncio.gather(*tasks, return_exceptions=True)
 
     async def update_respawns(self, dt: float):
-        log.info("Calling update_respawns from world.py")
         tasks = [room.check_respawn(self) for room in self.rooms.values()]
         if tasks: await asyncio.gather(*tasks, return_exceptions=True)
 

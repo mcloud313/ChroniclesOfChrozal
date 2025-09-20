@@ -142,9 +142,9 @@ class Room:
         if not self.spawners:
             return
         
-        log.info(f"--- Checking Spawners for Room {self.dbid} ({self.name}) ---")
-        log.info(f"Spawner data: {self.spawners}")
-        log.info(f"Mobs currently in room: {[mob.name for mob in self.mobs if mob.is_alive()]}")
+        # log.info(f"--- Checking Spawners for Room {self.dbid} ({self.name}) ---")
+        # log.info(f"Spawner data: {self.spawners}")
+        # log.info(f"Mobs currently in room: {[mob.name for mob in self.mobs if mob.is_alive()]}")
 
         for template_id, spawn_info in self.spawners.items():
             max_present = spawn_info.get("max_present", 1)
