@@ -356,40 +356,41 @@ async def cmd_drink(character: 'Character', world: 'World', args_str: str) -> bo
     return await _handle_consume(character, world, args_str, "drink")
 
 async def cmd_open(character: 'Character', world: 'World', args_str: str) -> bool:
-    """Opens a container in the room, like a chest."""
+    """Opens a container in inventory, equipped, or in the room."""
     if not args_str:
         await character.send("Open what?")
         return True
-    
-    # Find a container item in the current room
-    target_item = character.location.get_item_instance_by_name(args_str, world)
-    
+
+    # FIX: Search for the container in inventory, then equipped, then the room.
+    target_item = (character.find_item_in_inventory_by_name(args_str) or
+                   character.find_item_in_equipment_by_name(args_str) or
+                   character.location.get_item_instance_by_name(args_str, world))
+
     if not target_item or target_item.capacity <= 0:
         await character.send("You don't see that here.")
         return True
-    
-    # Check if the container is locked
+
     if target_item.instance_stats.get('is_locked', False):
         await character.send("It's locked.")
         return True
-    
+
     if target_item.is_open:
         await character.send("It's already open.")
         return True
-    
+
     # Open the container and show its contents
     target_item.instance_stats['is_open'] = True
-    await character.send(f"You open the {target_item.name}.")
-    
+
+    # If the container is in the room, the change needs to be saved to the DB
+    if target_item.id in character.location.item_instance_ids:
+         await world.db_manager.update_item_instance_stats(target_item.id, target_item.instance_stats)
+
     if not target_item.contents:
-        await character.send(f"You open the {target_item.name}.")
-        
-    if not target_item.contents:
-        await character.send(f"The {target_item.name} is empty.")
+        await character.send(f"You open the {target_item.name}; it is empty.")
     else:
         contents_list = ", ".join(item.name for item in target_item.contents.values())
-        await character.send(f"The {target_item.name} contains: {contents_list}.")
-        
+        await character.send(f"You open the {target_item.name}, revealing: {contents_list}.")
+
     return True
 
 async def cmd_close(character: 'Character', world: 'World', args_str: str) -> bool:
