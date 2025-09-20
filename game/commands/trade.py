@@ -199,7 +199,8 @@ async def cmd_sell(character: 'Character', world: 'World', args_str: str) -> boo
     # Then update the game state
     character.coinage += price
     del character._inventory_items[item_to_sell.id]
-    del world._all_item_instances[item_to_sell.id]
+    if item_to_sell.id in world._all_item_instances:
+        del world._all_item_instances[item_to_sell.id]
 
     await character.send(f"You sell {item_to_sell.name} for {utils.format_coinage(price)}.")
     return True

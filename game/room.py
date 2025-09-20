@@ -139,12 +139,23 @@ class Room:
         """
         if not self.spawners:
             return
+        
+        # --- DEBUG LOGGING ADDED ---
+        log.info(f"--- Checking Spawners for Room {self.dbid} ({self.name}) ---")
+        log.info(f"Spawner data: {self.spawners}")
+        log.info(f"Mobs currently in room: {[mob.name for mob in self.mobs if mob.is_alive()]}")
+        # ---------------------------
+
 
         for template_id, spawn_info in self.spawners.items():
             max_present = spawn_info.get("max_present", 1)
 
             # Count how many mobs of this template are currently alive in the room
             current_count = sum(1 for mob in self.mobs if mob.is_alive() and mob.template_id == template_id)
+
+            # --- DEBUG LOGGING ADDED ---
+            log.info(f"-> Checking template ID {template_id}: Max={max_present}, Current={current_count}")
+            # ---------------------------
 
             # Calculate how many new mobs we need to spawn
             needed = max_present - current_count

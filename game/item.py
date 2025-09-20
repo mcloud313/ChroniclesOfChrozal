@@ -23,7 +23,19 @@ class Item:
         self.id: str = instance_data['id'] # The UUID of this specific item
         self.container_id: Optional[str] = instance_data.get('container_id')
         self.condition: int = instance_data.get('condition', 100)
-        self.instance_stats: Dict[str, Any] = instance_data.get('instance_stats', {})
+
+        # FIX: Properly handle instance_stats which might be a string or None
+        stats_data = instance_data.get('instance_stats')
+        if isinstance(stats_data, str):
+            try:
+                self.instance_stats: Dict[str, Any] = json.loads(stats_data)
+            except (json.JSONDecodeError, TypeError):
+                self.instance_stats: Dict[str, Any] = {}
+        elif isinstance(stats_data, dict):
+            self.instance_stats: Dict[str, Any] = stats_data
+        else:
+            self.instance_stats: Dict[str, Any] = {}
+        
         self.instance_stats.setdefault('is_open', False)
 
         # --- Runtime Attributes ---
