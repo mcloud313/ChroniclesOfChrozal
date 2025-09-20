@@ -2,9 +2,13 @@
 """
 Represents a unique instance of an item in the game world.
 """
+from __future__ import annotations
 import json
 import logging
-from typing import Dict, Any, Optional, Set, List, Union
+from typing import Dict, Any, Optional, Set, List, Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .character import Character
 
 log = logging.getLogger(__name__)
 
@@ -50,11 +54,16 @@ class Item:
         except (json.JSONDecodeError, TypeError):
             log.warning("Could not parse stats JSON for item template %s", self._template.get('id'))
 
-    def get_current_weight(self) -> int:
+    def get_total_contents_weight(self) -> int:
         """Calculates the total weight of all items inside this container."""
         if not self.contents:
             return 0
-        return sum(item.weight for item in self.contents.values())
+        # FIX: Recursively get the weight of items in sub-containers
+        return sum(item.get_total_weight() for item in self.contents.values())
+
+    def get_total_weight(self) -> int:
+        """Calculates the item's own weight plus the weight of its contents."""
+        return self.weight + self.get_total_contents_weight()
 
     @property
     def template_id(self) -> int:
@@ -67,12 +76,10 @@ class Item:
 
     @property
     def name(self) -> str:
-        # In the future, this could be modified by instance_stats (e.g., "a glowing sword")
         return self._template.get('name', 'an unknown item')
 
     @property
     def description(self) -> str:
-        # This could also be modified by instance_stats (e.g., "It glows faintly.")
         return self._template.get('description', 'It is nondescript.')
 
     @property
@@ -85,10 +92,16 @@ class Item:
 
     @property
     def flags(self) -> Set[str]:
-        try:
-            return set(json.loads(self._template.get('flags', '[]') or '[]'))
-        except (json.JSONDecodeError, TypeError):
-            return set()
+        flags_data = self._template.get('flags')
+        # FIX: Check for both string and list/set types for flags
+        if isinstance(flags_data, str):
+            try:
+                return set(json.loads(flags_data or '[]'))
+            except (json.JSONDecodeError, TypeError):
+                return set()
+        elif isinstance(flags_data, (list, set)):
+            return set(flags_data)
+        return set()
 
     # --- Properties that pull from the template's stats dictionary ---
     @property
@@ -121,7 +134,6 @@ class Item:
     
     @property
     def spell_failure(self) -> int:
-        """The percentage chance this item adds to spell failure."""
         return self._template_stats.get("spell_failure", 0)
         
     @property
@@ -130,18 +142,22 @@ class Item:
     
     @property
     def is_open(self) -> bool:
-        """Checks if the container instance is open."""
         return self.instance_stats.get('is_open', False)
     
     @property
     def unlocks(self) -> List[str]:
-        """A list of lock_ids this item can unlock."""
         return self._template_stats.get("unlocks", [])
 
     def has_flag(self, flag_name: str) -> bool:
-        """Check if the item has a specific flag (case-insensitive)."""
         return flag_name.upper() in self.flags
+
+    def is_equipped(self, character: 'Character') -> bool:
+        """Checks if the item is equipped by the given character."""
+        return self.id in [item.id for item in character._equipped_items.values() if item]
+
+    def is_in_container(self) -> bool:
+        """Checks if the item is inside another item."""
+        return self.container_id is not None
 
     def __repr__(self) -> str:
         return f"<Item {self.id} (Template: {self.template_id})>"
-    

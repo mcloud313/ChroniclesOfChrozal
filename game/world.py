@@ -4,7 +4,6 @@ Manages the game world's loaded state and orchestrates ticker-driven updates.
 """
 from __future__ import annotations
 import time
-import random
 import logging
 import asyncio
 import config
@@ -20,7 +19,6 @@ from .definitions import abilities as ability_defs
 from . import resolver
 from . import utils
 from . import ticker
-
 
 if TYPE_CHECKING:
     from .database import DatabaseManager
@@ -55,7 +53,6 @@ class World:
         log.info("Building world state from PostgreSQL database...")
         
         try:
-            # Load all template and core data concurrently
             results = await asyncio.gather(
                 self.db_manager.fetch_all("SELECT * FROM areas ORDER BY id"),
                 self.db_manager.fetch_all("SELECT * FROM races ORDER BY id"),
@@ -70,11 +67,9 @@ class World:
                 self.db_manager.fetch_all("SELECT * FROM ability_templates"),
                 self.db_manager.fetch_all("SELECT * FROM damage_types") 
             )
-            # FIX: The unpacking order now correctly matches the gather() calls.
             (area_rows, race_rows, class_rows, item_rows, mob_rows, attack_rows,
              loot_rows, room_rows, exit_rows, shop_rows, ability_rows, damage_type_rows) = results
 
-            # --- Process Template Data ---
             self.areas = {row['id']: dict(row) for row in area_rows or []}
             self.races = {row['id']: dict(row) for row in race_rows or []}
             self.classes = {row['id']: dict(row) for row in class_rows or []}
@@ -83,14 +78,8 @@ class World:
             self.abilities = {row['internal_name']: dict(row) for row in ability_rows or []}
             self.damage_types = {row['name']: dict(row) for row in damage_type_rows or []}
 
-            log.info("Loaded %d areas, %d races, %d classes, %d items, %d mobs, %d abilities.",
-                     len(self.areas), len(self.races), len(self.classes), 
-                     len(self.item_templates), len(self.mob_templates), len(self.abilities))
-            
-            # --- Attach Relational Template Data ---
             for template in self.mob_templates.values():
                 template['attacks'] = []
-                # FIX: Initialize loot_table list for every mob template.
                 template['loot_table'] = [] 
             
             if attack_rows:
@@ -103,14 +92,12 @@ class World:
                     if mob_id in self.mob_templates:
                         self.mob_templates[mob_id]['loot_table'] = [dict(i) for i in loot_items]
 
-            # --- Process Rooms and Exits (Corrected Logic) ---
             if not room_rows:
                 log.error("No rooms found in database. World build failed.")
                 return False
             
             for row_data in room_rows:
                 room = Room(dict(row_data))
-                room.exits = {} # Initialize exits dictionary
                 self.rooms[room.dbid] = room
 
             if exit_rows:
@@ -125,7 +112,6 @@ class World:
                     if room_id in self.rooms:
                         self.shop_inventories[room_id] = [dict(i) for i in items]
 
-            # --- Populate Rooms with Items, Objects, and Mobs ---
             for room in self.rooms.values():
                 instance_records = await self.db_manager.get_instances_in_room(room.dbid)
                 for record in instance_records:
@@ -138,8 +124,9 @@ class World:
                 object_rows = await self.db_manager.fetch_all("SELECT * FROM room_objects WHERE room_id = $1", room.dbid)
                 room.objects = [dict(r) for r in object_rows]
                 
-                for template_id_str, spawn_info in room.spawners.items():
-                    if mob_template := self.mob_templates.get(int(template_id_str)):
+                # Initial spawn of mobs at server startup
+                for template_id, spawn_info in room.spawners.items():
+                    if mob_template := self.mob_templates.get(template_id):
                         for _ in range(spawn_info.get("max_present", 1)):
                             room.add_mob(Mob(mob_template, room))
 
@@ -155,48 +142,31 @@ class World:
         return self.rooms.get(room_id)
         
     def mark_room_dirty(self, room: Room):
-        """Adds a room's ID to the set of rooms needing a save."""
-        if room:
-            self.dirty_rooms.add(room.dbid)
+        self.dirty_rooms.add(room.dbid)
 
     async def save_state(self):
-        """
-        Saves the state of all active characters and all dirty rooms.
-        This is the new central save function.
-        """
         log.info("Saving world state...")
-        
-        # 1. Save all active characters (this is robust)
         active_chars = self.get_active_characters_list()
         if active_chars:
             char_save_tasks = [char.save() for char in active_chars]
             await asyncio.gather(*char_save_tasks, return_exceptions=True)
             log.info(f"Saved {len(active_chars)} active characters.")
 
-        # 2. Save all dirty rooms
         if self.dirty_rooms:
-            # Create a copy in case the set is modified during the save
             rooms_to_save_ids = list(self.dirty_rooms)
-            self.dirty_rooms.clear() # Clear the set immediately
+            self.dirty_rooms.clear() 
 
-            room_save_tasks = []
-            for room_id in rooms_to_save_ids:
-                if room := self.get_room(room_id):
-                    room_save_tasks.append(room.save(self.db_manager))
-            
+            room_save_tasks = [self.get_room(room_id).save(self.db_manager) for room_id in rooms_to_save_ids if self.get_room(room_id)]
             if room_save_tasks:
                 await asyncio.gather(*room_save_tasks, return_exceptions=True)
                 log.info(f"Saved {len(room_save_tasks)} dirty rooms.")
-        
         log.info("World state save complete.")
 
     def get_shop_inventory(self, room_id: int) -> Optional[List[Dict]]:
-        """Returns the cached list of inventory items for a given shop room."""
         return self.shop_inventories.get(room_id)
     
     def get_item_object(self, instance_id: str) -> Optional[Item]:
-        """Gets a loaded item instance object from the world cache."""
-        return self._all_item_instances.get(instance_id)
+            return self._all_item_instances.get(instance_id)
     
     def get_area(self, area_id: int) -> Optional[Dict]:
         return self.areas.get(area_id)
@@ -217,10 +187,10 @@ class World:
     def get_mob_template(self, template_id: int) -> Optional[Dict]:
         return self.mob_templates.get(template_id)
 
+
     # --- Active Character Management ---
     def add_active_character(self, character: Character):
         self.active_characters[character.dbid] = character
-        log.debug("Character %s added to active list.", character.name)
 
     def remove_active_character(self, character_id: int) -> Optional[Character]:
         return self.active_characters.pop(character_id, None)
@@ -233,15 +203,11 @@ class World:
 
     # -- Grouping Functions ---
     def add_active_group(self, group: ' Group'):
-        """Adds a group to the world's list of active groups."""
         self.active_groups[group.id] = group
-        log.debug(f"Group {group.id} created by {group.leader.name} now active.")
 
     def remove_active_group(self, group_id: int):
-        """Removes a group from the active list."""
         if group_id in self.active_groups:
             del self.active_groups[group_id]
-            log.debug(f"Group {group_id} removed from active list.")
             
     def subscribe_to_ticker(self):
         """Subscribes all world update methods to the global ticker."""
@@ -300,36 +266,24 @@ class World:
                         await p.send(f"{{RYou lose focus ({ability_data.get('name', ability_key)}) - not enough essence!{{x")
 
     async def update_mob_ai(self, dt: float):
-        """Ticker: Ticks AI for all mobs in all loaded rooms."""
         tasks = [room.mob_ai_tick(dt, self) for room in self.rooms.values()]
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        if tasks: await asyncio.gather(*tasks, return_exceptions=True)
 
     async def update_respawns(self, dt: float):
-        """Ticker: Checks for and processes mob respawns."""
-        current_time = time.monotonic()
         tasks = [room.check_respawn(self) for room in self.rooms.values()]
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        if tasks: await asyncio.gather(*tasks, return_exceptions=True)
 
     # In game/world.py
     async def update_death_timers(self, dt: float):
-        """Ticker: Checks dying characters and transitions them to DEAD."""
         current_time = time.monotonic()
-        dying_chars = [char for char in self.get_active_characters_list() if char.status == 'DYING']
-
-        for char in dying_chars:
-            if char.death_timer_ends_at and current_time >= char.death_timer_ends_at:
-                log.info("Character %s death timer expired.", char.name)
+        for char in self.get_active_characters_list():
+            if char.status == 'DYING' and char.death_timer_ends_at and current_time >= char.death_timer_ends_at:
                 char.status = "DEAD"
-                char.death_timer_ends_at = None
                 
                 await char.send("\r\n{RYou have succumbed to your wounds. Your spirit now lingers over your corpse.{x")
                 await char.send("{RYou may be resurrected by a powerful cleric, or you may <release> your spirit to return to your spiritual tether.{x")
                 
                 if char.location:
-                    # We leave a "corpse" which is just the disconnected character object.
-                    # A better implementation might swap them with an item, but this works for now.
                     await char.location.broadcast(f"\r\n{char.name} has died.\r\n")
 
     async def respawn_character(self, character: Character):
