@@ -99,65 +99,47 @@ class Mob:
         self.location: 'Room' = current_room
         self.mob_type: Optional[str] = template_data.get('mob_type')
         self.effects: Dict[str, Dict[str, Any]] = {}
-        self.resistances: Dict[str, float] = template_data.get('resistances', {})
-        self.flags: List[str] = template_data.get('flags', [])
 
-        # --- Load Variance Data ---
-        try:
-            variance_str = template_data.get('variance', '{}') or '{}'
-            variance_dict = json.loads(variance_str)
-        except (json.JSONDecodeError, TypeError):
-            log.warning("Mob template %d (%s): Could not decode variance JSON: %r",
-                        self.template_id, self.name, template_data.get('variance'))
-            variance_dict = {}
+        # --- FIX: Properly parse all JSONB fields from the template ---
+        def _parse_json(data, default_type=dict):
+            if isinstance(data, (dict, list)):
+                return data
+            if isinstance(data, str):
+                try:
+                    return json.loads(data)
+                except (json.JSONDecodeError, TypeError):
+                    return default_type()
+            return default_type()
+
+        self.resistances: Dict[str, float] = _parse_json(template_data.get('resistances'), default_type=dict)
+        self.flags: Set[str] = set(_parse_json(template_data.get('flags'), default_type=list))
+        self.attacks: List[Dict[str, Any]] = _parse_json(template_data.get('attacks'), default_type=list)
+
+        template_stats = _parse_json(template_data.get('stats'), default_type=dict)
+        variance_dict = _parse_json(template_data.get('variance'), default_type=dict)
+        # ----------------------------------------------------------------
 
         hp_var_pct = variance_dict.get("max_hp_pct", 0)
         stats_var_pct = variance_dict.get("stats_pct", 0)
 
-        # --- Load and Apply Variance to Max HP ---
         template_max_hp: int = template_data.get('max_hp', 10)
         if hp_var_pct > 0:
             hp_multiplier = 1.0 + random.uniform(-hp_var_pct / 100.0, hp_var_pct / 100.0)
             self.max_hp = max(1, math.floor(template_max_hp * hp_multiplier))
         else:
             self.max_hp = max(1, template_max_hp)
-        self.hp: int = self.max_hp
+        self.hp: float = self.max_hp
 
-        # --- Load and Apply Variance to Stats ---
         self.stats: Dict[str, int] = {}
-        try:
-            template_stats = json.loads(template_data.get('stats', '{}') or '{}')
-            for stat_name, base_value in template_stats.items():
-                if stats_var_pct > 0:
-                    stat_multiplier = 1.0 + random.uniform(-stats_var_pct / 100.0, stats_var_pct / 100.0)
-                    self.stats[stat_name] = max(1, math.floor(base_value * stat_multiplier))
-                else:
-                    self.stats[stat_name] = base_value
-        except (json.JSONDecodeError, TypeError):
-            log.warning("Mob template %d (%s): Could not decode stats JSON: %r",
-                        self.template_id, self.name, template_data.get('stats'))
-        
-        for core_stat in ["might", "vitality", "agility", "intellect", "aura", "persona"]:
-            if core_stat not in self.stats:
-                self.stats[core_stat] = 10
+        for stat_name, base_value in template_stats.items():
+            if stats_var_pct > 0:
+                stat_multiplier = 1.0 + random.uniform(-stats_var_pct / 100.0, stats_var_pct / 100.0)
+                self.stats[stat_name] = max(1, math.floor(base_value * stat_multiplier))
+            else:
+                self.stats[stat_name] = base_value
 
-        # --- Load other template data ---
-        try:
-            self.attacks: List[Dict[str, Any]] = json.loads(template_data.get('attacks', '[]') or '[]')
-        except (json.JSONDecodeError, TypeError):
-            log.warning("Mob template %d (%s): Could not decode attacks JSON.", self.template_id, self.name)
-            self.attacks = []
-        try:
-            self.loot_table: Dict[str, Any] = json.loads(template_data.get('loot', '{}') or '{}')
-        except (json.JSONDecodeError, TypeError):
-            log.warning("Mob template %d (%s): Could not decode loot JSON.", self.template_id, self.name)
-            self.loot_table = {}
-        try:
-            flags_list = json.loads(template_data.get('flags', '[]') or '[]')
-            self.flags: Set[str] = {flag.upper() for flag in flags_list}
-        except (json.JSONDecodeError, TypeError):
-            log.warning("Mob template %d (%s): Could not decode flags JSON.", self.template_id, self.name)
-            self.flags = set()
+        for core_stat in ["might", "vitality", "agility", "intellect", "aura", "persona"]:
+            self.stats.setdefault(core_stat, 10)
 
         self.respawn_delay: int = template_data.get('respawn_delay_seconds', 300)
         self.movement_chance: float = template_data.get('movement_chance', 0.0)
