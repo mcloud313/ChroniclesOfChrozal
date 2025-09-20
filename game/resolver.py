@@ -43,22 +43,28 @@ async def resolve_physical_attack(
     damage_multiplier: float = 1.0
 ):
     """Resolves a physical attack by coordinating hit, damage, and outcome modules."""
-    # --- 1. Initial Checks ---
+    # ---Initial Checks ---
     if not attacker.is_alive() or not target.is_alive() or attacker.location != target.location:
         return
 
-    # --- 2. Determine Attack Variables (CRITICAL: Do this first!) ---
+    # ---Determine Attack Variables (CRITICAL: Do this first!) ---
     wpn_speed = 2.0 # Default for unarmed
+    attack_name = "unarmed strike"
     if isinstance(attacker, Character):
         if isinstance(attack_source, Item) and attack_source.item_type == "WEAPON":
             wpn_speed = attack_source.speed
+            attack_name = attack_source.name
+        elif isinstance(attacker, Mob) and isinstance(attack_source, dict):
+            wpn_speed = attack_source.get("speed", 2.0)
+            attack_name = attack_source.get("name", "an attack")
 
-    # Calculate roundtime penalty once
     rt_penalty = attacker.total_av * 0.05 if isinstance(attacker, Character) else 0.0
+    attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
 
-    # --- 3. Resolve Hit/Miss ---
+    # ---Resolve Hit/Miss ---
     hit_result = hit_resolver.check_physical_hit(attacker, target)
     if not hit_result.is_hit:
+        roll_details = f"{{i[Roll: {hit_result.roll} + MAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]{{x"
         if isinstance(attacker, Character):
             await attacker.send(f"You try to attack {target.name}, but miss.")
         if isinstance(target, Character):
@@ -93,6 +99,12 @@ async def resolve_physical_attack(
     # --- 8. Apply Final Roundtime for a successful hit ---
     attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
 
+    log.info(
+        f"[COMBAT-DEBUG] Roundtime for {attacker.name}: "
+        f"{attacker.roundtime:.2f}s (Speed: {wpn_speed:.2f}s, "
+        f"Armor Penalty: {rt_penalty:.2f}s, Slow Penalty: {attacker.slow_penalty:.2f}s)"
+    )
+
 async def resolve_magical_attack(
     caster: Union[Character, Mob], 
     target: Union[Character, Mob],
@@ -103,25 +115,28 @@ async def resolve_magical_attack(
     effect_details = spell_data.get("effect_details", {})
     caster_name = caster.name.capitalize()
     target_name = target.name.capitalize()
+    spell_name = spell_data.get("name", "a spell")
 
-    # --- 1. Get Power and Defense Ratings ---
+    # ---Get Power and Defense Ratings ---
     school = effect_details.get("school", "Arcane")
     rating_name = "APR" if school == "Arcane" else "DPR"
 
     hit_result = hit_resolver.check_magical_hit(caster, target, school)
 
     if not hit_result.is_hit:
+        roll_details = f"{{i[Roll: {hit_result.roll} + {rating_name}: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]{{x"
         if isinstance(caster, Character):
-            await caster.send(f"Your {spell_data['name']} misses {target_name}.")
-        # No miss message for target to reduce spam
+            await caster.send(f"Your {spell_name} misses {target_name}. {roll_details}")
+        if isinstance(target, Character):
+             await target.send(f"{caster_name}'s {spell_name} misses you.")
         return
-
-    # --- 2. Calculate Damage ---
+    
+    # ---Calculate Damage ---
     damage_info = damage_calculator.calculate_magical_damage(caster, spell_data, hit_result.is_crit)
     final_damage = damage_calculator.mitigate_magical_damage(target, damage_info)
-
-    # --- 3. Apply Damage & Send Messages ---
     outcome_handler.apply_damage(target, final_damage)
+
+    await outcome_handler.send_attack_messages(caster, target, hit_result, final_damage, spell_name)
 
     # --- Create verbose combat messages ---
     hit_desc = "{rCRITICALLY HITS{x" if hit_result.is_crit else "hits"
