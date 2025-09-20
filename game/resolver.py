@@ -1,4 +1,4 @@
-# game/combat.py
+# game/resolver.py
 """
 Coordinates combat resolution by calling specialized modules.
 """
@@ -7,8 +7,9 @@ import random
 import math
 import time
 import json
-import utils
 from typing import Union, Dict, Any, Optional, Tuple, List, TYPE_CHECKING
+
+from . import utils
 
 # The coordinator now imports all its helper modules
 from .combat import hit_resolver, damage_calculator, outcome_handler
