@@ -121,21 +121,16 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
     target_name = args_str.strip().lower()
     target_char = character.location.get_character_by_name(target_name)
     if target_char:
-        output = []
-        description = target_char.description.strip()
-        if not description:
-            description = f"{target_char.name} looks rather ordinary."
-        output.append(description)
-        output.append(utils.get_health_desc(target_char))
-        output.append(f"\n\r{target_char.first_name} is using:")
+        output = [
+            target_char.description.strip() or f"{target_char.name} looks rather ordinary.",
+            utils.get_health_desc(target_char),
+            f"\n\r{target_char.first_name} is using:"
+        ]
         
         equipped_items_desc = []
-        # FIX: Iterate through your canonical list of slots
         for slot in slots.ALL_SLOTS:
-            # FIX: Use the lowercase version of the slot for the dictionary key
             item = target_char._equipped_items.get(slot.lower())
             if item:
-                # Create a clean display name like "Wield Main"
                 slot_display = slot.replace('_', ' ').title()
                 equipped_items_desc.append(f" <{slot_display:<12}> {item.name}")
         

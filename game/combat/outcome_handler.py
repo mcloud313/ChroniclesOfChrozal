@@ -104,15 +104,15 @@ async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Ch
     hit_desc = "{rCRITICALLY HITS{x" if hit_result.is_crit else "hits"
     
     # --- Build Verbose Details for Players ---
-    hit_details = f"{{i[Roll:{hit_result.roll} + MAR:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]{{x"
+    hit_details = f"[Roll:{hit_result.roll} + MAR:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]"
     mitigation = damage_info.pre_mitigation_damage - final_damage
     
     # Add PDS/SDS to the mitigation details for the target
     mit_stat = target.pds if damage_info.damage_type in ['slash', 'pierce', 'bludgeon'] else target.sds
     mit_name = "PDS" if damage_info.damage_type in ['slash', 'pierce', 'bludgeon'] else "SDS"
 
-    damage_details = (f"{{i[Dmg:{damage_info.pre_mitigation_damage}(Base) "
-                      f"- {mitigation}({mit_name}:{mit_stat}, AV:{target.total_av}) = {final_damage}]{{x")
+    damage_details = (f"[Dmg:{damage_info.pre_mitigation_damage}(Base) "
+                      f"- {mitigation}({mit_name}:{mit_stat}, AV:{target.total_av}) = {final_damage}]")
 
     # --- Message to Attacker (if player) ---
     if isinstance(attacker, Character):

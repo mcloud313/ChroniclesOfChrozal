@@ -137,29 +137,16 @@ class Room:
 
     async def check_respawn(self, world: "World"):
         """
-        Checks mob population against spawners and respawns mobs as needed
-        to meet the 'max_present' count. This is the true spawner logic.
+        Checks for dead mobs in the room and respawns them if their timer has elapsed.
         """
-        if not self.spawners:
-            return
-
-        for template_id, spawn_info in self.spawners.items():
-            max_present = spawn_info.get("max_present", 1)
-            
-            # Count how many mobs of this template are currently alive in THIS room
-            current_count = sum(1 for mob in self.mobs if mob.is_alive() and mob.template_id == template_id)
-
-            # If we are below the max count, spawn new ones
-            needed = max_present - current_count
-            if needed > 0:
-                mob_template = world.get_mob_template(template_id)
-                if mob_template:
-                    for _ in range(needed):
-                        # We need to import Mob at the top of room.py for this to work
-                        from .mob import Mob 
-                        new_mob = Mob(mob_template, self)
-                        self.add_mob(new_mob)
-                        await self.broadcast(f"\r\nA {new_mob.name} appears!\r\n")
+        current_time = time.monotonic()
+        # Iterate over a copy of the set as respawning modifies it
+        for mob in list(self.mobs):
+            if not mob.is_alive() and mob.time_of_death:
+                if (current_time - mob.time_of_death) >= mob.respawn_delay:
+                    # Instead of creating a new mob, we reset the state of the existing one.
+                    mob.respawn()
+                    await self.broadcast(f"\r\nA {mob.name} appears!\r\n")
                         
     async def mob_ai_tick(self, dt: float, world: 'World'):
         """Calls the AI tick method for all living mobs in the room."""
