@@ -1,6 +1,7 @@
 # game/room.py
 import json
 import logging
+import time
 import asyncio
 import textwrap
 from .item import Item
@@ -136,30 +137,16 @@ class Room:
 
     async def check_respawn(self, world: "World"):
         """
-        Checks mob population against spawners and respawns mobs as needed
-        to meet the 'max_present' count.
+        Checks for dead mobs in the room and respawns them if their timer has elapsed.
         """
-        if not self.spawners:
-            return
-        
-        # log.info(f"--- Checking Spawners for Room {self.dbid} ({self.name}) ---")
-        # log.info(f"Spawner data: {self.spawners}")
-        # log.info(f"Mobs currently in room: {[mob.name for mob in self.mobs if mob.is_alive()]}")
-
-        for template_id, spawn_info in self.spawners.items():
-            max_present = spawn_info.get("max_present", 1)
-            current_count = sum(1 for mob in self.mobs if mob.is_alive() and mob.template_id == template_id)
-            
-
-            needed = max_present - current_count
-            if needed > 0:
-                log.info(f"--> Spawning {needed} mobs for template ID {template_id}")
-                mob_template = world.get_mob_template(template_id)
-                if mob_template:
-                    for _ in range(needed):
-                        new_mob = Mob(mob_template, self)
-                        self.add_mob(new_mob)
-                        await self.broadcast(f"\r\nA {new_mob.name} appears!\r\n")
+        # This method is now much simpler. It only deals with mobs already in the room.
+        # We can't just let the logic check for mobs in the room...because mobs move around. It'll have to check the area or something else.
+        current_time = time.monotonic()
+        for mob in self.mobs:
+            if not mob.is_alive() and mob.time_of_death:
+                if (current_time - mob.time_of_death) >= mob.respawn_delay:
+                    mob.respawn()
+                    await self.broadcast(f"\r\nA {mob.name} appears!\r\n")
                         
     async def mob_ai_tick(self, dt: float, world: 'World'):
         """Calls the AI tick method for all living mobs in the room."""

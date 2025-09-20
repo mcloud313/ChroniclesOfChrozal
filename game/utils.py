@@ -138,10 +138,6 @@ def check_needs_rehash(stored_hash: str) -> bool:
         # If it's not an Argon2 hash at all, it definitely needs to be "rehashed".
         return True
 
-def _legacy_hash_password_sha256(password: str) -> str:
-    """The old SHA256 hashing function, kept for migration purposes."""
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
-
 def _roll_4d6() -> int:
     """Rolls 4 six-sided dice and returns the sum."""
     return sum(random.randint(1, 6) for _ in range(4))
@@ -252,6 +248,15 @@ def get_article(word: str) -> str:
         return "a" # Default if empty string passed
     # Simple check for common vowel sounds (lowercase)
     return "an" if word.lower()[0] in 'aeiou' else "a"
+
+def strip_article(item_name: str) -> str:
+    """Removes a leading 'a ' or 'an ' from an item name."""
+    name_lower = item_name.lower()
+    if name_lower.startswith("a "):
+        return item_name[2:]
+    if name_lower.startswith("an "):
+        return item_name[3:]
+    return item_name
 
 def skill_check(character: 'Character', skill_name: str, dc: int = 10) -> Dict[str, Any]:
     """

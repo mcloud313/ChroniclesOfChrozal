@@ -17,6 +17,7 @@ class DamageInfo:
     pre_mitigation_damage: int
     damage_type: str
     is_crit: bool
+    attack_name: str = "an attack" # Add a default value
 
 def _roll_exploding_dice(max_roll: int) -> int:
     """Rolls a die, exploding on the maximum result up to 10 times."""

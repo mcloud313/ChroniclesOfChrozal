@@ -9,6 +9,8 @@ import logging
 import time
 from typing import Union, List, Tuple, Dict, Any, TYPE_CHECKING
 
+from .damage_calculator import DamageInfo
+
 from ..character import Character
 from ..mob import Mob
 from ..item import Item
@@ -93,39 +95,54 @@ async def handle_durability(attacker: Union[Character, Mob], target: Union[Chara
             elif armor_hit.condition <= 10:
                 await target.send(f"{{yYour {armor_hit.name} was damaged.{{x")
 
-async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Character, Mob], hit_result: HitResult, final_damage: int, attack_name: str):
-    """Sends all relevant combat messages to the attacker, target, and room."""
+async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Character, Mob], 
+                               hit_result: HitResult, damage_info: 'DamageInfo', final_damage: int):
+    """Sends all relevant, detailed combat messages."""
     attacker_name = attacker.name.capitalize()
-    target_name = target.name.capitalize()
+    target_name = target.name
 
-    hit_desc = "{rCRITICALLY HITS{x" if hit_result.is_crit else "hits"
+    hit_desc = "{rCRITICALLY HIT{x" if hit_result.is_crit else "hit"
 
-    # --- Create the detailed combat roll string for players ---
-    roll_details = (
-        f"{{i[Roll: {hit_result.roll} + MAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]"
-        f" -> Damage: {final_damage}{{x"
+    # --- Build Verbose Details for Players ---
+    hit_details = f"{{i[Roll: {hit_result.roll} + MAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]{{x"
+
+    # Explain what "Mitigation" means
+    mitigation = damage_info.pre_mitigation_damage - final_damage
+    damage_details = (
+        f"{{i[Damage: {damage_info.pre_mitigation_damage}(Base) "
+        f"- {mitigation}(Mitigation) = {final_damage}]{{x"
     )
 
+    # --- Message to Attacker (if player) ---
     if isinstance(attacker, Character):
-        await attacker.send(f"Your {attack_name} {hit_desc.lower()} {target_name}...")
-        await attacker.send(f"You {hit_desc.lower()} {target_name} for {{y{final_damage}{{x damage! {roll_details}")
+        # FIX: Use helper to fix grammar for "Your a rusty shortsword"
+        weapon_name = utils.strip_article(damage_info.attack_name)
+        # FIX: Verb conjugation for "You hits"
+        await attacker.send(
+            f"Your {weapon_name} {hit_desc.lower()} {target_name}!\n\r"
+            f"You deal {{y{final_damage}{{x damage. {hit_details} {damage_details}"
+        )
 
+    # --- Message to Target (if player) ---
     if isinstance(target, Character):
-        # Calculate and show mitigation for the target
-        mitigation = (target.pds + target.total_av) # Basic physical mitigation
-        mit_details = f"{{i[Mitigation: {mitigation}]"
-        await target.send(f"{{R{attacker_name}'s {attack_name} {hit_desc} you...")
-        await target.send(f"{{R{attacker_name} {hit_desc} you for {{y{final_damage}{{x damage!{{x {mit_details} ({int(target.hp)}/{int(target.max_hp)} HP)")
+        await target.send(
+            f"{{R{attacker_name}'s {damage_info.attack_name} {hit_desc.lower()} you!{{x\n\r"
+            f"{{RYou take {{y{final_damage}{{x damage. {hit_details} {damage_details} "
+            f"({int(target.hp)}/{int(target.max_hp)} HP)"
+        )
 
+    # --- Message to Room ---
     if attacker.location:
-        room_msg_hit_desc = "critically hits" if hit_result.is_crit else "hits"
-        await attacker.location.broadcast(f"\r\n{attacker_name} {room_msg_hit_desc} {target_name}!\r\n", exclude={attacker, target})
+        room_hit_desc = "critically hits" if hit_result.is_crit else "hits"
+        await attacker.location.broadcast(
+            f"\r\n{attacker_name}'s {damage_info.attack_name} {room_hit_desc} {target_name}.\r\n",
+            exclude={attacker, target}
+        )
 
+    # --- Handle Post-Message Effects (like breaking meditation) ---
     if isinstance(target, Character) and target.status == "MEDITATING" and final_damage > 0:
         target.status = "ALIVE"
         await target.send("{RThe force of the blow shatters your concentration!{x")
-        if attacker.location:
-            await attacker.location.broadcast(f"\r\n{target_name} is snapped out of their meditative trance by the attack!\r\n", exclude={target})
 
 async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character, Mob], world: 'World'):
     """Handles logic for when a target's HP reaches 0, with group reward sharing."""

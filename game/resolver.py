@@ -7,6 +7,7 @@ import random
 import math
 import time
 import json
+import utils
 from typing import Union, Dict, Any, Optional, Tuple, List, TYPE_CHECKING
 
 # The coordinator now imports all its helper modules
@@ -39,7 +40,6 @@ async def resolve_physical_attack(
     target: Union[Character, Mob],
     attack_source: Optional[Union[Item, Dict[str, Any]]],
     world: 'World',
-    ability_mods: Optional[Dict[str, Any]] = None,
     damage_multiplier: float = 1.0
 ):
     """Resolves a physical attack by coordinating hit, damage, and outcome modules."""
@@ -52,26 +52,27 @@ async def resolve_physical_attack(
     attack_name = "unarmed strike"
     if isinstance(attacker, Character):
         if isinstance(attack_source, Item) and attack_source.item_type == "WEAPON":
-            wpn_speed = attack_source.speed
-            attack_name = attack_source.name
-        elif isinstance(attacker, Mob) and isinstance(attack_source, dict):
-            wpn_speed = attack_source.get("speed", 2.0)
-            attack_name = attack_source.get("name", "an attack")
+            wpn_speed, attack_name = attack_source.speed, attack_source.name
+    elif isinstance(attacker, Mob) and isinstance(attack_source, dict):
+        wpn_speed, attack_name = attack_source.get("speed", 2.0), attack_source.get("name", "an attack")
 
     rt_penalty = attacker.total_av * 0.05 if isinstance(attacker, Character) else 0.0
     attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
 
     # ---Resolve Hit/Miss ---
     hit_result = hit_resolver.check_physical_hit(attacker, target)
+    rt_penalty = attacker.total_av * 0.05 if isinstance(attacker, Character) else 0.0
+    
     if not hit_result.is_hit:
         roll_details = f"{{i[Roll: {hit_result.roll} + MAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]{{x"
         if isinstance(attacker, Character):
-            await attacker.send(f"You try to attack {target.name}, but miss.")
+            await attacker.send(f"You miss {target.name} with your {utils.strip_article(attack_name)}. {roll_details}")
         if isinstance(target, Character):
-            await target.send(f"{attacker.name.capitalize()} tries to attack you, but misses.")
+            await target.send(f"{attacker.name.capitalize()}'s {attack_name} misses you.")
+        attacker.roundtime = 1.0 + rt_penalty + attacker.slow_penalty
         return
 
-    # --- 4. Resolve Block ---
+    # ---Resolve Block ---
     if isinstance(target, Character) and (shield := target.get_shield()):
         shield_skill_rank = target.get_skill_rank("shield usage")
         block_chance = shield.block_chance + (math.floor(shield_skill_rank / 10) * 0.01)
@@ -81,21 +82,24 @@ async def resolve_physical_attack(
             # Apply correct roundtime on a block
             attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
             return
-
-    # --- 5. Calculate and Mitigate Damage ---
+        
+    # ---Calculate and Mitigate Damage ---
     damage_info = damage_calculator.calculate_physical_damage(attacker, attack_source, hit_result.is_crit)
+    damage_info.attack_name = attack_name # Add attack_name to the info object
     if damage_multiplier != 1.0:
         damage_info.pre_mitigation_damage = int(damage_info.pre_mitigation_damage * damage_multiplier)
     final_damage = damage_calculator.mitigate_damage(target, damage_info)
-    # --- 6. Handle Consequences ---
-    await outcome_handler.handle_durability(attacker, target, attack_source, world)
-    outcome_handler.apply_damage(target, final_damage)
-    await outcome_handler.send_attack_messages(attacker, target, hit_result, final_damage, attack_name)
 
-    # --- 7. Check for Defeat ---
+    #--- Handle Consequences
+    if isinstance(attack_source, Item):
+        await outcome_handler.handle_durability(attacker, target, attack_source, world)
+    outcome_handler.apply_damage(target, final_damage)
+    await outcome_handler.send_attack_messages(attacker, target, hit_result, damage_info, final_damage)
+
     if target.hp <= 0:
         await outcome_handler.handle_defeat(attacker, target, world)
-
+        return
+    
     # --- 8. Apply Final Roundtime for a successful hit ---
     attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
 
@@ -133,7 +137,9 @@ async def resolve_magical_attack(
     
     # ---Calculate Damage ---
     damage_info = damage_calculator.calculate_magical_damage(caster, spell_data, hit_result.is_crit)
+    damage_info.attack_name = spell_name # Add spell name to the info object
     final_damage = damage_calculator.mitigate_magical_damage(target, damage_info)
+
     outcome_handler.apply_damage(target, final_damage)
 
     await outcome_handler.send_attack_messages(caster, target, hit_result, final_damage, spell_name)
