@@ -115,6 +115,9 @@ class Mob:
         self.flags: Set[str] = set(_parse_json(template_data.get('flags'), default_type=list))
         self.attacks: List[Dict[str, Any]] = _parse_json(template_data.get('attacks'), default_type=list)
 
+        self.respawn_delay: int = template_data.get('respawn_delay_seconds', 300)
+        self.movement_chance: float = template_data.get('movement_Chance', 0.0)
+
         template_stats = _parse_json(template_data.get('stats'), default_type=dict)
         variance_dict = _parse_json(template_data.get('variance'), default_type=dict)
         # ----------------------------------------------------------------

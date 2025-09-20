@@ -62,9 +62,10 @@ async def resolve_physical_attack(
     # --- 3. Resolve Hit/Miss ---
     hit_result = hit_resolver.check_physical_hit(attacker, target)
     if not hit_result.is_hit:
-        await attacker.send(f"You try to attack {target.name}, but miss.")
-        # Apply correct roundtime on a miss
-        attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
+        if isinstance(attacker, Character):
+            await attacker.send(f"You try to attack {target.name}, but miss.")
+        if isinstance(target, Character):
+            await target.send(f"{attacker.name.capitalize()} tries to attack you, but misses.")
         return
 
     # --- 4. Resolve Block ---

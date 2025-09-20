@@ -98,16 +98,27 @@ async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Ch
     attacker_name = attacker.name.capitalize()
     target_name = target.name.capitalize()
 
-    hit_desc = "{rCRITICALLY HIT{x" if hit_result.is_crit else "hit"
-    
-    if isinstance(attacker, Character):
-        await attacker.send(f"You {hit_desc} {target_name} for {{y{final_damage}{{x damage!")
-    if isinstance(target, Character):
-        await target.send(f"{{R{attacker_name} {hit_desc.upper()}S you for {{y{final_damage}{{x damage!{{x ({int(target.hp)}/{int(target.max_hp)} HP)")
-    
-    if attacker.location:
-        await attacker.location.broadcast(f"\r\n{attacker_name} {hit_desc}s {target_name}!\r\n", exclude={attacker, target})
+    # FIX: Clean up the crit message and make it more verbose
+    hit_desc = "{rCRITICALLY HITS{x" if hit_result.is_crit else "hits"
 
+    # --- Create the detailed combat roll string for players ---
+    roll_details = (
+        f"{{i[Roll: {hit_result.roll} + MAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]"
+        f" -> Damage: {final_damage}{{x"
+    )
+
+    if isinstance(attacker, Character):
+        await attacker.send(f"You {hit_desc.lower()} {target_name} for {{y{final_damage}{{x damage! {roll_details}")
+
+    if isinstance(target, Character):
+        # Calculate and show mitigation for the target
+        mitigation = (target.pds + target.total_av) # Basic physical mitigation
+        mit_details = f"{{i[Mitigation: {mitigation}]"
+        await target.send(f"{{R{attacker_name} {hit_desc} you for {{y{final_damage}{{x damage!{{x {mit_details} ({int(target.hp)}/{int(target.max_hp)} HP)")
+
+    if attacker.location:
+        room_msg_hit_desc = "critically hits" if hit_result.is_crit else "hits"
+        await attacker.location.broadcast(f"\r\n{attacker_name} {room_msg_hit_desc} {target_name}!\r\n", exclude={attacker, target})
     if isinstance(target, Character) and target.status == "MEDITATING" and final_damage > 0:
         target.status = "ALIVE"
         await target.send("{RThe force of the blow shatters your concentration!{x")
