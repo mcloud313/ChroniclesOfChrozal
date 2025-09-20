@@ -256,8 +256,10 @@ async def cmd_help(character: 'Character', world: 'World', args_str: str) -> boo
 
 async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'score' or 'stats' command."""
-    xp_needed = utils.xp_needed_for_level(character.level)
-    
+    xp_needed_val = utils.xp_needed_for_level(character.level)
+    # FIX: Handle the case where XP needed is infinite (max level)
+    xp_needed_str = "Max" if xp_needed_val == float('inf') else str(int(xp_needed_val))
+
     attributes_display = []
     stat_order = ["might", "vitality", "agility", "intellect", "aura", "persona"]
     for stat_name in stat_order:
@@ -268,7 +270,7 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
     total_av = character.total_av
     armor_training_rank = character.get_skill_rank("armor training")
     effective_av = math.floor(total_av * (0.20 + (armor_training_rank * 0.01)))
-    
+
     output = (
         f"\r\n=================================================="
         f"\r\n Name : {character.name:<28} Sex: {character.sex}"
@@ -279,7 +281,7 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
         f"\r\n Armor: {effective_av:>4}/{total_av:<28} (Effective/Total)"
         f"\r\n Barrier: {character.barrier_value:<28} "
         f"\r\n Essn : {int(character.essence):>4}/{int(character.max_essence):<31}"
-        f"\r\n XP   : {int(character.xp_total):>4}/{xp_needed:<28} Pool: {int(character.xp_pool)}"
+        f"\r\n XP   : {int(character.xp_total):>4}/{xp_needed_str:<28} Pool: {int(character.xp_pool)}" # <-- USE THE FIXED STRING HERE
         f"\r\n Tether: {character.spiritual_tether:<30}"
         f"\r\n --- Attributes ---"
         f"\r\n{attributes_display[0]} {attributes_display[1]}"

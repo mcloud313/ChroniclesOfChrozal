@@ -278,20 +278,21 @@ class Character:
             "status": self.status, "stance": self.stance, "coinage": self.coinage,
             "total_playtime_seconds": self.total_playtime_seconds
         }
-        
-        equipment_data = {slot.lower(): item.id for slot, item in self._equipped_items.items()}
+
+        equipment_data = {slot.lower(): (item.id if item else None) for slot, item in self._equipped_items.items()}
 
         try:
-            await asyncio.gather(
-                self.world.db_manager.save_character_core(self.dbid, core_data),
-                self.world.db_manager.save_character_stats(self.dbid, self.stats),
-                self.world.db_manager.save_character_skills(self.dbid, self.skills),
-                self.world.db_manager.save_character_equipment(self.dbid, equipment_data)
-            )
+            # FIX: Save core data first, then related data sequentially.
+            # This is safer than running all saves in parallel.
+            await self.world.db_manager.save_character_core(self.dbid, core_data)
+            await self.world.db_manager.save_character_stats(self.dbid, self.stats)
+            await self.world.db_manager.save_character_skills(self.dbid, self.skills)
+            await self.world.db_manager.save_character_equipment(self.dbid, equipment_data)
+
             log.info("Successfully saved character %s (ID: %s).", self.name, self.dbid)
         except Exception:
             log.exception("Unexpected error saving character %s (ID: %s):", self.name, self.dbid)
-
+            
     def respawn(self):
         """Resets character state after death."""
         log.info("RESPAWN: Character %s (ID %s) is respawning.", self.name, self.dbid)
