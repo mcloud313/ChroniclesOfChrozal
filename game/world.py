@@ -270,6 +270,7 @@ class World:
         if tasks: await asyncio.gather(*tasks, return_exceptions=True)
 
     async def update_respawns(self, dt: float):
+        log.info("Calling update_respawns from world.py")
         tasks = [room.check_respawn(self) for room in self.rooms.values()]
         if tasks: await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -304,8 +305,6 @@ class World:
 
         await character.send("\r\n{WYou feel yourself drawn back to the mortal plane...{x")
         await character.send(respawn_room.get_look_string(character, self))
-
-    # In game/world.py, replace the existing update_effects function with this:
 
     async def update_effects(self, dt: float):
         """Ticker: Processes ongoing effects and removes expired ones."""
@@ -423,8 +422,6 @@ class World:
             is_in_node = char.location and "NODE" in char.location.flags
             char.update_regen(dt, is_in_node)
             
-    # Replace the existing function in the World class
-
     async def update_stealth_checks(self, dt: float):
         """Ticker: Periodically allows observers to detect hidden characters."""
         # Only run this check occasionally to reduce spam and processing

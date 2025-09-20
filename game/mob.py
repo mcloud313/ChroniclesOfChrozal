@@ -79,7 +79,6 @@ class Mob:
                     total_av += effect_data.get("amount", 0)
         return max(0, total_av)
 
-
     @property
     def slow_penalty(self) -> float:
         """Returns the roundtime penalty from any active 'slow' effects."""

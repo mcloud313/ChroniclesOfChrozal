@@ -1,7 +1,4 @@
 # game/room.py
-"""
-Defines the Room class. Represents a Room in the game world.
-"""
 import json
 import logging
 import asyncio
@@ -9,11 +6,14 @@ import textwrap
 from .item import Item
 from typing import Set, Dict, Any, Optional, List, Union, TYPE_CHECKING
 
+# FIX: Import Mob for check_respawn
 if TYPE_CHECKING:
     from .character import Character
     from .mob import Mob
     from .world import World
     from .database import DatabaseManager
+
+from .mob import Mob # <-- ADD THIS IMPORT
 
 log = logging.getLogger(__name__)
 
@@ -23,10 +23,14 @@ class Room:
         self.dbid: int = db_data['id']
         self.area_id: int = db_data['area_id']
         self.name: str = db_data['name']
-        self.description: str = db_data['description'] 
-        exits_data = db_data.get('exits') or {}
-        self.exits: Dict[str, Any] = json.loads(exits_data) if isinstance(exits_data, str) else exits_data
+        self.description: str = db_data['description']
         
+        # FIX: Simplified __init__. Exits and Objects are now loaded by world.py after creation.
+        # This ensures the data structures are correct from the start.
+        self.exits: Dict[str, Any] = {}
+        self.objects: List[Dict[str, Any]] = []
+
+        # This logic for flags and spawners is correct as they are still on the rooms table.
         flags_data = db_data.get('flags') or []
         self.flags: Set[str] = set(json.loads(flags_data) if isinstance(flags_data, str) else flags_data)
         
@@ -34,11 +38,9 @@ class Room:
         spawners_dict = json.loads(spawners_data) if isinstance(spawners_data, str) else spawners_data
         self.spawners: Dict[int, Dict[str, Any]] = {int(k): v for k, v in spawners_dict.items()}
         
-        # Runtime attributes, populated by World.build()
+        # Runtime attributes
         self.characters: Set['Character'] = set()
         self.mobs: Set['Mob'] = set()
-        self.items: List[str] = []
-        self.objects: List[Dict[str, Any]] = []
         self.coinage: int = db_data.get('coinage', 0)
         self.item_instance_ids: List[str] = []
         
@@ -140,26 +142,18 @@ class Room:
         if not self.spawners:
             return
         
-        # --- DEBUG LOGGING ADDED ---
         log.info(f"--- Checking Spawners for Room {self.dbid} ({self.name}) ---")
         log.info(f"Spawner data: {self.spawners}")
         log.info(f"Mobs currently in room: {[mob.name for mob in self.mobs if mob.is_alive()]}")
-        # ---------------------------
-
 
         for template_id, spawn_info in self.spawners.items():
             max_present = spawn_info.get("max_present", 1)
-
-            # Count how many mobs of this template are currently alive in the room
             current_count = sum(1 for mob in self.mobs if mob.is_alive() and mob.template_id == template_id)
-
-            # --- DEBUG LOGGING ADDED ---
             log.info(f"-> Checking template ID {template_id}: Max={max_present}, Current={current_count}")
-            # ---------------------------
 
-            # Calculate how many new mobs we need to spawn
             needed = max_present - current_count
             if needed > 0:
+                log.info(f"--> Spawning {needed} mobs for template ID {template_id}")
                 mob_template = world.get_mob_template(template_id)
                 if mob_template:
                     for _ in range(needed):
