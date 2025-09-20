@@ -17,7 +17,7 @@ VALID_ATTRIBUTES = {"might", "vitality", "agility", "intellect", "aura", "person
 log = logging.getLogger(__name__)
 
 
-async def cmd_spend(character: 'Character', world: 'World', db_conn: aiosqlite.Connection, args_str: str) -> bool:
+async def cmd_spend(character: 'Character', world: 'World', args_str: str) -> bool:
     """Spends skill points to increase a skill rank."""
     if not args_str:
         await character.send("Spend points on which skill? (e.g., spend lockpicking)")
@@ -68,7 +68,7 @@ async def cmd_spend(character: 'Character', world: 'World', db_conn: aiosqlite.C
     return True
 
 
-async def cmd_improve(character: 'Character', world: 'World', db_conn: aiosqlite.Connection, args_str: str) -> bool:
+async def cmd_improve(character: 'Character', world: 'World', args_str: str) -> bool:
     """Spends an attribute point to increase a core stat."""
     if not args_str:
         await character.send("Improve which attribute? (Might, Vitality, Agility, Intellect, Aura, Persona)")

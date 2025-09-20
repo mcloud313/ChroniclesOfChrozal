@@ -72,6 +72,16 @@ async def resolve_physical_attack(
             await target.send(f"{attacker.name.capitalize()}'s {attack_name} misses you.")
         attacker.roundtime = 1.0 + rt_penalty + attacker.slow_penalty
         return
+    
+    # --- Resolve Parry ---
+    if isinstance(target, Character) and (weapon := target._equipped_items.get("main_hand")):
+        parry_skill_rank = target.get_skill_rank("parrying")
+        parry_chance = parry_skill_rank * 0.005 # 0.5% chance per rank
+        if random.random() < parry_chance:
+            await attacker.send(f"{{y{target.name} parries your attack with their {weapon.name}!{{x")
+            await target.send(f"{{gYou parry {attacker.name}'s attack with your {weapon.name}!{{x")
+            attacker.roundtime = 1.0 + rt_penalty + attacker.slow_penalty
+            return
 
     # ---Resolve Block ---
     if isinstance(target, Character) and (shield := target.get_shield()):

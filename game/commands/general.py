@@ -8,6 +8,7 @@ import config
 from typing import TYPE_CHECKING
 from .. import utils
 from ..definitions import slots
+from ..definitions import slots, skills as skill_defs
 
 if TYPE_CHECKING:
     from ..character import Character
@@ -51,6 +52,10 @@ HELP_TOPICS = {
         "disband": "DISBAND\n\r  If you are the leader, disbands your current group.",
         "leave": "LEAVE\n\r  Leave your current group.",
         "kick": "KICK <player>\n\r  If you are the leader, removes a player from your group."
+    },
+    "SKILLS": {
+        "skills": "SKILLS\n\r Show a list of your skills and ranks purchased.",
+        "spend": "SPEND\n\r Spend a skill point."
     }
 }
 
@@ -128,7 +133,9 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
         ]
         
         equipped_items_desc = []
+        # FIX: Iterate through the canonical list of slots
         for slot in slots.ALL_SLOTS:
+            # FIX: Use .get() to safely handle empty slots
             item = target_char._equipped_items.get(slot.lower())
             if item:
                 slot_display = slot.replace('_', ' ').title()
@@ -282,7 +289,7 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
         f"\r\n Barrier: {character.barrier_value:<28} "
         f"\r\n Essn : {int(character.essence):>4}/{int(character.max_essence):<31}"
         f"\r\n XP   : {int(character.xp_total):>4}/{xp_needed_str:<28} Pool: {int(character.xp_pool)}" # <-- USE THE FIXED STRING HERE
-        f"\r\n Tether: {character.spiritual_tether:<30}"
+        f"\r\n Tether: {character.spiritual_tether:<28} Playtime: {utils.format_playtime(character.total_playtime_seconds)}"
         f"\r\n --- Attributes ---"
         f"\r\n{attributes_display[0]} {attributes_display[1]}"
         f"\r\n{attributes_display[2]} {attributes_display[3]}"
@@ -315,6 +322,9 @@ async def cmd_advance(character: 'Character', world: 'World', args_str: str) -> 
     ap_gain = 1 if character.level % 4 == 0 else 0
     character.unspent_attribute_points += ap_gain
 
+    tether_gain = 1 if character.level % 5 == 0 else 0
+    character.spiritual_tether += tether_gain
+
     hp_gain, essence_gain = character.apply_level_up_gains()
 
     log.info("Character %s advanced to level %d! Gains: HP+%.1f, Ess+%.1f, SP+%d, AP+%d",
@@ -331,26 +341,28 @@ async def cmd_advance(character: 'Character', world: 'World', args_str: str) -> 
     if ap_gain > 0:
         level_msg.append(f"You gain {ap_gain} attribute point (Total unspent: {character.unspent_attribute_points}).")
     
+    if tether_gain > 0:
+        level_msg.append(f"Your spiritual tether strengthens! (Now: {character.spiritual_tether})")
+    
     await character.send("\r\n".join(level_msg))
     # REFACTOR: Call the character's own save method.
     await character.save()
     return True
 
 async def cmd_skills(character: 'Character', world: 'World', args_str: str) -> bool:
-    """Displays the character's known skills and ranks."""
+    """Displays all available skills and the character's rank in each."""
     output = [
-        "\r\n================== Skills ==================",
+        "\r\n{c================== Skills =================={x",
         f" Unspent Skill Points: {character.unspent_skill_points}",
-        "------------------------------------------"
+        "{c------------------------------------------{x"
     ]
     
-    skill_lines = [f" {name.title():<25}: {rank}" for name, rank in sorted(character.skills.items()) if rank > 0]
-    if not skill_lines:
-        output.append(" You have not trained any skills yet.")
-    else:
-        output.extend(skill_lines)
+    # FIX: Iterate through the canonical list of all skills
+    for skill_name in sorted(skill_defs.INITIAL_SKILLS):
+        rank = character.get_skill_rank(skill_name)
+        output.append(f" {skill_name.title():<25}: {rank}")
         
-    output.append("==========================================")
+    output.append("{c=========================================={x")
     await character.send("\r\n".join(output))
     return True
 

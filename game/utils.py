@@ -374,7 +374,23 @@ def get_condition_desc(condition: int) -> str:
         return "It looks like it could fall apart at any moment."
     else:
         return "It is completely broken."
-    
+
+def format_playtime(total_seconds: int) -> str:
+    """Formats total seconds into a readable Days, Hours, Minutes string."""
+    if total_seconds < 60:
+        return f"{total_seconds}s"
+
+    minutes, seconds = divmod(total_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+
+    parts = []
+    if days > 0: parts.append(f"{days}d")
+    if hours > 0: parts.append(f"{hours}h")
+    if minutes > 0: parts.append(f"{minutes}m")
+
+    return " ".join(parts) if parts else "0m"
+
 def get_health_desc(character: 'Character') -> str:
     """Returns a descriptive string for a character's health percentage."""
     percent = (character.hp / character.max_hp) * 100

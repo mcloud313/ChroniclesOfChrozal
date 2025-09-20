@@ -390,10 +390,11 @@ class DatabaseManager:
         query = "SELECT * FROM item_instances WHERE owner_char_id = $1"
         return await self.fetch_all(query, character_id)
     
-    async def update_item_location(self, instance_id: str, room_id: Optional[int] = None, owner_char_id: Optional[int] = None) -> str:
-        """Moves an item by changing its owner or room location."""
-        query = "UPDATE item_instances SET room_id = $1, owner_char_id = $2 WHERE id = $3"
-        return await self.execute_query(query, room_id, owner_char_id, instance_id)
+    async def update_item_location(self, instance_id: str, room_id: Optional[int] = None,
+                               owner_char_id: Optional[int] = None, container_id: Optional[str] = None) -> str:
+        """Moves an item by changing its owner, room, or container location."""
+        query = "UPDATE item_instances SET room_id = $1, owner_char_id = $2, container_id = $3 WHERE id = $4"
+        return await self.execute_query(query, room_id, owner_char_id, container_id, instance_id)
     
     async def delete_item_instance(self, instance_id: str) -> str:
         """Permanently deletes an item instance from the world."""

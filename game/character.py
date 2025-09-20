@@ -108,7 +108,9 @@ class Character:
         base_dv = self.agi_mod * 2
         item_bonus = self.get_stat_bonus_from_equipment("bonus_dv")
         effect_bonus = self.get_stat_bonus_from_effects("bonus_dv")
-        return base_dv + item_bonus + effect_bonus
+        # Add bonus from dodge skill
+        dodge_bonus = self.get_skill_rank("dodge") // 25
+        return base_dv + item_bonus + effect_bonus + dodge_bonus
     
     @property
     def barrier_value(self) -> int:
