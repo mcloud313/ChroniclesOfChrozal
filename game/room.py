@@ -149,7 +149,7 @@ class Room:
         for template_id, spawn_info in self.spawners.items():
             max_present = spawn_info.get("max_present", 1)
             current_count = sum(1 for mob in self.mobs if mob.is_alive() and mob.template_id == template_id)
-            log.info(f"-> Checking template ID {template_id}: Max={max_present}, Current={current_count}")
+            
 
             needed = max_present - current_count
             if needed > 0:
