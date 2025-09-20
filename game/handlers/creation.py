@@ -289,6 +289,8 @@ class CreationHandler:
         max_hp = float(hp_die + vit_mod)
         max_essence = float(aura_mod + pers_mod)
 
+        initial_tether = max(3, aura_mod + pers_mod)
+
         spells, abilities = [], []
         for key, data in ability_defs.ABILITIES_DATA.items():
             reqs = data.get("class_req", [])
@@ -301,7 +303,8 @@ class CreationHandler:
             last_name=self.creation_data["last_name"], sex=self.creation_data["sex"],
             race_id=self.creation_data["race_id"], class_id=self.creation_data["class_id"],
             stats=stats_dict, description=self._build_description_string(), 
-            hp=max_hp, max_hp=max_hp, essence=max_essence, max_essence=max_essence
+            hp=max_hp, max_hp=max_hp, essence=max_essence, max_essence=max_essence,
+            spiritual_tether=initial_tether
         )
 
         if new_char_id:

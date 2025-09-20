@@ -201,7 +201,7 @@ class DatabaseManager:
                         max_hp REAL DEFAULT 50.0,
                         essence REAL DEFAULT 20.0,
                         max_essence REAL DEFAULT 20.0,
-                        spiritual_tether INTEGER,
+                        spiritual_tether INTEGER NOT NULL DEFAULT 3,
                         xp_pool REAL DEFAULT 0.0,
                         xp_total REAL DEFAULT 0.0,
                         status TEXT NOT NULL DEFAULT 'ALIVE',
@@ -435,19 +435,19 @@ class DatabaseManager:
         return await self.fetch_one(query, character_id)
     
     async def create_character(self, player_id: int, first_name: str, last_name: str, sex: str,
-                           race_id: int, class_id: int, stats: dict,
-                           description: str, hp: float, max_hp: float, essence: float,
-                           max_essence: float) -> Optional[int]:
+                       race_id: int, class_id: int, stats: dict,
+                       description: str, hp: float, max_hp: float, essence: float,
+                       max_essence: float, spiritual_tether: int) -> Optional[int]:
         """Creates a new character and all associated relational data in a single transaction."""
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 # Step 1: Insert into the main characters table
                 char_query = """
-                    INSERT INTO characters (
-                        player_id, first_name, last_name, sex, race_id, class_id, description,
-                        hp, max_hp, essence, max_essence
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                    RETURNING id
+                INSERT INTO characters (
+                    player_id, first_name, last_name, sex, race_id, class_id, description,
+                    hp, max_hp, essence, max_essence, spiritual_tether
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                RETURNING id
                 """
                 char_params = (player_id, first_name, last_name, sex, race_id, class_id,
                             description, hp, max_hp, essence, max_essence)
