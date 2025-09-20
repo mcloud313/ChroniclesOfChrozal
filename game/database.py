@@ -480,15 +480,73 @@ class DatabaseManager:
                 
                 return new_char_id
     
-    async def save_character_data(self, character_id: int, data: dict) -> str:
-        """Dynamically updates character data."""
+    async def save_character_core(self, character_id: int, data: dict) -> str:
+        """Saves the core character data from the main 'characters' table."""
         if not data: return "UPDATE 0"
         set_clauses = [f"{key} = ${i+1}" for i, key in enumerate(data.keys())]
-        params = [json.dumps(v) if isinstance(v, (dict, list)) else v for v in data.values()]
-        
+        params = list(data.values())
         params.append(character_id)
         query = f"UPDATE characters SET {', '.join(set_clauses)}, last_saved = NOW() WHERE id = ${len(params)}"
         return await self.execute_query(query, *params)
+
+    async def save_character_stats(self, character_id: int, stats: dict) -> str:
+        """Saves character stats using an INSERT ... ON CONFLICT (upsert) command."""
+        query = """
+            INSERT INTO character_stats (character_id, might, vitality, agility, intellect, aura, persona)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (character_id) DO UPDATE SET
+                might = EXCLUDED.might,
+                vitality = EXCLUDED.vitality,
+                agility = EXCLUDED.agility,
+                intellect = EXCLUDED.intellect,
+                aura = EXCLUDED.aura,
+                persona = EXCLUDED.persona;
+        """
+        params = (
+            character_id, stats.get('might', 10), stats.get('vitality', 10),
+            stats.get('agility', 10), stats.get('intellect', 10),
+            stats.get('aura', 10), stats.get('persona', 10)
+        )
+        return await self.execute_query(query, *params)
+    
+    async def save_character_skills(self, character_id: int, skills: dict) -> str:
+        """Saves character skills by deleting old ones and inserting the new set."""
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute("DELETE FROM character_skills WHERE character_id = $1", character_id)
+                if not skills:
+                    return "DELETE" # No new skills to add
+                
+                skill_records = [(character_id, name, rank) for name, rank in skills.items()]
+                await conn.copy_records_to_table(
+                    'character_skills',
+                    columns=['character_id', 'skill_name', 'rank'],
+                    records=skill_records
+                )
+        return "COPY"
+
+    async def save_character_equipment(self, character_id: int, equipment: dict) -> str:
+        """Saves character equipment using an upsert."""
+        query = """
+            INSERT INTO character_equipment (character_id, head, torso, legs, feet, hands, main_hand, off_hand)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (character_id) DO UPDATE SET
+                head = EXCLUDED.head,
+                torso = EXCLUDED.torso,
+                legs = EXCLUDED.legs,
+                feet = EXCLUDED.feet,
+                hands = EXCLUDED.hands,
+                main_hand = EXCLUDED.main_hand,
+                off_hand = EXCLUDED.off_hand;
+        """
+        params = (
+            character_id, equipment.get('head'), equipment.get('torso'), equipment.get('legs'),
+            equipment.get('feet'), equipment.get('hands'), equipment.get('main_hand'),
+            equipment.get('off_hand')
+        )
+        return await self.execute_query(query, *params)
+
+
     
     async def get_character_stats(self, character_id: int) -> Optional[asyncpg.Record]:
         """Fetches the core stats for a character."""

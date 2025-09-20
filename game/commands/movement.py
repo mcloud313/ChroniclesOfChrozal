@@ -131,7 +131,7 @@ async def _perform_drag(dragger: 'Character', target_corpse: 'Character', target
     look_string = target_room.get_look_string(dragger, dragger.world)
     await dragger.send(look_string)
 
-async def cmd_move(character: 'Character', world: 'World', direction: str) -> bool:
+async def cmd_move(character: 'Character', world: 'World', args_str: str, *, direction: str) -> bool:
     """Handles all cardinal/ordinal directional movement commands."""
     if not character.location:
         await character.send("You cannot seem to move from the void.")
