@@ -60,7 +60,6 @@ async def _award_xp_to_character(character: Character, xp_amount: int):
     elif not character.group:
         await character.send("Your mind cannot hold any more raw experience right now.")
 
-
 async def handle_durability(attacker: Union[Character, Mob], target: Union[Character, Mob], attack_source: Item, world: 'World'):
     """Handles random durability loss for attacker's weapon and target's armor."""
     # Attacker weapon durability
@@ -100,49 +99,43 @@ async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Ch
     """Sends all relevant, detailed combat messages."""
     attacker_name = attacker.name.capitalize()
     target_name = target.name
-
-    hit_desc = "{rCRITICALLY HIT{x" if hit_result.is_crit else "hit"
-
+    attack_name = damage_info.attack_name
+    
+    hit_desc = "{rCRITICALLY HITS{x" if hit_result.is_crit else "hits"
+    
     # --- Build Verbose Details for Players ---
-    hit_details = f"{{i[Roll: {hit_result.roll} + MAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]{{x"
-
-    # Explain what "Mitigation" means
+    hit_details = f"{{i[Roll:{hit_result.roll} + MAR:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]{{x"
     mitigation = damage_info.pre_mitigation_damage - final_damage
-    damage_details = (
-        f"{{i[Damage: {damage_info.pre_mitigation_damage}(Base) "
-        f"- {mitigation}(Mitigation) = {final_damage}]{{x"
-    )
+    
+    # Add PDS/SDS to the mitigation details for the target
+    mit_stat = target.pds if damage_info.damage_type in ['slash', 'pierce', 'bludgeon'] else target.sds
+    mit_name = "PDS" if damage_info.damage_type in ['slash', 'pierce', 'bludgeon'] else "SDS"
+
+    damage_details = (f"{{i[Dmg:{damage_info.pre_mitigation_damage}(Base) "
+                      f"- {mitigation}({mit_name}:{mit_stat}, AV:{target.total_av}) = {final_damage}]{{x")
 
     # --- Message to Attacker (if player) ---
     if isinstance(attacker, Character):
-        # FIX: Use helper to fix grammar for "Your a rusty shortsword"
-        weapon_name = utils.strip_article(damage_info.attack_name)
-        # FIX: Verb conjugation for "You hits"
-        await attacker.send(
-            f"Your {weapon_name} {hit_desc.lower()} {target_name}!\n\r"
-            f"You deal {{y{final_damage}{{x damage. {hit_details} {damage_details}"
-        )
+        verb = "hit" if not hit_result.is_crit else "CRITICALLY HIT"
+        clean_weapon_name = utils.strip_article(attack_name)
+        msg = (f"Your {clean_weapon_name} {verb} {target_name}!\n\r"
+               f"You deal {{y{final_damage}{{x damage. {hit_details} {damage_details}")
+        await attacker.send(msg)
 
     # --- Message to Target (if player) ---
     if isinstance(target, Character):
-        await target.send(
-            f"{{R{attacker_name}'s {damage_info.attack_name} {hit_desc.lower()} you!{{x\n\r"
-            f"{{RYou take {{y{final_damage}{{x damage. {hit_details} {damage_details} "
-            f"({int(target.hp)}/{int(target.max_hp)} HP)"
-        )
-
+        msg = (f"{{R{attacker_name}'s {attack_name} {hit_desc.lower()} you!{{x\n\r"
+               f"{{RYou take {{y{final_damage}{{x damage. {hit_details} {damage_details} "
+               f"({int(target.hp)}/{int(target.max_hp)} HP)")
+        await target.send(msg)
+    
     # --- Message to Room ---
     if attacker.location:
         room_hit_desc = "critically hits" if hit_result.is_crit else "hits"
         await attacker.location.broadcast(
-            f"\r\n{attacker_name}'s {damage_info.attack_name} {room_hit_desc} {target_name}.\r\n",
+            f"\r\n{attacker_name}'s {attack_name} {room_hit_desc} {target_name}.\r\n",
             exclude={attacker, target}
         )
-
-    # --- Handle Post-Message Effects (like breaking meditation) ---
-    if isinstance(target, Character) and target.status == "MEDITATING" and final_damage > 0:
-        target.status = "ALIVE"
-        await target.send("{RThe force of the blow shatters your concentration!{x")
 
 async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character, Mob], world: 'World'):
     """Handles logic for when a target's HP reaches 0, with group reward sharing."""

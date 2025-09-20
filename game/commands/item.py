@@ -130,44 +130,27 @@ async def cmd_wear(character: 'Character', world: 'World', args_str: str) -> boo
     if not item_to_equip:
         await character.send("You aren't carrying that.")
         return True
-
-    # Determine the correct slots for the item
+    
     target_slots = item_to_equip.wear_location
     if not target_slots:
         await character.send("You can't equip that.")
         return True
-
-    # Ensure target_slots is a list
+    
     if isinstance(target_slots, str):
         target_slots = [target_slots]
-
-    # Check if slots are already occupied
+    
+    # Check if slots are occupied
     for slot in target_slots:
-        if slot in character._equipped_items:
-            # A special case for wielding a two-handed weapon
-            if "main_hand" in target_slots and slot == "off_hand" and character._equipped_items.get(slot) is None:
-                continue
+        if slot in character._equipped_items and character._equipped_items[slot] is not None:
             await character.send(f"You are already using your {slot.replace('_', ' ')}.")
             return True
-
-    # For two-handed weapons, ensure off-hand is also free
-    if "main_hand" in target_slots and "off_hand" in target_slots:
-        if character._equipped_items.get("off_hand"):
-            await character.send("You need your off hand free to wield that.")
-            return True
-
+    
     # --- FIX: LOGIC UPDATE ---
-    # 1. Remove item from in-memory inventory
     del character._inventory_items[item_to_equip.id]
-
-    # 2. Add item to in-memory equipment dictionary for all its slots
     for slot in target_slots:
         character._equipped_items[slot] = item_to_equip
 
-    # --- FIX: MESSAGING UPDATE ---
-    # 3. Determine the correct verb (wear vs. wield)
     verb = "wield" if item_to_equip.item_type == "WEAPON" else "wear"
-
     await character.send(f"You {verb} {item_to_equip.name}.")
     await character.location.broadcast(f"\r\n{character.name} {verb}s {item_to_equip.name}.\r\n", exclude={character})
     return True
@@ -216,7 +199,7 @@ async def cmd_put(character: 'Character', world: 'World', args_str: str) -> bool
         return True
     
     # 4. Check capacity
-    if container.get_current_weight() + item_to_put.weight > container.capacity:
+    if container.get_total_contents_weight() + item_to_put.get_total_weight() > container.capacity:
         await character.send(f"The {container.name} is too full.")
         return True
     
@@ -394,22 +377,31 @@ async def cmd_open(character: 'Character', world: 'World', args_str: str) -> boo
     return True
 
 async def cmd_close(character: 'Character', world: 'World', args_str: str) -> bool:
-    """Closes a container in the room."""
+    """Closes a container in inventory, equipped, or in the room."""
     if not args_str:
         await character.send("Close what?")
         return True
-
-    target_item = character.location.get_item_instance_by_name(args_str, world)
+    
+    # FIX: Search for the container in inventory, then equipped, then the room.
+    target_item = (character.find_item_in_inventory_by_name(args_str) or
+                   character.find_item_in_equipment_by_name(args_str) or
+                   character.location.get_item_instance_by_name(args_str, world))
     
     if not target_item or target_item.capacity <= 0:
         await character.send("You don't see that here.")
         return True
-        
+    
     if not target_item.is_open:
         await character.send("It's already closed.")
         return True
-        
+    
+    # Close the container
     target_item.instance_stats['is_open'] = False
+
+    # If the container is in the room, the change needs to be saved to the DB
+    if target_item.id in character.location.item_instance_ids:
+         await world.db_manager.update_item_instance_stats(target_item.id, target_item.instance_stats)
+         
     await character.send(f"You close the {target_item.name}.")
     return True
 
