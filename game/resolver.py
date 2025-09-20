@@ -90,7 +90,7 @@ async def resolve_physical_attack(
     # --- 6. Handle Consequences ---
     await outcome_handler.handle_durability(attacker, target, attack_source, world)
     outcome_handler.apply_damage(target, final_damage)
-    await outcome_handler.send_attack_messages(attacker, target, hit_result, final_damage)
+    await outcome_handler.send_attack_messages(attacker, target, hit_result, final_damage, attack_name)
 
     # --- 7. Check for Defeat ---
     if target.hp <= 0:
