@@ -11,8 +11,10 @@ from typing import TYPE_CHECKING, Optional, Dict, Any, List, Set, Union
 
 from . import utils
 from .definitions import abilities as ability_defs
+from . import resolver
 
 if TYPE_CHECKING:
+    
     from .room import Room
     from .character import Character
     from .world import World
@@ -222,15 +224,15 @@ class Mob:
 
     async def simple_ai_tick(self, dt: float, world: 'World'):
         """Basic AI logic called by the world ticker."""
-        from . import resolver
+
 
         if not self.is_alive() or self.roundtime > 0:
             return
         
-        if "CAN_FLY" in self.template_flags:
+        if self.has_flag("CAN_FLY"):
             # 10% chance per tick to consider changing flight state
             if random.random() < 0.1:
-                is_currently_flying = "FLYING" in self.flags
+                is_currently_flying = self.has_flag("FLYING")
                 
                 if is_currently_flying:
                     # If fighting a target on the ground, 25% chance to land
@@ -272,14 +274,11 @@ class Mob:
 
         # --- Movement Logic ---
         if not self.is_fighting and self.movement_chance > 0 and not self.has_flag("STATIONARY"):
-            if random.random() < self.movement_chance:
-                possible_exits = [
-                    direction for direction, target in self.location.exits.items()
-                    if isinstance(target, int)
-                ]
+            if random.random() < self.movement_chance * dt:
+                possible_exits = list(self.location.exits.keys())
                 if possible_exits:
                     await self.move(random.choice(possible_exits), world)
-                    return
+                    return # After moving, the mob's turn is over for this tick.
 
         # --- Aggressive Check ---
         if self.has_flag("AGGRESSIVE") and not self.is_fighting:
