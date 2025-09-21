@@ -11,13 +11,14 @@ from typing import TYPE_CHECKING, Optional, Dict, Any, List, Set, Union
 
 from . import utils
 from .definitions import abilities as ability_defs
-from . import resolver
+
 
 if TYPE_CHECKING:
     
     from .room import Room
     from .character import Character
     from .world import World
+    from . import resolver
 
 log = logging.getLogger(__name__)
 
