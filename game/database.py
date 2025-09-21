@@ -375,14 +375,21 @@ class DatabaseManager:
                 )
                 #--- Seed Ability Templates ---
                 log.info("Seeding ability templates...")
+                log.info("Seeding ability templates...")
                 ability_records = []
                 for key, data in ability_defs.ABILITIES_DATA.items():
                     ability_records.append((
                         key, data.get('name'), data.get('type'),
-                        json.dumps(data.get('class_req', [])), data.get('level_req', 1),
+                        # --- FIX: Removed json.dumps(). Pass the dictionary directly. ---
+                        data.get('class_req', []), 
+                        data.get('level_req', 1),
                         data.get('cost', 0), data.get('target_type'), data.get('effect_type'),
-                        json.dumps(data.get('effect_details', {})), data.get('cast_time', 0.0),
-                        data.get('roundtime', 1.0), json.dumps(data.get('messages', {})),
+                        # --- FIX: Removed json.dumps(). Pass the dictionary directly. ---
+                        data.get('effect_details', {}), 
+                        data.get('cast_time', 0.0),
+                        data.get('roundtime', 1.0), 
+                        # --- FIX: Removed json.dumps(). Pass the dictionary directly. ---
+                        data.get('messages', {}),
                         data.get('description')
                     ))
 
