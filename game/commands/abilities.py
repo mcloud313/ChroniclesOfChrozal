@@ -33,14 +33,16 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
     target_name_input: Optional[str] = None
 
     longest_match_len = 0
-    for ability_key, data in ability_defs.ABILITIES_DATA.items():
-        if data.get("type", "").upper() != "ABILITY":
+    for ability_key, data in world.abilities.items():
+        # The database column is 'ability_type', not 'type'
+        if data.get("ability_type", "").upper() != "ABILITY":
             continue
         if normalized_input.startswith(ability_key):
             if len(ability_key) > longest_match_len:
                 longest_match_len = len(ability_key)
                 found_key = ability_key
                 target_name_input = args_str.strip()[len(ability_key):].strip()
+
 
     if not found_key:
         await character.send("You don't know any ability by that name.")

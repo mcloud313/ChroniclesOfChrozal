@@ -4,6 +4,7 @@ Manages the game world's loaded state and orchestrates ticker-driven updates.
 """
 from __future__ import annotations
 import time
+import json 
 import logging
 import asyncio
 import config
@@ -76,6 +77,22 @@ class World:
             self.item_templates = {row['id']: dict(row) for row in item_rows or []}
             self.mob_templates = {row['id']: dict(row) for row in mob_rows or []}
             self.abilities = {row['internal_name']: dict(row) for row in ability_rows or []}
+
+            if ability_rows:
+                for row in ability_rows:
+                    ability_dict = dict(row)
+                    try:
+                        # The database driver returns JSONB as strings, so we must parse them.
+                        ability_dict['class_req'] = json.loads(ability_dict.get('class_req', '[]'))
+                        ability_dict['effect_details'] = json.loads(ability_dict.get('effect_details', '{}'))
+                        ability_dict['messages'] = json.loads(ability_dict.get('messages', '{}'))
+                    except (json.JSONDecodeError, TypeError):
+                        log.error(f"Could not parse JSON for ability: {ability_dict.get('internal_name')}")
+                        ability_dict['class_req'] = []
+                        ability_dict['effect_details'] = {}
+                        ability_dict['messages'] = {}
+                    self.abilities[ability_dict['internal_name']] = ability_dict
+
             self.damage_types = {row['name']: dict(row) for row in damage_type_rows or []}
 
             for template in self.mob_templates.values():
