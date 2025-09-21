@@ -390,8 +390,6 @@ class DatabaseManager:
                         json.dumps(data.get('messages', {})),
                         data.get('description')
                     ))
-                    ))
-
                 await conn.executemany("""
                     INSERT INTO ability_templates (
                         internal_name, name, ability_type, class_req, level_req, cost,
