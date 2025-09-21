@@ -227,9 +227,10 @@ class Character:
         results = await asyncio.gather(
             self.world.db_manager.get_character_stats(self.dbid),
             self.world.db_manager.get_character_skills(self.dbid),
+            self.world.db_manager.get_character_abilities(self.dbid),
             self.world.db_manager.get_character_equipment(self.dbid),
-            self.world.db_manager.get_instances_for_character(self.dbid),
-            self.world.db_manager.get_character_abilities(self.dbid)
+            self.world.db_manager.get_instances_for_character(self.dbid)
+            
         )
         stats_record, skills_records, ability_records, equipment_record, instance_records = results
 
