@@ -34,6 +34,10 @@ async def cmd_attack(character: Character, world: World, args_str: str) -> bool:
         await character.send(f"You don't see '{args_str}' here to attack.")
         return True
     
+    if "FLYING" in target.flags:
+        await character.send(f"You can't reach the {target.name}, it's flying too high!")
+        return True
+    
     weapon = character._equipped_items.get("main_hand")
     if weapon and weapon.item_type == item_defs.RANGED_WEAPON:
         await character.send(f"You can't attack with {weapon.name}, you should try to <shoot> it instead.")

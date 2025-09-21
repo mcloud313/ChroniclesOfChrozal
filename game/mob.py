@@ -116,7 +116,7 @@ class Mob:
         self.attacks: List[Dict[str, Any]] = _parse_json(template_data.get('attacks'), default_type=list)
 
         self.respawn_delay: int = template_data.get('respawn_delay_seconds', 300)
-        self.movement_chance: float = template_data.get('movement_Chance', 0.0)
+        self.movement_chance: float = template_data.get('movement_chance', 0.0)
 
         template_stats = _parse_json(template_data.get('stats'), default_type=dict)
         variance_dict = _parse_json(template_data.get('variance'), default_type=dict)
@@ -188,7 +188,7 @@ class Mob:
             return
 
         exit_data = self.location.exits.get(direction.lower())
-        target_room_id = exit_data if isinstance(exit_data, int) else None
+        target_room_id = exit_data.get('destination_room_id') if isinstance(exit_data, dict) else None
 
         if target_room_id is None:
             return
@@ -226,6 +226,22 @@ class Mob:
 
         if not self.is_alive() or self.roundtime > 0:
             return
+        
+        if "CAN_FLY" in self.template_flags:
+            # 10% chance per tick to consider changing flight state
+            if random.random() < 0.1:
+                is_currently_flying = "FLYING" in self.flags
+                
+                if is_currently_flying:
+                    # If fighting a target on the ground, 25% chance to land
+                    if self.is_fighting and random.random() < 0.25:
+                        self.flags.discard("FLYING")
+                        await self.location.broadcast(f"\r\n{self.name.capitalize()} lands on the ground to attack!\r\n")
+                else:
+                    # If not fighting, 20% chance to take off
+                    if not self.is_fighting and random.random() < 0.20:
+                        self.flags.add("FLYING")
+                        await self.location.broadcast(f"\r\n{self.name.capitalize()} takes to the air!\r\n")
 
         # --- Combat Logic ---
         if self.is_fighting and self.target:
