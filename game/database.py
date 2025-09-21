@@ -380,16 +380,16 @@ class DatabaseManager:
                 for key, data in ability_defs.ABILITIES_DATA.items():
                     ability_records.append((
                         key, data.get('name'), data.get('type'),
-                        # --- FIX: Convert the class_req list to a JSON string. ---
+                        # --- FIX: All JSONB fields must be manually converted to strings for executemany ---
                         json.dumps(data.get('class_req', [])), 
                         data.get('level_req', 1),
                         data.get('cost', 0), data.get('target_type'), data.get('effect_type'),
-                        # Pass dictionaries directly, as asyncpg handles them correctly.
-                        data.get('effect_details', {}), 
+                        json.dumps(data.get('effect_details', {})), 
                         data.get('cast_time', 0.0),
                         data.get('roundtime', 1.0), 
-                        data.get('messages', {}),
+                        json.dumps(data.get('messages', {})),
                         data.get('description')
+                    ))
                     ))
 
                 await conn.executemany("""
