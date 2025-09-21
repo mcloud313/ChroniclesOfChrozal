@@ -1,4 +1,17 @@
 import os
+import sys # <-- Make sure 'sys' is imported
+from pathlib import Path
+
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+# --- ADD THESE THREE LINES ---
+# This finds the root of your entire git repository (the ChroniclesOfChrozal folder)
+PROJECT_ROOT = BASE_DIR.parent
+# This adds that root folder to Python's import path
+sys.path.insert(0, str(PROJECT_ROOT))
+# --- END OF ADDED LINES ---
 
 # --- FINAL: Dynamic Host Configuration for Codespaces ---
 # Start with defaults that cover local access via VS Code or browser

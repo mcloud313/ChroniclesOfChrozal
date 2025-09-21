@@ -334,6 +334,7 @@ class CreationHandler:
             player_id=self.player.dbid, first_name=self.creation_data["first_name"],
             last_name=self.creation_data["last_name"], sex=self.creation_data["sex"],
             race_id=self.creation_data["race_id"], class_id=self.creation_data["class_id"],
+            class_name=class_name,
             stats=stats_dict, description=self._build_description_string(), 
             hp=max_hp, max_hp=max_hp, essence=max_essence, max_essence=max_essence,
             spiritual_tether=initial_tether

@@ -9,7 +9,7 @@ import random
 import asyncio
 import logging
 import config
-from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple, Union, Set
 from .item import Item
 from .definitions import skills as skill_defs, abilities as ability_defs, classes as class_defs
 from . import utils
@@ -91,7 +91,6 @@ class Character:
         effect_bonus = self.get_stat_bonus_from_effects("bonus_dpr")
         skill_bonus = self.get_skill_rank("piety") // 25
         return base_dpr + item_bonus + effect_bonus + skill_bonus
-
 
     @property
     def pds(self) -> int:
@@ -205,6 +204,8 @@ class Character:
         self.is_hidden: bool = False
         self.detected_traps: set = set()
 
+        self.known_abilities: Set[str] = set()
+
         # --- Data Structures to be populated by load_related_data() ---
         self.stats: Dict[str, int] = {}
         self.skills: Dict[str, int] = {}
@@ -312,7 +313,22 @@ class Character:
             log.info("Successfully saved character %s (ID: %s).", self.name, self.dbid)
         except Exception:
             log.exception("Unexpected error saving character %s (ID: %s):", self.name, self.dbid)
-            
+
+    async def check_and_learn_new_abilities(self, world: 'World'):
+        """Checks for and learns new abilities upon leveling up."""
+        char_class_name = world.get_class_name(self.class_id).lower()
+        
+        for key, ability in world.abilities.items():
+            # Check if the character is the right class and level, and doesn't already know it
+            if (self.level == ability['level_req'] and
+                    char_class_name in ability['class_req'] and
+                    key not in self.known_abilities):
+                
+                self.known_abilities.add(key)
+                await self.send(f"{{gYou have learned a new {ability['ability_type'].lower()}: {ability['name']}!{{x")
+                log.info(f"Character {self.name} learned new ability: {ability['name']}")
+
+
     def respawn(self):
         """Resets character state after death."""
         log.info("RESPAWN: Character %s (ID %s) is respawning.", self.name, self.dbid)

@@ -12,6 +12,8 @@ from typing import Optional, Dict, Any, List
 
 from . import utils
 from .definitions import skills as skill_defs
+from .definitions import abilities as ability_defs
+from .definitions import classes as class_defs
 
 log = logging.getLogger(__name__)
 
@@ -343,7 +345,7 @@ class DatabaseManager:
                                      [(1, "Chrozalin", "Versatile humans..."), (2, "Dwarf", "Stout mountain folk..."), (3, "Elf", "Graceful forest dwellers..."), (4, "Yan-tar", "Ancient turtle-like people..."), (5, "Grak", "Towering humanoids...")])
                 # Classes
                 await conn.executemany("INSERT INTO classes (id, name, description) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING",
-                                     [(1, "Warrior", "..."), (2, "Mage", "..."), (3, "Cleric", "..."), (4, "Rogue", "...")])
+                                     [(1, "Warrior", "..."), (2, "Mage", "..."), (3, "Cleric", "..."), (4, "Rogue", "..."), (5, "Ranger", "A master of ranged combat and survival.")])
                 # Areas & Rooms
                 await conn.execute("INSERT INTO areas (id, name, description) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING", 1, "The Void", "...")
                 await conn.execute("INSERT INTO rooms (id, area_id, name, description, flags) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING", 1, 1, "The Void", "...", json.dumps(["NODE", "RESPAWN"]))
@@ -361,6 +363,39 @@ class DatabaseManager:
                     "INSERT INTO damage_types (name, is_magical) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING",
                     damage_types_to_seed
                 )
+                #--- Seed Ability Templates ---
+                log.info("Seeding ability templates...")
+                ability_records = []
+                for key, data in ability_defs.ABILITIES_DATA.items():
+                    ability_records.append((
+                        key, data.get('name'), data.get('type'),
+                        json.dumps(data.get('class_req', [])), data.get('level_req', 1),
+                        data.get('cost', 0), data.get('target_type'), data.get('effect_type'),
+                        json.dumps(data.get('effect_details', {})), data.get('cast_time', 0.0),
+                        data.get('roundtime', 1.0), json.dumps(data.get('messages', {})),
+                        data.get('description')
+                    ))
+
+                await conn.executemany("""
+                    INSERT INTO ability_templates (
+                        internal_name, name, ability_type, class_req, level_req, cost,
+                        target_type, effect_type, effect_details, cast_time, roundtime,
+                        messages, description
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    ON CONFLICT (internal_name) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        ability_type = EXCLUDED.ability_type,
+                        class_req = EXCLUDED.class_req,
+                        level_req = EXCLUDED.level_req,
+                        cost = EXCLUDED.cost,
+                        target_type = EXCLUDED.target_type,
+                        effect_type = EXCLUDED.effect_type,
+                        effect_details = EXCLUDED.effect_details,
+                        cast_time = EXCLUDED.cast_time,
+                        roundtime = EXCLUDED.roundtime,
+                        messages = EXCLUDED.messages,
+                        description = EXCLUDED.description;
+                """, ability_records)
                 
         log.info("--- PostgreSQL schema check complete ---")
 
@@ -436,9 +471,9 @@ class DatabaseManager:
         return await self.fetch_one(query, character_id)
     
     async def create_character(self, player_id: int, first_name: str, last_name: str, sex: str,
-                       race_id: int, class_id: int, stats: dict,
-                       description: str, hp: float, max_hp: float, essence: float,
-                       max_essence: float, spiritual_tether: int) -> Optional[int]:
+                           race_id: int, class_id: int, class_name: str, stats: dict,
+                           description: str, hp: float, max_hp: float, essence: float,
+                           max_essence: float, spiritual_tether: int) -> Optional[int]:
         """Creates a new character and all associated relational data in a single transaction."""
         async with self.pool.acquire() as conn:
             async with conn.transaction():
@@ -450,8 +485,10 @@ class DatabaseManager:
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                 RETURNING id
                 """
+                # --- FIX: Added 'spiritual_tether' to the end of this tuple ---
                 char_params = (player_id, first_name, last_name, sex, race_id, class_id,
-                            description, hp, max_hp, essence, max_essence)
+                            description, hp, max_hp, essence, max_essence, spiritual_tether)
+                
                 record = await conn.fetchrow(char_query, *char_params)
                 if not record:
                     return None
@@ -470,8 +507,15 @@ class DatabaseManager:
                 # Step 3: Insert a blank equipment record
                 await conn.execute("INSERT INTO character_equipment (character_id) VALUES ($1)", new_char_id)
 
-                # FIX: Step 4: Insert the initial set of skills with a rank of 0
-                initial_skill_data = [(new_char_id, skill_name, 0) for skill_name in skill_defs.INITIAL_SKILLS]
+                # --- CLEANUP: Removed the duplicated, incorrect skill insertion logic ---
+
+                # Step 4: Insert initial skills WITH class bonuses
+                bonuses = class_defs.get_starting_skill_bonuses(class_name)
+                initial_skill_data = [
+                    (new_char_id, skill_name, bonuses.get(skill_name, 0))
+                    for skill_name in skill_defs.INITIAL_SKILLS
+                ]
+                
                 if initial_skill_data:
                     await conn.copy_records_to_table(
                     'character_skills',

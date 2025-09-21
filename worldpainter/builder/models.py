@@ -63,7 +63,7 @@ class DamageTypes(models.Model):
         verbose_name_plural = "Damage Types"
 
 class ItemTemplates(models.Model):
-    name = models.TextField(unique=True)
+    name = models.CharField(unique=True, max_length=100)
     description = models.TextField(blank=True, null=True)
     type = models.CharField(max_length=20, choices=ITEM_TYPE_CHOICES, default=GENERAL)
     stats = models.JSONField(blank=True, null=True, help_text='Ex: {"might": 5, "value": 100, "damage_base": 10}')

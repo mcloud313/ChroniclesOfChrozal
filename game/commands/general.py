@@ -326,6 +326,8 @@ async def cmd_advance(character: 'Character', world: 'World', args_str: str) -> 
 
     hp_gain, essence_gain = character.apply_level_up_gains()
 
+    await character.check_and_learn_new_abilities(world)
+
     log.info("Character %s advanced to level %d! Gains: HP+%.1f, Ess+%.1f, SP+%d, AP+%d",
              character.name, character.level, hp_gain, essence_gain, sp_gain, ap_gain)
 

@@ -13,14 +13,16 @@ CLASS_HP_DIE = {
     2: 4,   # Mage: d4
     3: 8,   # Cleric: d8
     4: 6,   # Rogue: d6
+    5: 8,   # Ranger
 }
 DEFAULT_HP_DIE = 6 # Default if class not found
 
 CLASS_ESSENCE_DIE = {
-    1: 4,   # Warrior: d4
+    1: 2,   # Warrior: d4
     2: 10,  # Mage: d10
     3: 8,   # Cleric: d8 (Assuming standard progression)
-    4: 6,   # Rogue: d6 (Assuming standard progression)
+    4: 4,   # Rogue: d6 (Assuming standard progression)
+    5: 4,   # Ranger
 }
 DEFAULT_ESSENCE_DIE = 4 # Default if class not found
 
@@ -60,6 +62,14 @@ CLASS_STARTING_SKILL_BONUSES: Dict[str, Dict[str, int]] = {
         "piercing weapons": 3, # Dagger archetype
         "acrobatics": 3,
         "climbing": 3,
+    },
+    "ranger": {
+        "projectile weapons": 5,
+        "piercing weapons": 3, # For daggers
+        "stealth": 3,
+        "first aid": 3,
+        "perception": 5,
+        "athletics": 3,
     },
 
 }
