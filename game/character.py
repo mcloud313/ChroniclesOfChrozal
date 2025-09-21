@@ -228,9 +228,10 @@ class Character:
             self.world.db_manager.get_character_stats(self.dbid),
             self.world.db_manager.get_character_skills(self.dbid),
             self.world.db_manager.get_character_equipment(self.dbid),
-            self.world.db_manager.get_instances_for_character(self.dbid)
+            self.world.db_manager.get_instances_for_character(self.dbid),
+            self.world.db_manager.get_character_abilities(self.dbid)
         )
-        stats_record, skills_records, equipment_record, instance_records = results
+        stats_record, skills_records, ability_records, equipment_record, instance_records = results
 
         # Populate stats from the character_stats table
         if stats_record:
@@ -240,6 +241,9 @@ class Character:
         # Populate skills from the character_skills table
         if skills_records:
             self.skills = {record['skill_name']: record['rank'] for record in skills_records}
+
+        if ability_records:
+            self.known_abilities = {record['ability_internal_name'] for record in ability_records}
 
         # --- Item and Equipment Loading ---
         all_owned_items: Dict[str, Item] = {}
@@ -309,6 +313,7 @@ class Character:
             await self.world.db_manager.save_character_stats(self.dbid, self.stats)
             await self.world.db_manager.save_character_skills(self.dbid, self.skills)
             await self.world.db_manager.save_character_equipment(self.dbid, equipment_data)
+            await self.world.db_manager.save_character_abilities(self.dbid, self.known_abilities)
 
             log.info("Successfully saved character %s (ID: %s).", self.name, self.dbid)
         except Exception:

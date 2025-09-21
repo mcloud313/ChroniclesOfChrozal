@@ -34,7 +34,7 @@ MOTD = """
 | |   | |_| | |_) | | | |/ /  / _ \ | |                    
 | |___|  _  |  _ <| |_| / /_ / ___ \| |___                 
  \____|_| |_|_| \_\\___/____/_/   \_\_____|
-                    Version 0.65 
+                    Version 0.66
 """
 
 class ConnectionState(Enum):
@@ -209,8 +209,9 @@ class ConnectionHandler:
     async def _handle_post_load(self):
         # NEW: Call the character's method to load its unique item instances
         await self.active_character.load_related_data()
-        
         room = self.world.get_room(self.active_character.location_id) or self.world.get_room(1)
+        if self.active_character.level == 1 and not self.active_character.known_abilities:
+            await self.active_character.check_and_learn_new_abilities(self.world)
         self.active_character.update_location(room)
         room.add_character(self.active_character)
         self.world.add_active_character(self.active_character)

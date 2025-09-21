@@ -423,7 +423,65 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "roundtime": 3.0,
         "description": "A vicious attack from the shadows that causes a deep bleeding wound and prevents spellcasting."
     },
+    "aimed shot": {
+        "name": "Aimed Shot",
+        "type": "ABILITY",
+        "class_req": ["ranger"],
+        "level_req": 1,
+        "cost": 5,
+        "target_type": TARGET_MOB,
+        "effect_type": EFFECT_MODIFIED_ATTACK,
+        "effect_details": {
+            # This is a ranged attack, so combat logic must use RAR
+            "is_ranged": True, 
+            # It provides a bonus to the character's RAR for this one attack
+            "bonus_rar": 10, 
+            "damage_multiplier": 1.25 # Deals 25% more damage
+        },
+        "roundtime": 6.0,
+        "description": "Take a moment to line up a perfect shot, increasing accuracy and damage at the cost of speed."
+    },
+
+    "serpent sting": {
+        "name": "Serpent Sting",
+        "type": "ABILITY",
+        "class_req": ["ranger"],
+        "level_req": 3,
+        "cost": 10,
+        "target_type": TARGET_MOB,
+        "effect_type": EFFECT_MODIFIED_ATTACK,
+        "effect_details": {
+            "is_ranged": True,
+            "damage_multiplier": 0.8, # The initial hit is slightly weaker
+            "applies_effect": {
+                "name": "SerpentVenom", "type": "poison", "duration": 9.0, "potency": 4
+            }
+        },
+        "roundtime": 2.5,
+        "description": "Fire a venom-tipped projectile that deals minor initial damage but poisons the target."
+    },
+
+    "hunter's mark": {
+        "name": "Hunter's Mark",
+        "type": "ABILITY",
+        "class_req": ["ranger"],
+        "level_req": 5,
+        "cost": 15,
+        "target_type": TARGET_MOB,
+        "effect_type": EFFECT_DEBUFF,
+        "effect_details": {
+            "name": "Marked",
+            "type": "debuff",
+            "stat_affected": "bonus_dv", # Lowers the target's Dodge Value
+            "amount": -2,
+            "duration": 60.0
+        },
+        "roundtime": 2.0,
+        "description": "Mark a target as your quarry, making them easier for you and your allies to hit.",
+        "apply_msg_room": "{caster_name} points at {target_name}, marking them as prey."
+    }
 }
+
 
 # Helper function to get data safely
 def get_ability_data(world: 'World', name: str) -> Optional[Dict[str, Any]]:

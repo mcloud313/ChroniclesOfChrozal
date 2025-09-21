@@ -240,6 +240,14 @@ class DatabaseManager:
                 )
                 """)
                 await conn.execute("""
+                CREATE TABLE IF NOT EXISTS character_abilities (
+                    id SERIAL PRIMARY KEY,
+                    character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+                    ability_internal_name TEXT NOT NULL REFERENCES ability_templates(internal_name) ON DELETE CASCADE,
+                    UNIQUE (character_id, ability_internal_name)
+                )
+                """)
+                await conn.execute("""
                 CREATE TABLE IF NOT EXISTS exits (
                     id SERIAL PRIMARY KEY,
                     source_room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
@@ -607,6 +615,11 @@ class DatabaseManager:
         """Fetches the equipment for a character."""
         query = "SELECT * FROM character_equipment WHERE character_id = $1"
         return await self.fetch_one(query, character_id)
+    
+    async def get_character_abilities(self, character_id: int) -> List[asyncpg.Record]:
+        """Fetches all known abilities for a character."""
+        query = "SELECT ability_internal_name FROM character_abilities WHERE character_id = $1"
+        return await self.fetch_all(query, character_id)
     
     async def update_character_playtime(self, character_id: int, session_seconds: int) -> str:
         """Adds the session duration to the character's total playtime."""
