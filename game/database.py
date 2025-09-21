@@ -353,7 +353,9 @@ class DatabaseManager:
                                      [(1, "Chrozalin", "Versatile humans..."), (2, "Dwarf", "Stout mountain folk..."), (3, "Elf", "Graceful forest dwellers..."), (4, "Yan-tar", "Ancient turtle-like people..."), (5, "Grak", "Towering humanoids...")])
                 # Classes
                 await conn.executemany("INSERT INTO classes (id, name, description) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING",
-                                     [(1, "Warrior", "..."), (2, "Mage", "..."), (3, "Cleric", "..."), (4, "Rogue", "..."), (5, "Ranger", "A master of ranged combat and survival.")])
+                                     [(1, "Warrior", "..."), (2, "Mage", "..."), (3, "Cleric", "..."), (4, "Rogue", "..."),
+                                      (5, "Ranger", "A master of ranged combat and survival."),
+                                      (6, "Barbarian", "A ferocious warrior who channels primal fury.")])
                 # Areas & Rooms
                 await conn.execute("INSERT INTO areas (id, name, description) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING", 1, "The Void", "...")
                 await conn.execute("INSERT INTO rooms (id, area_id, name, description, flags) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING", 1, 1, "The Void", "...", json.dumps(["NODE", "RESPAWN"]))
@@ -489,13 +491,13 @@ class DatabaseManager:
                 char_query = """
                 INSERT INTO characters (
                     player_id, first_name, last_name, sex, race_id, class_id, description,
-                    hp, max_hp, essence, max_essence, spiritual_tether
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                    hp, max_hp, essence, max_essence, spiritual_tether, coinage
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 RETURNING id
                 """
                 # --- FIX: Added 'spiritual_tether' to the end of this tuple ---
                 char_params = (player_id, first_name, last_name, sex, race_id, class_id,
-                            description, hp, max_hp, essence, max_essence, spiritual_tether)
+                            description, hp, max_hp, essence, max_essence, spiritual_tether, config.STARTING_COINAGE)
                 
                 record = await conn.fetchrow(char_query, *char_params)
                 if not record:

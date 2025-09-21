@@ -42,6 +42,13 @@ async def cmd_attack(character: Character, world: World, args_str: str) -> bool:
     if weapon and weapon.item_type == item_defs.RANGED_WEAPON:
         await character.send(f"You can't attack with {weapon.name}, you should try to <shoot> it instead.")
         return True
+    
+    # --- NEW: Check for two-handed weapon rules ---
+    # The character might be holding something they picked up after wielding.
+    if weapon and weapon.item_type == item_defs.TWO_HANDED_WEAPON:
+        if character._inventory_items: # If there's anything in inventory, a hand is full.
+            await character.send(f"You need two hands free to swing {weapon.name} effectively!")
+            return True
         
     log.info("%s is initiating combat with %s.", character.name, target.name)
 
@@ -93,6 +100,15 @@ async def cmd_shoot(character: Character, world: World, args: str) -> bool:
     required_ammo_type = weapon.stats.get("uses_ammo_type")
     if not required_ammo_type:
         await character.send(f"Your {weapon.name} doesn't seem to use any ammunition.")
+        return True
+    
+    # --- NEW: Check for free hands before shooting ---
+    # A character can't shoot if they have a shield equipped or are holding an item.
+    if character._equipped_items.get("off_hand"):
+        await character.send("You can't shoot while using a shield.")
+        return True
+    if character._inventory_items:
+        await character.send("You need a free hand to load and fire your weapon.")
         return True
 
     quiver = None

@@ -479,7 +479,33 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "roundtime": 2.0,
         "description": "Mark a target as your quarry, making them easier for you and your allies to hit.",
         "apply_msg_room": "{caster_name} points at {target_name}, marking them as prey."
-    }
+    },
+    "rage": {
+        "name": "Rage",
+        "type": "ABILITY",
+        "class_req": ["barbarian"],
+        "level_req": 1,
+        "cost": 10,
+        "target_type": TARGET_SELF,
+        "effect_type": EFFECT_BUFF,
+        "effect_details": {
+            "name": "Rage",
+            "type": "buff",
+            "stat_affected": "might",
+            "amount": 5,
+            "duration": 30.0,
+            # This buff also applies a secondary debuff
+            "secondary_effect": {
+                "stat_affected": "bonus_dv",
+                "amount": -3
+            }
+        },
+        "roundtime": 1.5,
+        "description": "Enter a primal rage, increasing your might but making you easier to hit.",
+        "apply_msg_self": "{rYou fly into a screaming rage!{x",
+        "apply_msg_room": "{caster_name} bellows with primal fury!",
+        "expire_msg_self": "{rYour rage subsides.{x"
+    },
 }
 
 

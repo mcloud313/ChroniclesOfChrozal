@@ -4,6 +4,8 @@ import json
 from typing import TYPE_CHECKING
 from ..item import Item
 from .. import utils
+from ..definitions import item_defs
+
 
 if TYPE_CHECKING:
     from ..character import Character
@@ -144,6 +146,21 @@ async def cmd_wear(character: 'Character', world: 'World', args_str: str) -> boo
         if slot in character._equipped_items and character._equipped_items[slot] is not None:
             await character.send(f"You are already using your {slot.replace('_', ' ')}.")
             return True
+    
+    # --- NEW: Two-Handed Wielding Logic ---
+    if item_to_equip.item_type == item_defs.TWO_HANDED_WEAPON:
+        if character._equipped_items.get("main_hand") or character._equipped_items.get("off_hand"):
+            await character.send("You must have both hands free to wield that weapon.")
+            return True
+        
+        # Equip in both hands
+        del character._inventory_items[item_to_equip.id]
+        character._equipped_items["main_hand"] = item_to_equip
+        character._equipped_items["off_hand"] = item_to_equip # Use same item as a placeholder
+        
+        await character.send(f"You heft {item_to_equip.name} with both hands.")
+        await character.location.broadcast(f"\r\n{character.name} hefts {item_to_equip.name} with both hands.\r\n", exclude={character})
+        return True
     
     # --- FIX: LOGIC UPDATE ---
     del character._inventory_items[item_to_equip.id]

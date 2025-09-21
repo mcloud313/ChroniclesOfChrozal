@@ -33,6 +33,7 @@ CARRY_WEIGHT_MIGHT_MULTIPLIER = 1.5
 # --- Gameplay ---
 DEFAULT_RESPAWN_ROOM_ID = 44  # FIX: Changed to 1 to match the default created room.
 FALLBACK_RESPAWN_ROOM_ID = 1
+STARTING_COINAGE = 125
 
 # --- Input ---
 MAX_INPUT_LENGTH = 512
