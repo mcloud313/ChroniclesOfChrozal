@@ -380,15 +380,14 @@ class DatabaseManager:
                 for key, data in ability_defs.ABILITIES_DATA.items():
                     ability_records.append((
                         key, data.get('name'), data.get('type'),
-                        # --- FIX: Removed json.dumps(). Pass the dictionary directly. ---
-                        data.get('class_req', []), 
+                        # --- FIX: Convert the class_req list to a JSON string. ---
+                        json.dumps(data.get('class_req', [])), 
                         data.get('level_req', 1),
                         data.get('cost', 0), data.get('target_type'), data.get('effect_type'),
-                        # --- FIX: Removed json.dumps(). Pass the dictionary directly. ---
+                        # Pass dictionaries directly, as asyncpg handles them correctly.
                         data.get('effect_details', {}), 
                         data.get('cast_time', 0.0),
                         data.get('roundtime', 1.0), 
-                        # --- FIX: Removed json.dumps(). Pass the dictionary directly. ---
                         data.get('messages', {}),
                         data.get('description')
                     ))
