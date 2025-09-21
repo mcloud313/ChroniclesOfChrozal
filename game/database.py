@@ -623,6 +623,21 @@ class DatabaseManager:
         query = "SELECT ability_internal_name FROM character_abilities WHERE character_id = $1"
         return await self.fetch_all(query, character_id)
     
+    async def save_character_abilities(self, character_id: int, abilities: Set[str]) -> str:
+        """Saves character abilities by deleting old ones and inserting the new set."""
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute("DELETE FROM character_abilities WHERE character_id = $1", character_id)
+                if not abilities:
+                    return "DELETE"
+                
+                ability_records = [(character_id, name) for name in abilities]
+                await conn.copy_records_to_table(
+                    'character_abilities',
+                    columns=['character_id', 'ability_internal_name'],
+                    records=ability_records
+                )
+
     async def update_character_playtime(self, character_id: int, session_seconds: int) -> str:
         """Adds the session duration to the character's total playtime."""
         query = "UPDATE characters SET total_playtime_seconds = total_playtime_seconds + $1 WHERE id = $2"
