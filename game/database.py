@@ -8,7 +8,7 @@ import json
 import asyncio
 import asyncpg
 import config
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Set
 
 from . import utils
 from .definitions import skills as skill_defs
