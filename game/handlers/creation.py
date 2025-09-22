@@ -38,6 +38,7 @@ class CreationState(Enum):
     GET_TRAIT_EAR_SHAPE = auto()
     GET_TRAIT_SKIN_PATTERN = auto()
     GET_TRAIT_SHELL_COLOR = auto()
+    GET_TRAIT_TUSK_STYLE = auto()
     GET_TRAIT_HEAD_SHAPE = auto()
     FINALIZE = auto()
     COMPLETE = auto()
@@ -372,6 +373,7 @@ class CreationHandler:
             CreationState.GET_TRAIT_BEARD_STYLE: lambda: self._handle_get_trait("Beard Style"),
             CreationState.GET_TRAIT_SKIN_PATTERN: lambda: self._handle_get_trait("Skin Pattern"),
             CreationState.GET_TRAIT_SHELL_COLOR: lambda: self._handle_get_trait("Shell Color"),
+            CreationState.GET_TRAIT_TUSK_STYLE: lambda: self._handle_get_trait("Tusk Style"),
             CreationState.FINALIZE: self._handle_finalize,
         }
 

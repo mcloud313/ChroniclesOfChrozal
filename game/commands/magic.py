@@ -53,7 +53,7 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
         return True
         
     spell_key = found_key
-    spell_data = ability_defs.get_ability_data(spell_key)
+    spell_data = ability_defs.get_ability_data(world, spell_key)
     display_name = spell_data.get("name", spell_key)
     log.debug("Parsed cast command: Spell='%s', Target Input='%s'", spell_key, target_name_input)
 
