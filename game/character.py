@@ -94,7 +94,11 @@ class Character:
 
     @property
     def pds(self) -> int:
-        base_pds = self.vit_mod
+        """
+        Calculates Physical Defense Stat.
+        FIX: Added a base value of 2 for all characters.
+        """
+        base_pds = 2 + self.vit_mod 
         item_bonus = self.get_stat_bonus_from_equipment("bonus_pds")
         effect_bonus = self.get_stat_bonus_from_effects("bonus_pds")
         return base_pds + item_bonus + effect_bonus

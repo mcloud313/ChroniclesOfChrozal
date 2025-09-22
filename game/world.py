@@ -305,7 +305,7 @@ class World:
 
     async def respawn_character(self, character: Character):
         """Handles moving a character to their respawn point and resetting their state."""
-        respawn_room_id = 1
+        respawn_room_id = 44
         respawn_room = self.get_room(respawn_room_id)
         if not respawn_room:
             log.critical("!!! Respawn Room ID %d not found! Cannot respawn %s.", respawn_room_id, character.name)
