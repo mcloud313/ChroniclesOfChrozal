@@ -57,8 +57,8 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
     display_name = spell_data.get("name", spell_key)
     log.debug("Parsed cast command: Spell='%s', Target Input='%s'", spell_key, target_name_input)
 
-    # --- 2. Check Requirements ---
-    if not character.knows_spell(spell_key):
+    # --- 2. Check Requirements --  
+    if not character.knows_ability(spell_key):
         await character.send(f"You don't know the spell '{display_name}'.")
         return True
     
