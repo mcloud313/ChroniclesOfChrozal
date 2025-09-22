@@ -226,7 +226,8 @@ class Mob:
     async def simple_ai_tick(self, dt: float, world: 'World'):
         """Basic AI logic called by the world ticker."""
 
-
+        from . import resolver
+        
         if not self.is_alive() or self.roundtime > 0:
             return
         

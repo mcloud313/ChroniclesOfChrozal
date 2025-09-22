@@ -64,8 +64,10 @@ async def cmd_attack(character: Character, world: World, args_str: str) -> bool:
 
     # Determine if the character is using a weapon or is unarmed
     weapon = character._equipped_items.get("main_hand")
-    if weapon and weapon.item_type != "WEAPON":
-        weapon = None # Not a valid melee weapon, treat as unarmed
+    valid_weapon_types = {item_defs.WEAPON, item_defs.TWO_HANDED_WEAPON}
+    if weapon and weapon.item_type not in valid_weapon_types:
+        # If the wielded item is not a valid weapon, treat the attack as unarmed.
+        weapon = None
         
     # Call the resolver with the correct, direct import
     await resolver.resolve_physical_attack(character, target, weapon, world)

@@ -194,17 +194,39 @@ async def cmd_wear(character: 'Character', world: 'World', args_str: str) -> boo
     return True
 
 async def cmd_remove(character: 'Character', world: 'World', args_str: str) -> bool:
-    item_to_remove, found_slot = None, None
-    for slot, item in character._equipped_items.items():
-        if args_str.lower() in item.name.lower():
-            item_to_remove, found_slot = item, slot
+    """Removes an equipped item, correctly handling multi-slot items."""
+    if not args_str:
+        await character.send("Remove what?")
+        return True
+
+    item_to_remove = None
+    # Find the item in the equipped items dict by name
+    for item in character._equipped_items.values():
+        if item and args_str.lower() in item.name.lower():
+            item_to_remove = item
             break
             
     if not item_to_remove:
         await character.send("You are not wearing that.")
         return True
 
-    del character._equipped_items[found_slot]
+    # --- THE FIX IS HERE ---
+    # Determine which slots the item actually occupies from its wear_location
+    slots_to_clear = []
+    wear_loc = item_to_remove.wear_location
+    if isinstance(wear_loc, str):
+        slots_to_clear = [wear_loc]
+    elif isinstance(wear_loc, list):
+        slots_to_clear = wear_loc
+    
+    # Remove the item from all of its associated slots
+    for slot in slots_to_clear:
+        if slot in character._equipped_items:
+            # We only delete the key if the item matches, to prevent bugs
+            if character._equipped_items[slot].id == item_to_remove.id:
+                del character._equipped_items[slot]
+    
+    # Place the item back in inventory
     character._inventory_items[item_to_remove.id] = item_to_remove
 
     await character.send(f"You remove {item_to_remove.name}.")
