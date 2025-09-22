@@ -171,7 +171,11 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "effect_type": EFFECT_DAMAGE,
         "effect_details": {"damage_base": 2, "damage_rng": 4, "damage_type": DAMAGE_ARCANE, "school": "Arcane", "always_hits": True},
         "roundtime": 1.0, # RT applied AFTER spell fires
-        "description": "A missile of pure arcane energy unerringly strikes your target."
+        "description": "A missile of pure arcane energy unerringly strikes your target.",
+        "messages": {
+            "caster_self_complete": "A shimmering bolt of arcane energy flies from your fingertips!",
+            "room_complete": "{caster_name} launches a shimmering bolt of arcane energy!"
+        }
     },
     "mage armor": {
         "name": "Mage Armor", "type": "SPELL", "class_req": ["mage"], "level_req": 1,
@@ -179,12 +183,12 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "effect_type": EFFECT_BUFF,
         "effect_details": {"name": "MageArmorBuff", "type": "buff", "stat_affected": STAT_BARRIER_VALUE, "amount": 15, "duration": 180.0},
         "description": "Surrounds you with a shimmering field...",
-        "apply_msg_self": "{{WAn shimmering barrier surrounds you!{{x", # {W -> {{W, {x -> {{x
-        "apply_msg_target": None,
-        "apply_msg_room": "{{W{caster_name} is suddenly surrounded by a shimmering barrier.{{x", 
-        "expire_msg_self": "{{WThe shimmering barrier around you dissipates.{{x",
-        "expire_msg_room": "{{WThe shimmering barrier surrounding {target_name} dissipates.{{x", 
-        # --- ^ ^ ^ ---
+        "messages": {
+            "apply_msg_self": "{WAn shimmering barrier surrounds you!{x",
+            "apply_msg_room": "{W{caster_name} is suddenly surrounded by a shimmering barrier.{x",
+            "expire_msg_self": "{WThe shimmering barrier around you dissipates.{x",
+            "expire_msg_room": "{WThe shimmering barrier surrounding {target_name} dissipates.{x"
+        }
     },
     "chill touch": {
         "name": "Chill Touch",
@@ -245,7 +249,11 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
             "school": "Arcane"
         },
         "roundtime": 4.0,
-        "description": "A massive explosion of fire that damages all enemies in the area."
+        "description": "A massive explosion of fire that damages all enemies in the area.",
+        "messages": {
+            "caster_self_complete": "{RYou hurl a tiny bead of flame that blossoms into a roaring inferno!{x",
+            "room_complete": "{R{caster_name} hurls a tiny bead of flame that explodes, engulfing the area in a roaring inferno!{x"
+        }
     },
     # == CLERIC ==
     "minor heal": {
@@ -255,7 +263,11 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "effect_type": EFFECT_HEAL,
         "effect_details": {"heal_base": 5, "heal_rng": 6},
         "roundtime": 1.5, # RT applied AFTER spell fires
-        "description": "A simple divine plea to mend minor wounds."
+        "description": "A simple divine plea to mend minor wounds.",
+        "messages": {
+            "caster_self_complete": "{YGolden light flows from your hands, mending wounds.{x",
+            "room_complete": "{YGolden light flows from {caster_name}'s hands, mending {target_name}'s wounds.{x"
+        }
     },
     "smite": {
         "name": "Smite", "type": "SPELL", "class_req": ["cleric"], "level_req": 1,
