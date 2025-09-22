@@ -277,7 +277,7 @@ class World:
                             await p.send("Something went wrong as your action finished.")
                         
                         base_rt = ability_data.get("roundtime", 1.0)
-                        rt_penalty = p.get_total_av * 0.05
+                        rt_penalty = p.total_av * 0.05
                         p.roundtime = base_rt + rt_penalty
                     else:
                         await p.send(f"{{RYou lose focus ({ability_data.get('name', ability_key)}) - not enough essence!{{x")
