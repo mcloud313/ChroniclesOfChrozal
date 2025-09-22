@@ -227,7 +227,7 @@ class Mob:
         """Basic AI logic called by the world ticker."""
 
         from . import resolver
-        
+
         if not self.is_alive() or self.roundtime > 0:
             return
         
@@ -257,7 +257,6 @@ class Mob:
             if not target_is_valid:
                 self.target = None
                 self.is_fighting = False
-                return
             else:
                 attack_data = self.choose_attack()
                 if attack_data:
