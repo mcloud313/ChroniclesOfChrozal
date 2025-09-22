@@ -145,7 +145,7 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
         )
     
     base_rt = ability_data.get("roundtime", 1.0)
-    rt_penalty = character.get_total_av() * 0.05
+    rt_penalty = character.get_total_av * 0.05
     character.roundtime = base_rt + rt_penalty + character.slow_penalty
     if rt_penalty > 0:
         await character.send(f"Your armor slightly hinders your action (+{rt_penalty:.1f}s).")

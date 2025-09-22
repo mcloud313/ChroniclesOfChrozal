@@ -17,6 +17,8 @@ from .character import Character
 from .mob import Mob
 from .item import Item
 from .definitions import abilities as ability_defs
+from .definitions import item_defs
+
 
 log = logging.getLogger(__name__)
 if TYPE_CHECKING:
@@ -52,7 +54,8 @@ async def resolve_physical_attack(
     wpn_speed = 2.0 # Default for unarmed
     attack_name = "unarmed strike"
     if isinstance(attacker, Character):
-        if isinstance(attack_source, Item) and attack_source.item_type == "WEAPON":
+        valid_weapon_types = {item_defs.WEAPON, item_defs.TWO_HANDED_WEAPON}
+        if isinstance(attack_source, Item) and attack_source.item_type in valid_weapon_types:
             wpn_speed, attack_name = attack_source.speed, attack_source.name
     elif isinstance(attacker, Mob) and isinstance(attack_source, dict):
         wpn_speed, attack_name = attack_source.get("speed", 2.0), attack_source.get("name", "an attack")

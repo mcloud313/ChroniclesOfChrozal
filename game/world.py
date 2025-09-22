@@ -350,7 +350,7 @@ class World:
             for key in expired_keys:
                 if p.effects.get(key):
                     expired_effect_data = p.effects[key] # Get data before deleting
-                    ability_data = ability_defs.get_ability_data(key)
+                    ability_data = ability_defs.get_ability_data(self, key)
                     del p.effects[key]
 
                     # --- NEW: Handle expiring Max HP buffs ---

@@ -13,6 +13,9 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+COINAGE_KEYWORDS = {"coins", "coin", "money", "coinage", "talons", "shards", "orbs", "crowns"}
+
+
 async def cmd_inventory(character: 'Character', world: 'World', args_str: str) -> bool:
     """Displays character's unique item instances."""
     output = ["\r\n{c========================= Inventory ========================{x"]
@@ -43,6 +46,24 @@ async def cmd_get(character: 'Character', world: 'World', args_str: str) -> bool
     if not args_str:
         await character.send("Get what?")
         return True
+    
+    if args_str.lower() in COINAGE_KEYWORDS:
+        if character.location.coinage > 0:
+            amount = character.location.coinage
+            # Remove coinage from the room (this also updates the database)
+            await character.location.add_coinage(-amount, world)
+            # Add coinage to the character
+            character.coinage += amount
+            
+            await character.send(f"You pick up {utils.format_coinage(amount)}.")
+            await character.location.broadcast(
+                f"\r\n{character.name} picks up some coins.\r\n",
+                exclude={character}
+            )
+            return True
+        else:
+            await character.send("There is no money here to pick up.")
+            return True
     
     # Case 1: Get item from a container (e.g., "get sword from bag")
     if " from " in args_str:
