@@ -1,6 +1,6 @@
 # worldpainter/builder/forms.py
 from django import forms
-from .models import Rooms, MobTemplates
+from .models import Rooms, MobTemplates, ItemTemplates
 
 class RoomAdminForm(forms.ModelForm):
     # --- Spawner Fields ---
@@ -54,4 +54,91 @@ class RoomAdminForm(forms.ModelForm):
         self.instance.spawners = spawners_json
         
         # Call the parent save method to save the instance to the database
+        return super().save(commit)
+    
+class ItemTemplateAdminForm(forms.ModelForm):
+    """A custom form to manage the 'stats' JSONField for ItemTemplates."""
+
+    # Define individual fields for common item stats
+    value = forms.IntegerField(required=False)
+    weight = forms.FloatField(required=False)
+    damage_base = forms.IntegerField(required=False)
+    damage_rng = forms.IntegerField(required=False)
+    speed = forms.FloatField(required=False)
+    armor = forms.IntegerField(required=False)
+    block_chance = forms.FloatField(required=False)
+    
+    # Bonus stats
+    bonus_might = forms.IntegerField(required=False)
+    bonus_vitality = forms.IntegerField(required=False)
+    bonus_agility = forms.IntegerField(required=False)
+    bonus_intellect = forms.IntegerField(required=False)
+    bonus_aura = forms.IntegerField(required=False)
+    bonus_persona = forms.IntegerField(required=False)
+
+
+    class Meta:
+        model = ItemTemplates
+        fields = '__all__'
+        widgets = {
+            'stats': forms.HiddenInput(), # Hide the raw JSON field
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # If we are editing an existing item, populate our new fields from its stats JSON
+        if self.instance and self.instance.stats:
+            for key, value in self.instance.stats.items():
+                if key in self.fields:
+                    self.fields[key].initial = value
+
+    def save(self, commit=True):
+        # Build the stats JSON from our individual form fields before saving
+        stats_json = {}
+        for field_name in self.fields:
+            # Only include fields that are part of the stats dictionary
+            if field_name not in ['name', 'description', 'type', 'flags', 'damage_type']:
+                 value = self.cleaned_data.get(field_name)
+                 if value is not None and value != '':
+                    stats_json[field_name] = value
+        
+        self.instance.stats = stats_json if stats_json else None
+        return super().save(commit)
+    
+class MobTemplateAdminForm(forms.ModelForm):
+    """A custom form to manage the 'stats' JSONField for MobTemplates."""
+    
+    # Define individual fields for mob stats
+    might = forms.IntegerField(required=False)
+    vitality = forms.IntegerField(required=False)
+    agility = forms.IntegerField(required=False)
+    intellect = forms.IntegerField(required=False)
+    aura = forms.IntegerField(required=False)
+    persona = forms.IntegerField(required=False)
+
+    class Meta:
+        model = MobTemplates
+        fields = '__all__'
+        widgets = {
+            'stats': forms.HiddenInput(), # Hide the raw JSON field
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Populate fields from existing stats JSON
+        if self.instance and self.instance.stats:
+            for key, value in self.instance.stats.items():
+                if key in self.fields:
+                    self.fields[key].initial = value
+
+    def save(self, commit=True):
+        # Build the stats JSON from form fields
+        stats_json = {}
+        stat_fields = ['might', 'vitality', 'agility', 'intellect', 'aura', 'persona']
+        for field_name in stat_fields:
+            value = self.cleaned_data.get(field_name)
+            if value is not None:
+                stats_json[field_name] = value
+        
+        self.instance.stats = stats_json if stats_json else None
         return super().save(commit)

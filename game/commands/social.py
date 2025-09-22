@@ -75,26 +75,77 @@ async def cmd_group(character: 'Character', world: 'World', args_str: str) -> bo
     if target_char.group:
         await character.send(f"{target_char} is already in a group.")
         return True
+    if target_char.pending_group_invite:
+        await character.send(f"{target_char} already has a pending group invitation.")
+
+    # --- FIX: Grouping is now an invitation ---
+    if character.group and character.group.leader != character:
+        await character.send("Only the group leader can invite new members.")
+        return True
+    if character.group and len(character.group.members) >= 4:
+        await character.send("Your group is full.")
+        return True
+
+    target_char.pending_group_invite = character
     
-    # --- Grouping logic ----
-    if not character.group:
-        # Case 1: You are not in a group so you form one.
-        new_group = Group(leader=character)
-        new_group.add_member(target_char)
+    await character.send(f"You have invited {target_char.name} to join your group.")
+    await target_char.send(f"\r\n{character.name} has invited you to join their group.\r\nType <accept group> or <decline group>.")
+    return True
+
+async def cmd_accept(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Accepts a pending group invitation."""
+    if not args_str or "group" not in args_str.lower():
+        await character.send("Accept what? (Try 'accept group)'")
+        return True
+    
+    inviter = character.pending_group_invite
+    if not inviter:
+        await character.send("You don't have a pending group invitation.")
+        return True
+    
+    #Clear the invite immediately
+    character.pending_group_invite = None
+
+    if not inviter._is_alive() or inviter.location != character.location:
+        await character.send(f"{inviter.name} is no longer available to group with.")
+        return True
+    
+    # Case 1: Inviter is not in a group, so a new one is formed.
+    if not inviter.group:
+        new_group = Group(leader=inviter)
+        new_group.add_member(character)
         world.add_active_group(new_group)
-        await new_group.broadcast(f"{character.name} has formed a group with {target_char}")
+        await new_group.broadcast(f"{character.name} has joined the group, which is now led by {inviter.name}.")
     else:
-        # Case 2: You are already in a group.
-        if character.group.leader != character:
-            await character.send("Only the group leader can invite new members.")
-            return True
-        if len(character.group.members) >= 4:
-            await character.send("Your group is full.")
+        if len(inviter.group.members) >= 4:
+            await character.send("The group is now full.")
+            await inviter.send(f"{character.name} tried to join, but your group is full.")
             return True
         
-        character.group.add_member(target_char)
-        await character.group.broadcast(f"{target_char.name} has joined the group.")
+        inviter.group.add_member(character)
+        await inviter.group.broadcast(f"{character.name} has joined the group.")
+    
+    return True
 
+async def cmd_decline(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Declines a pending group invitation."""
+    if not args_str or "group" not in args_str.lower():
+        await character.send("Decline what? (Try 'decline group')")
+        return True
+
+    inviter = character.pending_group_invite
+    if not inviter:
+        await character.send("You don't have a pending group invitation.")
+        return True
+
+    # Clear the invite
+    character.pending_group_invite = None
+    
+    await character.send("You have declined the group invitation.")
+    # Silently notify the inviter if they are still around
+    if inviter.is_alive():
+        await inviter.send(f"{character.name} has declined your group invitation.")
+        
     return True
 
 async def cmd_disband(character: 'Character', world: ' World', args_str: str) -> bool:

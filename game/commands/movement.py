@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+CARDINAL_DIRECTIONS = {"north", "south", "east", "west", "up", "down", "northeast", "northwest", "southeast", "southwest"}
+
 
 async def _perform_move(character: 'Character', world: 'World', target_room: 'Room', exit_name: str):
     """
@@ -44,12 +46,16 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
         final_rt = max(move_rt, slowest_member_rt)
 
     # --- 3. Announce Departure ---
-    if current_room:
-        if is_group_move:
-            # A single message for the whole group leaving
-            await current_room.broadcast(f"\r\n{character.name}'s group leaves {exit_name}.\r\n")
-        else:
-            await current_room.broadcast(f"\r\n{character.name} leaves {exit_name}.\r\n", exclude={character})
+    if exit_name.lower() in CARDINAL_DIRECTIONS:
+        departure_message = f"leaves {exit_name}"
+    else:
+        departure_message = f"leaves through the {exit_name}"
+
+    if is_group_move:
+        await current_room.broadcast(f"\r\n{character.name}'s group {departure_message}.\r\n")
+    else:
+        await current_room.broadcast(f"\r\n{character.name} {departure_message}.\r\n", exclude={character})
+    
         
         # Remove all moving characters from the old room
         for char in chars_to_move:

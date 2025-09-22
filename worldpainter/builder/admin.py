@@ -1,13 +1,14 @@
 # worldpainter/builder/admin.py
 from django.contrib import admin
-from django.db.models import Count
+from django.db import models
+from django.forms import TextInput, Textarea
 from .models import (
     Areas, Races, Classes, DamageTypes, ItemTemplates, MobTemplates,
     Rooms, Exits, RoomObjects, MobAttacks, MobLootTable,
     Players, Characters, CharacterStats, CharacterSkills, CharacterEquipment,
     ItemInstances, ShopInventories, BankAccounts, AbilityTemplates
 )
-from .forms import RoomAdminForm
+from .forms import RoomAdminForm, ItemTemplateAdminForm, MobTemplateAdminForm
 
 # --- Helper Dictionaries ---
 OPPOSITE_DIRECTIONS = {
@@ -15,6 +16,11 @@ OPPOSITE_DIRECTIONS = {
     "up": "down", "down": "up", "northeast": "southwest", "southwest": "northeast",
     "northwest": "southeast", "southeast": "northwest",
 }
+
+class NameAsCharFieldAdmin(admin.ModelAdmin):
+    formfield_overrides = {
+        models.TextField: {'widget': TextInput(attrs={'size':'80'})},
+    }
 
 # --- Inline Model Admins ---
 class ExitsInline(admin.TabularInline):
@@ -84,6 +90,7 @@ class RoomAdmin(admin.ModelAdmin):
 
 @admin.register(MobTemplates)
 class MobTemplateAdmin(admin.ModelAdmin):
+    form = MobTemplateAdminForm
     list_display = ('name', 'id', 'level')
     search_fields = ('name',)
     list_filter = ('level', 'mob_type')
@@ -107,6 +114,7 @@ class CharacterAdmin(admin.ModelAdmin):
 
 @admin.register(ItemTemplates)
 class ItemTemplateAdmin(admin.ModelAdmin):
+    form = ItemTemplateAdminForm
     list_display = ('name', 'id', 'type', 'damage_type')
     search_fields = ('name', 'description')
     list_filter = ('type',)
