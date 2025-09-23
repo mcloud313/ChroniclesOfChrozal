@@ -54,6 +54,22 @@ STAT_INTELLECT = "intellect"
 STAT_AURA = "aura"
 STAT_PERSONA = "persona"
 
+# In game/definitions/abilities.py
+# "messages": {
+#     # Fired when the spell/ability is successfully cast, after cast_time.
+#     "caster_self_complete": "A shimmering bolt flies from your hands!",
+#     "room_complete": "{caster_name} launches a shimmering bolt!",
+
+#     # Fired when a BUFF/DEBUFF effect is applied to the target.
+#     "apply_msg_self": "You are surrounded by a shimmering barrier!",
+#     "apply_msg_target": "{caster_name}'s spell surrounds you with a barrier.",
+#     "apply_msg_room": "{target_name} is surrounded by a shimmering barrier.",
+
+#     # Fired when a BUFF/DEBUFF effect expires.
+#     "expire_msg_self": "The shimmering barrier around you dissipates.",
+#     "expire_msg_room": "The shimmering barrier around {target_name} dissipates."
+# }
+
  # etc. for base stats
 
 # --- Ability/Spell Data Dictionary ---
@@ -71,77 +87,56 @@ STAT_PERSONA = "persona"
 #     # "cooldown": float, # Optional, for later
 #     "description": "Help file / info description."
 # }
+
 ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
 
     # == WARRIOR ==
     "rallying cry": {
-        "name": "Rallying Cry",
-        "type": "ABILITY",
-        "class_req": ["warrior"],
-        "level_req": 7,
-        "cost": 15,
-        "target_type": TARGET_AREA, # It affects an area
-        "effect_type": EFFECT_BUFF,
+        "name": "Rallying Cry", "type": "ABILITY", "class_req": ["warrior"], "level_req": 7,
+        "cost": 15, "target_type": TARGET_AREA, "effect_type": EFFECT_BUFF,
         "effect_details": {
-            "name": "Rally",
-            "type": "buff",
-            "aoe_target_scope": "allies", # It only affects group members
-            "stat_affected": "max_hp", # A new type of buff!
-            "amount": 20,
-            "duration": 30.0
+            "name": "Rally", "type": "buff", "aoe_target_scope": "allies",
+            "stat_affected": "max_hp", "amount": 20, "duration": 30.0
         },
-        "roundtime": 3.0,
-        "description": "Unleash a powerful shout, temporarily bolstering the health of all group members in the room.",
-        "apply_msg_room": "{C{caster_name} lets out a powerful rallying cry!{x"
+        "roundtime": 3.0, "description": "...",
+        "messages": {
+            "apply_msg_room": "{C{caster_name} lets out a powerful rallying cry, bolstering their allies!{x",
+            "apply_msg_target": "{CYou feel heartened by the rallying cry!{x",
+            "expire_msg_target": "{CThe effect of the rallying cry fades.{x"
+        }
     },
     "power strike": {
-        "name": "Power Strike", "type": "ABILITY", "class_req": ["warrior"], "level_req": 1,
-        "cost": 0, "target_type": TARGET_CHAR_OR_MOB, # Target for the attack
-        "cast_time": 0.0, # Instant activation
-        "effect_type": EFFECT_MODIFIED_ATTACK, # Special type for combat system
-        "effect_details": {
-            "mar_modifier_mult": 0.75, # 75% of normal MAR (25% penalty)
-            "rng_damage_mult": 2.0, # Double the weapon's random damage component
-            "bonus_rt": 0.5, # Add 0.5s to the weapon's speed for final roundtime
-            "school": "Physical"
-        },
-        "roundtime": 0.0, # Base RT applied is weapon speed + bonus_rt
-        "description": "A mighty blow sacrificing accuracy for power. Uses your wielded weapon."
+        "name": "Power Strike", "type": "ABILITY", "class_req": ["warrior", "barbarian"], "level_req": 1,
+        "cost": 10, "target_type": TARGET_CHAR_OR_MOB, "cast_time": 0.0,
+        "effect_type": EFFECT_MODIFIED_ATTACK,
+        "effect_details": { "damage_multiplier": 1.5 },
+        "roundtime": 0.0, "description": "...",
+        "messages": {
+            "caster_self_complete": "{RYou gather your strength for a powerful strike!{x",
+            "room_complete": "{R{caster_name} gathers their strength for a powerful strike!{x"
+        }
     },
     "shield bash": {
         "name": "Shield Bash", "type": "ABILITY", "class_req": ["warrior", "cleric"], "level_req": 3,
-        "cost": 0, "target_type": TARGET_CHAR_OR_MOB,
-        "cast_time": 0.0, # Instant activation
-        "effect_type": EFFECT_STUN_ATTEMPT, # Special type for combat system
+        "cost": 5, "target_type": TARGET_CHAR_OR_MOB, "cast_time": 0.0,
+        "effect_type": EFFECT_STUN_ATTEMPT,
         "effect_details": {
-            "mar_modifier_mult": 0.5, # 50% MAR penalty to hit with the bash
-            "stun_chance": 0.20, # 20% chance to stun if the bash hits
-            "stun_duration": 5.0, # Adds 5s roundtime to target if stun succeeds
-            "requires_shield": True, # Logic check needed in cmd/resolution
-            "school": "Physical"
+            "mar_modifier_mult": 0.8, "stun_chance": 0.25, "stun_duration": 3.0, "requires_shield": True
         },
-        "roundtime": 2.5, # RT applied to user after attempting bash
-        "description": "Attempt to daze an opponent with your shield, potentially stunning them. Less accurate than a normal attack. (Requires Shield equipped)."
+        "roundtime": 2.5, "description": "...",
+        "messages": {
+            "caster_self_complete": "You slam your shield into {target_name}!",
+            "room_complete": "{caster_name} slams their shield into {target_name}!"
+        }
     },
     "cleave": {
-        "name": "Cleave",
-        "type": "ABILITY",
-        "class_req": ["warrior"],
-        "level_req": 12,
-        "cost": 20,
-        "target_type": TARGET_MOB, # The player must select a primary target
-        "effect_type": EFFECT_MODIFIED_ATTACK,
-        "effect_details": {
-            "is_cleave": True,
-            "max_cleave_targets": 3, # Hits the primary target + 2 others
-            # All targets hit by cleave take 75% of normal weapon damage
-            "damage_multiplier": 0.75 
-        },
-        "roundtime": 4.0,
-        "description": "A wide, sweeping attack that strikes your primary target and up to two other enemies in the room for reduced damage.",
+        "name": "Cleave", "type": "ABILITY", "class_req": ["warrior", "barbarian"], "level_req": 12,
+        "cost": 20, "target_type": TARGET_MOB, "effect_type": EFFECT_MODIFIED_ATTACK,
+        "effect_details": { "is_cleave": True, "max_cleave_targets": 3, "damage_multiplier": 0.75 },
+        "roundtime": 4.0, "description": "...",
         "messages": {
-            "caster_self": "You swing your weapon in a wide arc, striking multiple foes!",
-            "room": "{caster_name} swings their weapon in a wide arc, striking multiple foes!"
+            "caster_self_complete": "You swing your weapon in a wide arc, striking multiple foes!",
+            "room_complete": "{caster_name} swings their weapon in a wide arc, striking multiple foes!"
         }
     },
     "defensive stance": {
@@ -191,26 +186,20 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         }
     },
     "chill touch": {
-        "name": "Chill Touch",
-        "type": "SPELL",
-        "class_req": ["mage"],
-        "level_req": 6,
-        "cost": 8,
-        "target_type": TARGET_CHAR_OR_MOB,
-        "cast_time": 2.0,
+        "name": "Chill Touch", "type": "SPELL", "class_req": ["mage"], "level_req": 6,
+        "cost": 8, "target_type": TARGET_CHAR_OR_MOB, "cast_time": 2.0,
         "effect_type": EFFECT_DAMAGE,
         "effect_details": {
-            "damage_base": 4,
-            "damage_rng": 4,
-            "damage_type": DAMAGE_COLD,
-            "school": "Arcane",
-            # This "rider" effect is applied on a successful hit
-            "applies_effect": {
-                "name": "Chilled", "type": "slow", "duration": 8.0, "potency": 0.5
-            }
+            "damage_base": 4, "damage_rng": 4, "damage_type": DAMAGE_COLD, "school": "Arcane",
+            "applies_effect": { "name": "Chilled", "type": "debuff", "stat_affected": "agility", "amount": -5, "duration": 12.0 }
         },
-        "roundtime": 1.5,
-        "description": "A touch of frigid energy damages your target and leaves them slowed."
+        "roundtime": 1.5, "description": "...",
+        "messages": {
+            "caster_self_complete": "{CFrigid energy coalesces around your hand as you touch {target_name}!{x",
+            "room_complete": "{C{caster_name} touches {target_name}, leaving a frosty residue.{x",
+            "apply_msg_target": "{CYou feel a deep chill seep into your bones, slowing your movements.{x",
+            "expire_msg_target": "{CThe deep chill in your bones finally fades.{x"
+        }
     },
     "burning hands": {
         "name": "Burning Hands",
@@ -276,7 +265,10 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "effect_type": EFFECT_DAMAGE,
         "effect_details": {"damage_base": 2, "damage_rng": 6, "damage_type": DAMAGE_DIVINE, "school": "Divine"},
         "roundtime": 2.0, # RT applied AFTER spell fires
-        "description": "Calls down divine energy to strike your foe."
+        "description": "Calls down divine energy to strike your foe.",
+        "messages": {
+            "caster_self_complete": "{YYou call down a column of divine light to strike {target_name}!{x",
+            "room_complete": "{Y{caster_name} calls down a column of divine light to strike {target_name}!{x"
     },
      "bless": {
         "name": "Bless",
@@ -297,53 +289,64 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "description": "Fills an ally with divine favor, increasing their accuracy in combat.",
         "apply_msg_target": "{yYou feel blessed!{x"
     },
-    "cure poison": {
+     "cure poison": {
         "name": "Cure Poison",
         "type": "SPELL",
-        "class_req": ["cleric"],
-        "level_req": 10,
-        "cost": 15,
-        "target_type": TARGET_CHAR_OR_MOB,
-        "cast_time": 1.5,
-        "effect_type": "CURE", # A new custom type for our logic
+        "class_req": ["cleric"], #
+        "level_req": 10, #
+        "cost": 15, #
+        "target_type": TARGET_CHAR_OR_MOB, #
+        "cast_time": 1.5, #
+        "effect_type": "CURE", #
         "effect_details": {
-            "cure_type": "poison" # Specifies what kind of effect to remove
+            "cure_type": "poison" #
         },
-        "roundtime": 2.0,
-        "description": "Neutralizes common poisons afflicting the target."
+        "roundtime": 2.0, #
+        "description": "Neutralizes common poisons afflicting the target.", #
+        "messages": {
+            "caster_self_complete": "{WYou gesture at {target_name}, and a pure light washes over them, cleansing them of poison.{x",
+            "room_complete": "{W{caster_name} gestures at {target_name}, who is bathed in a brief, pure light.{x"
+        }
     },
-    "circle of healing": {
+     "circle of healing": {
         "name": "Circle of Healing",
         "type": "SPELL",
-        "class_req": ["cleric"],
-        "level_req": 16,
-        "cost": 35,
-        "target_type": TARGET_AREA,
-        "cast_time": 3.0,
-        "effect_type": EFFECT_HEAL,
+        "class_req": ["cleric"], #
+        "level_req": 16, #
+        "cost": 35, #
+        "target_type": TARGET_AREA, #
+        "cast_time": 3.0, #
+        "effect_type": EFFECT_HEAL, #
         "effect_details": {
-            "aoe_target_scope": "allies", # Heals all group members in the room
-            "heal_base": 15,
-            "heal_rng": 10
+            "aoe_target_scope": "allies", #
+            "heal_base": 15, #
+            "heal_rng": 10 #
         },
-        "roundtime": 4.0,
-        "description": "A circle of golden light washes over your allies, mending their wounds."
+        "roundtime": 4.0, #
+        "description": "A circle of golden light washes over your allies, mending their wounds.", #
+        "messages": {
+            "caster_self_complete": "{YAn expanding circle of golden light washes over your allies, mending their wounds.{x",
+            "room_complete": "{YA circle of golden light expands from {caster_name}'s feet, washing over their allies.{x"
+        }
     },
-    "resurrect": {
+     "resurrect": {
         "name": "Resurrect",
         "type": "SPELL",
-        "class_req": ["cleric"],
-        "level_req": 20,
-        "cost": 100,
-        "target_type": TARGET_CHAR,
-        "effect_type": "RESURRECT",
-        "cast_time": 30.0,
-        "roundtime": 10.0,
+        "class_req": ["cleric"], #
+        "level_req": 20, #
+        "cost": 100, #
+        "target_type": TARGET_CHAR, #
+        "effect_type": "RESURRECT", #
+        "cast_time": 30.0, #
+        "roundtime": 10.0, #
         "effect_details": {
-            # Change from component to XP cost
-            "xp_cost": 5000 
+            "xp_cost": 5000 #
         },
-        "description": "A powerful plea to restore a soul to its body, preventing tether loss. This ritual costs the caster some of their own life experience."
+        "description": "A powerful plea to restore a soul to its body, preventing tether loss. This ritual costs the caster some of their own life experience.", #
+        "messages": {
+            "caster_self_complete": "{YYou complete the final words of the ritual, and a blinding column of divine energy surges from the heavens into {target_name}'s corpse!{x",
+            "room_complete": "{Y{caster_name} completes a powerful ritual! A blinding column of divine energy surges from the heavens, striking {target_name}'s corpse and bringing them back to life!{x"
+        }
     },
     # == ROGUE ==
     "backstab": {
@@ -436,41 +439,30 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "description": "A vicious attack from the shadows that causes a deep bleeding wound and prevents spellcasting."
     },
     "aimed shot": {
-        "name": "Aimed Shot",
-        "type": "ABILITY",
-        "class_req": ["ranger"],
-        "level_req": 1,
-        "cost": 5,
-        "target_type": TARGET_MOB,
-        "effect_type": EFFECT_MODIFIED_ATTACK,
-        "effect_details": {
-            # This is a ranged attack, so combat logic must use RAR
-            "is_ranged": True, 
-            # It provides a bonus to the character's RAR for this one attack
-            "bonus_rar": 10, 
-            "damage_multiplier": 1.25 # Deals 25% more damage
-        },
-        "roundtime": 6.0,
-        "description": "Take a moment to line up a perfect shot, increasing accuracy and damage at the cost of speed."
+        "name": "Aimed Shot", "type": "ABILITY", "class_req": ["ranger"], "level_req": 1,
+        "cost": 5, "target_type": TARGET_MOB, "effect_type": EFFECT_MODIFIED_ATTACK,
+        "effect_details": { "is_ranged": True, "bonus_rar": 15, "damage_multiplier": 1.25 },
+        "roundtime": 4.0, "description": "...",
+        "messages": {
+            "caster_self_complete": "{GYou take a deep breath, aim carefully, and release your shot at {target_name}!{x",
+            "room_complete": "{G{caster_name} takes a moment to aim before firing at {target_name}.{x"
+        }
     },
 
     "serpent sting": {
-        "name": "Serpent Sting",
-        "type": "ABILITY",
-        "class_req": ["ranger"],
-        "level_req": 3,
-        "cost": 10,
-        "target_type": TARGET_MOB,
-        "effect_type": EFFECT_MODIFIED_ATTACK,
+        "name": "Serpent Sting", "type": "ABILITY", "class_req": ["ranger"], "level_req": 3,
+        "cost": 10, "target_type": TARGET_MOB, "effect_type": EFFECT_MODIFIED_ATTACK,
         "effect_details": {
-            "is_ranged": True,
-            "damage_multiplier": 0.8, # The initial hit is slightly weaker
-            "applies_effect": {
-                "name": "SerpentVenom", "type": "poison", "duration": 9.0, "potency": 4
-            }
+            "is_ranged": True, "damage_multiplier": 0.8,
+            "applies_effect": { "name": "SerpentVenom", "type": "poison", "duration": 12.0, "potency": 5 }
         },
-        "roundtime": 2.5,
-        "description": "Fire a venom-tipped projectile that deals minor initial damage but poisons the target."
+        "roundtime": 2.5, "description": "...",
+        "messages": {
+            "caster_self_complete": "You fire a venom-tipped projectile at {target_name}!",
+            "room_complete": "{caster_name} fires a venom-tipped projectile at {target_name}.",
+            "apply_msg_target": "{gA sickly green venom begins to course through your veins!{x",
+            "expire_msg_target": "{gThe serpent venom has run its course.{x"
+        }
     },
 
     "hunter's mark": {
@@ -518,8 +510,55 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "apply_msg_room": "{caster_name} bellows with primal fury!",
         "expire_msg_self": "{rYour rage subsides.{x"
     },
+    "reckless attack": {
+        "name": "Reckless Attack",
+        "type": "ABILITY",
+        "class_req": ["barbarian"],
+        "level_req": 4,
+        "cost": 5,
+        "target_type": TARGET_CHAR_OR_MOB,
+        "effect_type": EFFECT_MODIFIED_ATTACK,
+        "effect_details": {
+            "bonus_mar": 20,          # Huge accuracy bonus
+            "damage_multiplier": 1.2, # 20% damage bonus
+            "applies_self_effect": {  # Applies a debuff to the barbarian after using
+                "name": "Exposed", "type": "debuff", "stat_affected": "bonus_dv", "amount": -50, "duration": 3.0
+            }
+        },
+        "roundtime": 0, # The roundtime is the weapon's speed
+        "description": "Throw all caution to the wind, making a powerful and accurate attack that leaves you exposed for a few moments.",
+        "messages": {
+            "caster_self_complete": "{RWith a wild roar, you make a reckless attack against {target_name}!{x",
+            "room_complete": "{R{caster_name} roars and makes a reckless attack against {target_name}!{x",
+            "apply_msg_self": "{RYour reckless attack leaves you completely exposed!{x",
+            "expire_msg_self": "{RYou regain your footing.{x"
+        }
+    },
+    "sunder armor": {
+        "name": "Sunder Armor",
+        "type": "ABILITY",
+        "class_req": ["barbarian"],
+        "level_req": 8,
+        "cost": 15,
+        "target_type": TARGET_CHAR_OR_MOB,
+        "effect_type": EFFECT_MODIFIED_ATTACK,
+        "effect_details": {
+            "damage_multiplier": 0.5, # The hit itself is weak
+            "applies_effect": {       # But it applies a strong debuff
+                "name": "Sundered", "type": "debuff", "stat_affected": "bonus_av", "amount": -20, "duration": 10.0
+            }
+        },
+        "roundtime": 3.0,
+        "description": "A focused strike intended to break or disable an opponent's armor, reducing their physical defense.",
+        "messages": {
+            "caster_self_complete": "You slam your weapon into {target_name}'s armor with a resounding CRACK!",
+            "room_complete": "{caster_name} slams their weapon into {target_name}'s armor with a resounding CRACK!",
+            "apply_msg_target": "{RYour armor has been sundered, leaving you vulnerable!{x",
+            "expire_msg_target": "{RYour sundered armor feels slightly more secure.{x"
+        }
 }
-
+}
+}
 
 # Helper function to get data safely
 def get_ability_data(world: 'World', name: str) -> Optional[Dict[str, Any]]:

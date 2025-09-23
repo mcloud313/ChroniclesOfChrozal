@@ -205,7 +205,7 @@ async def resolve_magical_attack(
 
     outcome_handler.apply_damage(target, final_damage)
 
-    await outcome_handler.send_attack_messages(caster, target, hit_result, final_damage, spell_name)
+    await outcome_handler.send_magical_attack_messages(caster, target, hit_result, damage_info, final_damage)
 
     # --- Create verbose combat messages ---
     hit_desc = "{rCRITICALLY HITS{x" if hit_result.is_crit else "hits"

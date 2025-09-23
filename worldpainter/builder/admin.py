@@ -8,7 +8,7 @@ from .models import (
     Players, Characters, CharacterStats, CharacterSkills, CharacterEquipment,
     ItemInstances, ShopInventories, BankAccounts, AbilityTemplates
 )
-from .forms import RoomAdminForm, ItemTemplateAdminForm, MobTemplateAdminForm
+from .forms import RoomAdminForm, ItemTemplateAdminForm, MobTemplateAdminForm, AbilityTemplateAdminForm # Add new form
 
 # --- Helper Dictionaries ---
 OPPOSITE_DIRECTIONS = {
@@ -115,9 +115,79 @@ class CharacterAdmin(admin.ModelAdmin):
 @admin.register(ItemTemplates)
 class ItemTemplateAdmin(admin.ModelAdmin):
     form = ItemTemplateAdminForm
-    list_display = ('name', 'id', 'type', 'damage_type')
+    list_display = ('name', 'id', 'type', 'get_value')
     search_fields = ('name', 'description')
     list_filter = ('type',)
+
+    fieldsets = (
+        ('Core Details', {
+            'fields': ('name', 'description', 'type', 'damage_type', 'flags')
+        }),
+        ('Core Stats', {
+            'fields': ('value', 'weight')
+        }),
+        ('Combat Stats (Melee)', {
+            'fields': ('damage_base', 'damage_rng', 'speed'),
+            'classes': ('collapse',)
+        }),
+        ('Combat Stats (Ranged)', {
+            'fields': ('uses_ammo_type',),
+            'classes': ('collapse',)
+        }),
+        ('Defensive Stats', {
+            'fields': ('armor', 'spell_failure', 'block_chance', 'wear_location'),
+            'classes': ('collapse',)
+        }),
+        ('Container Stats', {
+            'fields': ('capacity', 'holds_ammo_type'),
+            'classes': ('collapse',)
+        }),
+        ('Consumable Effect', {
+            'fields': ('effect', 'amount'),
+            'classes': ('collapse',)
+        }),
+        ('Attribute Bonuses', {
+            'fields': ('bonus_might', 'bonus_vitality', 'bonus_agility', 'bonus_intellect', 'bonus_aura', 'bonus_persona'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    @admin.display(description='Value')
+    def get_value(self, obj):
+        if isinstance(obj.stats, dict):
+            return obj.stats.get('value', 0)
+        return 0
+
+@admin.register(AbilityTemplates)
+class AbilityTemplateAdmin(admin.ModelAdmin):
+    form = AbilityTemplateAdminForm
+    list_display = ('name', 'ability_type', 'get_classes', 'level_req')
+    search_fields = ('name', 'internal_name', 'description')
+    list_filter = ('ability_type', 'level_req')
+
+    fieldsets = (
+        ('Identification', {
+            'fields': ('name', 'internal_name', 'description')
+        }),
+        ('Requirements', {
+            'fields': ('ability_type', 'class_req', 'level_req')
+        }),
+        ('Casting Mechanics', {
+            'fields': ('cost', 'target_type', 'cast_time', 'roundtime')
+        }),
+        ('Effect Definition', {
+            'fields': ('effect_type', 'effect_details')
+        }),
+        ('Messaging', {
+            'fields': ('messages',)
+        }),
+    )
+
+    @admin.display(description='Classes')
+    def get_classes(self, obj):
+        if isinstance(obj.class_req, list):
+            return ", ".join(c.capitalize() for c in obj.class_req)
+        return "None"
 
 # --- Standard Registration for other models ---
 admin.site.register(Players)

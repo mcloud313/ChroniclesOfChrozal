@@ -148,6 +148,44 @@ async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Ch
             exclude={attacker, target}
         )
 
+async def send_magical_attack_messages(caster: Union[Character, Mob], target: Union[Character, Mob],
+                                     hit_result: HitResult, damage_info: 'DamageInfo', final_damage: int):
+    """Sends all relevant, detailed combat messages for a magical attack."""
+    caster_name = caster.name.capitalize()
+    target_name = target.name
+    spell_name = damage_info.attack_name
+    
+    hit_desc = "{rCRITICALLY HITS{x" if hit_result.is_crit else "hits"
+    
+    # --- Build Verbose Details for Players ---
+    rating_name = "APR" if damage_info.damage_type in ["arcane", "fire", "cold"] else "DPR"
+    hit_details = f"{{i[Roll:{hit_result.roll} + {rating_name}:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]{{x"
+    mitigation = damage_info.pre_mitigation_damage - final_damage
+    
+    mit_details = f"{{i[Dmg:{damage_info.pre_mitigation_damage}(Base) - {mitigation}(SDS:{target.sds}, Barrier:{target.barrier_value}) = {final_damage}]{{x"
+
+    # --- Message to Caster (if player) ---
+    if isinstance(caster, Character):
+        verb = "critically hit" if hit_result.is_crit else "hit"
+        msg = (f"Your {spell_name} {verb} {target_name}!\n\r"
+               f"You deal {{y{final_damage}{{x damage. {hit_details} {mit_details}")
+        await caster.send(msg)
+
+    # --- Message to Target (if player) ---
+    if isinstance(target, Character):
+        msg = (f"{{R{caster_name}'s {spell_name} {hit_desc.lower()} you!{{x\n\r"
+               f"{{RYou take {{y{final_damage}{{x damage. {hit_details} {mit_details} "
+               f"({int(target.hp)}/{int(target.max_hp)} HP)")
+        await target.send(msg)
+    
+    # --- Message to Room ---
+    if caster.location:
+        room_hit_desc = "critically hits" if hit_result.is_crit else "hits"
+        await caster.location.broadcast(
+            f"\r\n{caster_name}'s {spell_name} {room_hit_desc} {target_name}.\r\n",
+            exclude={caster, target}
+        )
+
 async def send_ranged_attack_messages(attacker, target, hit_result, damage_info, final_damage):
     """Sends tailored messages for a ranged attack outcome."""
     hit_desc = "{rCRITICALLY STRIKE{x" if hit_result.is_crit else "strike"
