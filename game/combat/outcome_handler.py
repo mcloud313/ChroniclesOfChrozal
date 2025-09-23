@@ -117,13 +117,15 @@ async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Ch
     # --- Build Verbose Details for Players ---
     hit_details = f"[Roll:{hit_result.roll} + MAR:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]"
     mitigation = damage_info.pre_mitigation_damage - final_damage
-    
-    # Add PDS/SDS to the mitigation details for the target
-    mit_stat = target.pds if damage_info.damage_type in ['slash', 'pierce', 'bludgeon'] else target.sds
-    mit_name = "PDS" if damage_info.damage_type in ['slash', 'pierce', 'bludgeon'] else "SDS"
 
+    # --- NEW: Show which defense was used (AV or BV) ---
+    effective_av = target.total_av
+    effective_bv = math.floor(target.barrier_value / 2)
+    defense_name = "AV" if effective_av >= effective_bv else "BV"
+    defense_value = max(effective_av, effective_bv)
+    
     damage_details = (f"[Dmg:{damage_info.pre_mitigation_damage}(Base) "
-                      f"- {mitigation}({mit_name}:{mit_stat}, AV:{target.total_av}) = {final_damage}]")
+                      f"- {mitigation}(PDS:{target.pds}, {defense_name}:{defense_value}) = {final_damage}]")
 
     # --- Message to Attacker (if player) ---
     if isinstance(attacker, Character):
@@ -161,8 +163,14 @@ async def send_magical_attack_messages(caster: Union[Character, Mob], target: Un
     rating_name = "APR" if damage_info.damage_type in ["arcane", "fire", "cold"] else "DPR"
     hit_details = f"{{i[Roll:{hit_result.roll} + {rating_name}:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]{{x"
     mitigation = damage_info.pre_mitigation_damage - final_damage
+
+    # --- NEW: Show which defense was used (BV or AV) ---
+    effective_bv = target.barrier_value
+    effective_av = math.floor(target.total_av / 2)
+    defense_name = "BV" if effective_bv >= effective_av else "AV"
+    defense_value = max(effective_bv, effective_av)
     
-    mit_details = f"{{i[Dmg:{damage_info.pre_mitigation_damage}(Base) - {mitigation}(SDS:{target.sds}, Barrier:{target.barrier_value}) = {final_damage}]{{x"
+    mit_details = f"{{i[Dmg:{damage_info.pre_mitigation_damage}(Base) - {mitigation}(SDS:{target.sds}, {defense_name}:{defense_value}) = {final_damage}]{{x"
 
     # --- Message to Caster (if player) ---
     if isinstance(caster, Character):

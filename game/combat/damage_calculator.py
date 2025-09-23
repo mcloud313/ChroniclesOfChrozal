@@ -56,12 +56,19 @@ def mitigate_damage(target: Union[Character, Mob], damage_info: DamageInfo) -> i
     """Applies mitigation to pre-calculated damage and returns the final amount."""
     pre_mitigation_damage = damage_info.pre_mitigation_damage
     
-    # Base mitigation from stats and armor
+    # --- NEW MITIGATION LOGIC ---
+    # Base mitigation from PDS is always applied.
     mit_pds = target.pds
-    mit_av = target.total_av
-    mit_bv = math.floor(target.barrier_value / 2) # Barriers are half effective vs physical
-    
-    post_armor_damage = max(0, pre_mitigation_damage - mit_pds - mit_av - mit_bv)
+    post_pds_damage = max(0, pre_mitigation_damage - mit_pds)
+
+    # Determine the best defense: Armor Value (AV) or a less effective Barrier Value (BV).
+    effective_av = target.total_av
+    effective_bv = math.floor(target.barrier_value / 2) # Barriers are half as effective vs. physical.
+
+    # Use the greater of the two values for the final mitigation step.
+    best_defense_value = max(effective_av, effective_bv)
+    post_armor_damage = max(0, post_pds_damage - best_defense_value)
+    # --- END NEW LOGIC ---
 
     # Apply resistances/vulnerabilities
     resistance = target.resistances.get(damage_info.damage_type, 0.0)
@@ -70,6 +77,35 @@ def mitigate_damage(target: Union[Character, Mob], damage_info: DamageInfo) -> i
         final_damage = int(post_armor_damage * multiplier)
     else:
         final_damage = post_armor_damage
+        
+    return max(0, final_damage)
+
+def mitigate_magical_damage(target: Union[Character, Mob], damage_info: DamageInfo) -> int:
+    """Applies mitigation to pre-calculated magical damage."""
+    pre_mitigation_damage = damage_info.pre_mitigation_damage
+    
+    # --- NEW MITIGATION LOGIC ---
+    # Base mitigation from SDS is always applied.
+    mit_sds = target.sds
+    post_sds_damage = max(0, pre_mitigation_damage - mit_sds)
+    
+    # Determine the best defense: Barrier Value (BV) or a less effective Armor Value (AV).
+    effective_bv = target.barrier_value
+    effective_av = math.floor(target.total_av / 2) # Armor is half as effective vs. magical.
+
+    # Use the greater of the two values for the final mitigation step.
+    best_defense_value = max(effective_bv, effective_av)
+    post_mitigation_damage = max(0, post_sds_damage - best_defense_value)
+    # --- END NEW LOGIC ---
+
+    # Apply resistances/vulnerabilities
+    resistance = target.resistances.get(damage_info.damage_type, 0.0)
+    # The multiplier for magical resistance might be different; ensure this matches your design.
+    if resistance != 0:
+        multiplier = 1.0 - resistance
+        final_damage = int(post_mitigation_damage * multiplier)
+    else:
+        final_damage = post_mitigation_damage
         
     return max(0, final_damage)
 
@@ -90,24 +126,3 @@ def calculate_magical_damage(caster: Union[Character, Mob], spell_data: Dict[str
     pre_mitigation_damage = max(0, base_dmg + rng_roll_result + stat_modifier)
     
     return DamageInfo(pre_mitigation_damage=pre_mitigation_damage, damage_type=dmg_type, is_crit=is_crit)
-
-
-def mitigate_magical_damage(target: Union[Character, Mob], damage_info: DamageInfo) -> int:
-    """Applies mitigation to pre-calculated magical damage."""
-    pre_mitigation_damage = damage_info.pre_mitigation_damage
-    
-    # Base mitigation from stats and barriers
-    mit_sds = target.sds
-    mit_bv = target.barrier_value
-    
-    post_mitigation_damage = max(0, pre_mitigation_damage - mit_sds - mit_bv)
-
-    # Apply resistances/vulnerabilities
-    resistance = target.resistances.get(damage_info.damage_type, 0.0)
-    if resistance != 0:
-        multiplier = 1.0 - resistance
-        final_damage = int(post_mitigation_damage * multiplier)
-    else:
-        final_damage = post_mitigation_damage
-        
-    return max(0, final_damage)
