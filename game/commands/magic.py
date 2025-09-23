@@ -115,13 +115,19 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
     # --- 4. Initiate Casting Sequence ---
     cast_time = spell_data.get("cast_time", 0.0)
 
+    target_display_name = "itself"
+    if target_obj:
+        target_display_name = "yourself" if target_obj == character else target_obj.name
+
     character.casting_info = {
         "key": spell_key,
         "name": display_name,
         "target_id": target_id,
         "target_type": target_obj_type_str,
+        "target_name": target_display_name, # This line was missing
         "cast_time": cast_time,
     }
+    
     log.debug("Character %s starting cast: %s", character.name, character.casting_info)
 
     target_display = ""

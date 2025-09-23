@@ -16,7 +16,7 @@ AUTOSAVE_INTERVAL_SECONDS = 300   # 300 seconds = 5 minutes
 MAX_LEVEL = 100
 XP_BASE = 1000
 XP_EXPONENT = 2.2
-XP_ABSORB_RATE_PER_SEC = 10.0 # Increased for better feel
+XP_ABSORB_RATE_PER_SEC = 2.5 # Increased for better feel
 SKILL_POINTS_PER_LEVEL = 5
 
 # --- Regen Rates (Points per Second) ---

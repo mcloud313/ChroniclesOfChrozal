@@ -98,7 +98,7 @@ class Character:
         Calculates Physical Defense Stat.
         FIX: Added a base value of 2 for all characters.
         """
-        base_pds = 2 + self.vit_mod 
+        base_pds = self.vit_mod 
         item_bonus = self.get_stat_bonus_from_equipment("bonus_pds")
         effect_bonus = self.get_stat_bonus_from_effects("bonus_pds")
         return base_pds + item_bonus + effect_bonus
@@ -115,7 +115,6 @@ class Character:
         base_dv = self.agi_mod * 2
         item_bonus = self.get_stat_bonus_from_equipment("bonus_dv")
         effect_bonus = self.get_stat_bonus_from_effects("bonus_dv")
-        # Add bonus from dodge skill
         dodge_bonus = self.get_skill_rank("dodge") // 25
         return base_dv + item_bonus + effect_bonus + dodge_bonus
     

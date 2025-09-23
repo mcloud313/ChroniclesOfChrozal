@@ -117,7 +117,9 @@ def calculate_magical_damage(caster: Union[Character, Mob], spell_data: Dict[str
     base_dmg = effect_details.get("damage_base", 0)
     rng_dmg = effect_details.get("damage_rng", 0)
     dmg_type = effect_details.get("damage_type", "arcane")
-    stat_modifier = caster.apr if school == "Arcane" else caster.dpr
+    
+    stat_power = caster.apr if school == "Arcane" else caster.dpr
+    stat_modifier = math.floor(stat_power / 4) if stat_power <= 0 else max(1, math.floor(stat_power / 4))
 
     rng_roll_result = random.randint(1, rng_dmg) if rng_dmg > 0 else 0
     if is_crit:

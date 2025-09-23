@@ -331,7 +331,6 @@ async def resolve_ability_effect(
         else:
             # Original single-target damage logic
             await resolve_magical_attack(caster, target, ability_data, world)
-        await resolve_magical_attack(caster, target, ability_data, world)
     
     elif effect_type == ability_defs.EFFECT_HEAL:
         await apply_heal(caster, target, effect_details, world)

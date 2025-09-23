@@ -269,26 +269,22 @@ class World:
 
                     cost = ability_data.get("cost", 0)
                     if p.essence >= cost:
-                        p.essence -= cost
-                        try:
-                            await resolver.resolve_ability_effect(p, info.get("target_id"), info.get("target_type"), ability_data, self)
+                        messages = ability_data.get("messages", {})
+                        target_name = info.get("target_name", "its target")
 
-                            # --- THIS IS THE FIX ---
-                            # After the effect is resolved, send the completion messages.
-                            messages = ability_data.get("messages", {})
-                            target_name = info.get("target_name", "its target") 
-
-                            # Message to the caster
-                            if msg_self := messages.get("caster_self_complete"):
+                        if msg_self := messages.get("caster_self_complete"):
                                 await p.send(msg_self.format(caster_name=p.name, target_name=target_name))
                             
                             # Message to the room
-                            if msg_room := messages.get("room_complete"):
-                                if p.location:
-                                    await p.location.broadcast(
-                                        f"\r\n{msg_room.format(caster_name=p.name, target_name=target_name)}\r\n",
-                                        exclude={p}
+                        if msg_room := messages.get("room_complete"):
+                            if p.location:
+                                await p.location.broadcast(
+                                    f"\r\n{msg_room.format(caster_name=p.name, target_name=target_name)}\r\n",
+                                    exclude={p}
                                     )
+                        p.essence -= cost
+                        try:
+                            await resolver.resolve_ability_effect(p, info.get("target_id"), info.get("target_type"), ability_data, self)
 
                         except Exception:
                             log.exception("Error resolving ability effect '%s' for %s", ability_key, p.name)
