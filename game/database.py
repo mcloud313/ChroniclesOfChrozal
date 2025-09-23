@@ -99,6 +99,8 @@ class DatabaseManager:
                     spawners JSONB DEFAULT '{}'::jsonb,
                     flags JSONB DEFAULT '[]'::jsonb,
                     coinage INTEGER NOT NULL DEFAULT 0,
+                    shop_buy_filter JSONB DEFAULT '[]'::jsonb,
+                    shop_sell_modifier REAL NOT NULL DEFAULT 0.5,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
@@ -266,6 +268,7 @@ class DatabaseManager:
                         container_id UUID REFERENCES item_instances(id) ON DELETE SET NULL,
                         condition INTEGER NOT NULL DEFAULT 100,
                         instance_stats JSONB DEFAULT '{}'::jsonb,
+                        last_moved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         
                         CONSTRAINT single_location_check CHECK (
                              (owner_char_id IS NOT NULL AND room_id IS NULL AND container_id IS NULL) OR -- In top-level inventory/equipped
@@ -442,7 +445,12 @@ class DatabaseManager:
     async def update_item_location(self, instance_id: str, room_id: Optional[int] = None,
                                owner_char_id: Optional[int] = None, container_id: Optional[str] = None) -> str:
         """Moves an item by changing its owner, room, or container location."""
-        query = "UPDATE item_instances SET room_id = $1, owner_char_id = $2, container_id = $3 WHERE id = $4"
+        # --- UPDATE THIS FUNCTION ---
+        # When an item is dropped (room_id is set), update its timestamp.
+        if room_id is not None:
+            query = "UPDATE item_instances SET room_id = $1, owner_char_id = $2, container_id = $3, last_moved_at = NOW() WHERE id = $4"
+        else:
+            query = "UPDATE item_instances SET room_id = $1, owner_char_id = $2, container_id = $3 WHERE id = $4"
         return await self.execute_query(query, room_id, owner_char_id, container_id, instance_id)
     
     async def delete_item_instance(self, instance_id: str) -> str:

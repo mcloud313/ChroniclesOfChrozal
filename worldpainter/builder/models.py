@@ -134,6 +134,8 @@ class Rooms(models.Model):
     # {"101": {"max_present": 3}, "102": {"max_present": 1}}
     flags = models.JSONField(blank=True, null=True)
     coinage = models.IntegerField(default=0, blank=True)
+    shop_buy_filter = models.JSONField(blank=True, null=True, help_text='List of item types this shop buys. Ex: ["WEAPON", "ARMOR"]')
+    shop_sell_modifier = models.FloatField(default=0.5, help_text="Multiplier for item base value when buying from players. 0.5 = 50%.")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -318,6 +320,7 @@ class ItemInstances(models.Model):
     container = models.ForeignKey('self', on_delete=models.SET_NULL, blank=True, null=True)
     condition = models.IntegerField(default=100)
     instance_stats = models.JSONField(blank=True, null=True)
+    last_moved_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.template.name} ({self.id})"

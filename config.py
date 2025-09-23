@@ -37,3 +37,6 @@ STARTING_COINAGE = 125
 
 # --- Input ---
 MAX_INPUT_LENGTH = 512
+
+# Item cleanup
+ITEM_DECAY_TIME_SECONDS = 1800

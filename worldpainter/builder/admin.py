@@ -70,6 +70,18 @@ class RoomAdmin(admin.ModelAdmin):
     list_display = ('name', 'id', 'area')
     list_filter = ('area',)
     search_fields = ('name', 'description')
+
+    fieldsets = (
+        ('Core Details', {'fields': ('area', 'name', 'description', 'flags')}),
+        ('Population', {'fields': ('spawner_1_mob', 'spawner_1_count', 'spawner_2_mob', 'spawner_2_count', 'spawner_3_mob', 'spawner_3_count')}),
+        ('Shop Logic (Optional)', {
+            'classes': ('collapse',),
+            'fields': ('shop_buy_filter', 'shop_sell_modifier'),
+            'description': 'Set these fields if the room has the "SHOP" flag.'
+        }),
+        ('Treasure', {'fields': ('coinage',)})
+    )
+
     inlines = [ExitsInline, RoomObjectsInline]
     exclude = ('exits',)
 

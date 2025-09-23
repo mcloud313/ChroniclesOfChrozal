@@ -149,67 +149,48 @@ async def cmd_sell(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send("Sell what?")
         return True
     
-    # 1. Check if the room is a shop
     if "SHOP" not in character.location.flags:
         await character.send("This is not a shop.")
         return True
-
-     # --- NEW: Check for the NO_SELL flag ---
-    if "NO_SELL" in character.location.flags:
-        await character.send("The shopkeeper isn't interested in buying anything today.")
-        return True
     
-    # 2. Find the item in the character's top level inventory (hands)
     item_to_sell = character.find_item_in_inventory_by_name(args_str)
     if not item_to_sell:
         await character.send("You aren't carrying that.")
         return True
     
-    # 3. Check if the item is sellable (e.g., not a "NOSELL" quest item)
     if item_to_sell.has_flag("NOSELL"):
         await character.send("You cannot sell that.")
         return True
     
-    # 4. Calculate the price
-    try:
-        # We need the item's template to find its base value
-        template = world.get_item_template(item_to_sell.template_id)
-        if not template:
-            raise ValueError("Template not found")
-        stats = json.loads(template.get('stats', '{}') or '{}')
-        base_value = stats.get('value', 0)
-    except (json.JSONDecodeError, TypeError, ValueError):
-        base_value = 0
-
+    # --- This is the new, correct logic ---
+    room_data = character.location
+    buy_filter = room_data.shop_buy_filter
+    
+    if not buy_filter or item_to_sell.item_type not in buy_filter:
+        await character.send("The shopkeeper is not interested in buying that.")
+        return True
+    
+    base_value = item_to_sell.value
     if base_value <= 0:
-        await character.send("That item is worthless")
+        await character.send("That item is worthless.")
         return True
     
-    # Determine the shop's sell rate. For now we'll use the first item
-    # in the shop's inventory to determine the shop's general rate.
-    shop_inventory = world.get_shop_inventory(character.location.dbid)
-    if not shop_inventory:
-        await character.send("This shop isn't buying anything right now.")
-        return True
-    
-    sell_modifier = shop_inventory[0]['sell_price_modifier']
+    sell_modifier = room_data.shop_sell_modifier
     price = int(base_value * sell_modifier)
 
     if price <= 0:
         await character.send("The shopkeeper offers you nothing for that.")
         return True
     
-    # --- NEW: Apply Bartering Skill Bonus ---
+    # Apply Bartering Skill Bonus
     bartering_rank = character.get_skill_rank("bartering")
     profit_mod = bartering_rank // 25 # 1% profit bonus per 25 ranks
     if profit_mod > 0:
         price = int(price * (1.0 + (profit_mod / 100.0)))
     
-    # 5. Perform the transaction
-    # First, modify the database
+    # Perform the transaction
     await world.db_manager.delete_item_instance(item_to_sell.id)
 
-    # Then update the game state
     character.coinage += price
     del character._inventory_items[item_to_sell.id]
     if item_to_sell.id in world._all_item_instances:

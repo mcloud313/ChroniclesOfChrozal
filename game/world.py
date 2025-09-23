@@ -231,13 +231,14 @@ class World:
         log.info("Subscribing world systems to the game ticker...")
         ticker.subscribe(self.update_roundtimes)
         ticker.subscribe(self.update_mob_ai)
-        ticker.subscribe(self.update_respawns)
+        ticker.subscribe(self.update_respawns) 
         ticker.subscribe(self.update_death_timers)
         ticker.subscribe(self.update_effects)
         ticker.subscribe(self.update_xp_absorption)
         ticker.subscribe(self.update_regen)
         ticker.subscribe(self.update_stealth_checks)
         ticker.subscribe(self.update_room_effects)
+        ticker.subscribe(self.update_item_decay, interval_seconds=30.0)
 
     # --- Ticker Callback Functions ---
     async def update_roundtimes(self, dt: float):
@@ -481,4 +482,42 @@ class World:
                     if isinstance(observer, Character):
                         await observer.send(f"You spot {hidden_char.name} hiding in the shadows!")
                     break # Stop checking once spotted
+
+    async def update_item_decay(self, dt: float):
+        """Ticker: Periodically cleans up old, flagged items from the ground."""
+        current_time = time.time()
+        decay_threshold = config.ITEM_DECAY_TIME_SECONDS
+        items_to_delete = []
+
+        # Find items eligible for decay
+        for item in self._all_item_instances.values():
+            # Check if item is on the ground (via its owner in the game state, not DB)
+            if item.owner_char is None and item.container is None:
+                if item.has_flag("DECAYS"):
+                    # We need to get the timestamp from the database record, as the python object doesn't have it yet.
+                    # A more optimized way would be to load this at startup. For now, we'll fetch it.
+                    record = await self.db_manager.get_item_instance(item.id)
+                    if record and record['last_moved_at']:
+                        age = current_time - record['last_moved_at'].timestamp()
+                        if age > decay_threshold:
+                            items_to_delete.append(item)
+        
+        if not items_to_delete:
+            return
+
+        # Delete the items
+        for item in items_to_delete:
+            log.info(f"Decaying item: {item.name} (ID: {item.id})")
+            
+            # Remove from world state
+            del self._all_item_instances[item.id]
+            if item.room:
+                if item.id in item.room.item_instance_ids:
+                    item.room.item_instance_ids.remove(item.id)
+            
+            # Remove from database
+            await self.db_manager.delete_item_instance(item.id)
+        
+        if items_to_delete:
+            log.info(f"Cleaned up {len(items_to_delete)} decayed items from the world.")
             
