@@ -18,6 +18,7 @@ HELP_TOPICS = {
         "look": "LOOK [target|in container]\n\r  Look at your surroundings, a person, an item, or inside a container.",
         "score": "SCORE\n\r  Display your character's vital statistics, attributes, and status.",
         "skills": "SKILLS\n\r  Show a list of your skills and their current ranks.",
+        "abilities": "ABILITIES\n\r  Shows a list of all spells and abilities you have learned.",
         "who": "WHO\n\r  See a list of all players currently online.",
         "quit": "QUIT\n\r  Log out of the game safely, saving your character.",
         "help": "HELP [topic]\n\r  Shows a list of help topics, or detailed help for a specific topic."
@@ -348,6 +349,45 @@ async def cmd_advance(character: 'Character', world: 'World', args_str: str) -> 
     await character.send("\r\n".join(level_msg))
     # REFACTOR: Call the character's own save method.
     await character.save()
+    return True
+
+async def cmd_abilities(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Displays a formatted list of the character's known spells and abilities."""
+    known_keys = sorted(list(character.known_abilities))
+    
+    if not known_keys:
+        await character.send("You have not yet learned any special abilities or spells.")
+        return True
+
+    spells = []
+    abilities = []
+
+    for key in known_keys:
+        ability_data = world.abilities.get(key)
+        if not ability_data:
+            continue
+        
+        line = (
+            f"{{c}}[{ability_data.get('cost', 0):>3} Ess]{{x}} {ability_data.get('name', key):<20} - "
+            f"{{i}}{ability_data.get('description', 'No description available.')}{{x}}"
+        )
+        
+        if ability_data.get('ability_type') == 'SPELL':
+            spells.append(line)
+        else:
+            abilities.append(line)
+            
+    output = ["\r\n"]
+    if spells:
+        output.append("{C--- Spells ---{x")
+        output.extend(spells)
+        output.append("\r\n")
+        
+    if abilities:
+        output.append("{C--- Abilities ---{x")
+        output.extend(abilities)
+
+    await character.send("\n\r".join(output))
     return True
 
 async def cmd_skills(character: 'Character', world: 'World', args_str: str) -> bool:

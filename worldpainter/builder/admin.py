@@ -198,4 +198,3 @@ admin.site.register(ItemInstances)
 admin.site.register(ShopInventories)
 admin.site.register(BankAccounts)
 # We don't register RoomObjects here because it's handled by an Inline
-admin.site.register(AbilityTemplates)

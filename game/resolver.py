@@ -586,7 +586,8 @@ async def apply_effect(caster: Character, target: Union[Character, Mob], effect_
         "amount": amount,
         "stat": stat,
         "type": effect_details.get('type'),
-        "caster_id": caster.dbid
+        "caster_id": caster.dbid,
+        "source_ability_key": ability_data.get("internal_name")
     }
     log.info("Applied effect '%s' to %s for %.1f seconds.", effect_name, target.name, duration)
 
