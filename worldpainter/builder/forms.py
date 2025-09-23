@@ -102,7 +102,11 @@ class ItemTemplateAdminForm(forms.ModelForm):
     armor = forms.IntegerField(required=False, label="Armor Value (AV)")
     spell_failure = forms.IntegerField(required=False, label="Spell Failure %", help_text="e.g., 15 for 15%.")
     block_chance = forms.FloatField(required=False, label="Block Chance (Shields)")
-    wear_location = forms.ChoiceField(choices=WEAR_LOCATION_CHOICES, required=False) # This will now use the updated list
+    wear_location = forms.MultipleChoiceField(
+        choices=WEAR_LOCATION_CHOICES, 
+        widget=forms.CheckboxSelectMultiple, 
+        required=False
+    )
 
     # --- Container Stats ---
     capacity = forms.IntegerField(required=False, help_text="Max weight a container can hold.")
