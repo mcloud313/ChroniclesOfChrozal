@@ -138,6 +138,16 @@ class ItemTemplateAdminForm(forms.ModelForm):
         widget=forms.CheckboxSelectMultiple, 
         required=False
     )
+    lock_details = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 4, 'cols': 60}),
+        required=False,
+        help_text='e.g., {"is_locked": true, "lockpick_dc": 25, "key_name": "a rusty key"}'
+    )
+    trap_details = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 4, 'cols': 60}),
+        required=False,
+        help_text='e.g., {"is_active": true, "disarm_dc": 20, "perception_dc": 18}'
+    )
     capacity = forms.IntegerField(required=False, help_text="Max weight a container can hold.")
     holds_ammo_type = forms.CharField(required=False, label="Holds Ammo Type", help_text="For quivers, e.g., 'arrow', 'bolt'.")
     effect = forms.CharField(required=False, label="Consumable Effect", help_text="e.g., 'heal_hp'.")
@@ -151,9 +161,10 @@ class ItemTemplateAdminForm(forms.ModelForm):
 
     class Meta:
         model = ItemTemplates
-        fields = '__all__'
+        # Add the new fields to the form
+        fields = ['name', 'description', 'item_type', 'flags', 'wear_location', 'stats', 'loot_table', 'lock_details', 'trap_details']
         widgets = {
-            'stats': forms.HiddenInput(),
+            'stats': forms.Textarea(attrs={'rows': 10, 'cols': 60}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -163,6 +174,10 @@ class ItemTemplateAdminForm(forms.ModelForm):
                 for key, value in self.instance.stats.items():
                     if key in self.fields:
                         self.fields[key].initial = value
+            if self.instance.lock_details:
+                self.fields['lock_details'].initial = json.dumps(self.instance.lock_details, indent=2)
+            if self.instance.trap_details:
+                self.fields['trap_details'].initial = json.dumps(self.instance.trap_details, indent=2)
 
     def save(self, commit=True):
         stats_json = {}
@@ -177,6 +192,15 @@ class ItemTemplateAdminForm(forms.ModelForm):
              value = self.cleaned_data.get(field_name)
              if value is not None and value != '':
                 stats_json[field_name] = value
+
+        try:
+            self.instance.lock_details = json.loads(self.cleaned_data.get('lock_details') or '{}')
+        except json.JSONDecodeError:
+            self.add_error('lock_details', 'Invalid JSON format.')
+        try:
+            self.instance.trap_details = json.loads(self.cleaned_data.get('trap_details') or '{}')
+        except json.JSONDecodeError:
+            self.add_error('trap_details', 'Invalid JSON format.')
         
         self.instance.stats = stats_json if stats_json else None
         return super().save(commit)

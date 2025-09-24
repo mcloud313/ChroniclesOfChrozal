@@ -24,44 +24,39 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
     Handles the logic for moving characters between rooms, now with group support.
     """
     # --- 1. Identify Who to Move ---
-    # Start with just the character, but expand to the whole group if they are the leader.
     chars_to_move = [character]
     is_group_move = character.group and character.group.leader == character
     if is_group_move:
-        # Get a stable list of members to move
         chars_to_move = list(character.group.members)
 
     current_room = character.location
     
     # --- 2. Calculate Shared Roundtime ---
     base_rt = 1.0
-    # The leader's armor penalty affects the whole group's base move time
     leader_penalty = character.total_av * 0.05
     move_rt = base_rt + leader_penalty + character.slow_penalty
     
-    # Final roundtime is the greater of the move time or anyone's current roundtime
     final_rt = move_rt
     if is_group_move:
         slowest_member_rt = character.group.get_slowest_member_rt()
         final_rt = max(move_rt, slowest_member_rt)
 
-    # --- 3. Announce Departure ---
+    # --- 3. Announce Departure & Immediately Update Room State ---
     if exit_name.lower() in CARDINAL_DIRECTIONS:
         departure_message = f"leaves {exit_name}"
     else:
         departure_message = f"leaves through the {exit_name}"
 
+    # Broadcast the departure message first.
     if is_group_move:
         await current_room.broadcast(f"\r\n{character.name}'s group {departure_message}.\r\n")
     else:
         await current_room.broadcast(f"\r\n{character.name} {departure_message}.\r\n", exclude={character})
     
-        
-        # Remove all moving characters from the old room
-        for char in chars_to_move:
-            current_room.remove_character(char)
+    for char in chars_to_move:
+        current_room.remove_character(char)
 
-    # --- 4. Update State for All Movers ---
+    # --- 4. Update Character State & Add to New Room ---
     for char in chars_to_move:
         char.update_location(target_room)
         target_room.add_character(char)
@@ -81,11 +76,9 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
 
     # --- 6. Send Room Info to All Movers ---
     for char in chars_to_move:
-        # We broadcast the look string to the mover(s)
         look_string = target_room.get_look_string(char, world)
         await char.send(look_string)
 
-        # Check for items on the ground individually
         ground_items_output = []
         item_counts = {}
         for item_id in target_room.item_instance_ids:
@@ -187,7 +180,6 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
         await character.send("Go where? (e.g., go hole, go climb rope)")
         return True
 
-    # --- FIX: Simplified Exit Data Parsing ---
     exit_data = character.location.exits.get(exit_name)
     if not exit_data:
         # Also check cardinal directions in case the user types "go north"
@@ -198,13 +190,25 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
         return True
 
     target_room_id = exit_data.get('destination_room_id')
-
     if target_room_id is None:
         log.error("Room %d exit '%s' has an invalid target ID.", character.location.dbid, exit_name)
         await character.send("The way forward seems broken.")
         return True
 
-    skill_check_data: Optional[Dict[str, Any]] = None
+    # Extract the exit's 'details' dictionary. This contains all complex exit info.
+    exit_details = exit_data.get('details', {}) or {}
+
+    # --- Handle Doors and Locks ---
+    if exit_details.get("is_door"):
+        if not exit_details.get("is_open", True):
+            await character.send("The door is closed.")
+            return True
+        if exit_details.get("is_locked", False):
+            await character.send("The door is locked.")
+            return True
+
+    #  Get the skill check data *from* the exit details.
+    skill_check_data: Optional[Dict[str, Any]] = exit_details.get("skill_check")
 
     # --- Perform Skill Check if Required ---
     if skill_check_data:
@@ -215,9 +219,9 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
             await character.send("The obstacle seems undefined.")
             return True
 
+        # The rest of your skill check logic from here was already perfect.
         check_result = utils.skill_check(character, skill_name, dc=dc)
         
-        # Provide verbose feedback to the player
         feedback = (f"You attempt {skill_name.title()}... "
                     f"{{c[Roll: {check_result['roll']} + Skill: {check_result['skill_value']} = {check_result['total_check']} vs DC: {check_result['dc']}]"
                     f"{{x {{gSuccess!{{x" if check_result['success'] else f"{{x {{rFailure!{{x")
@@ -228,9 +232,11 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
             await character.send(fail_msg)
             
             if (fail_damage := skill_check_data.get('fail_damage', 0)) > 0:
-                character.hp = max(0.0, character.hp - fail_damage)
+                # Use the resolver to handle damage and concentration checks
+                await combat_logic.apply_damage(character, fail_damage)
                 await character.send(f"{{rYou take {int(fail_damage)} damage!{{x")
-                if character.hp <= 0:
+                if not character.is_alive():
+                    # The resolver doesn't handle defeat, so we check here.
                     await combat_logic.handle_defeat(character, character, world)
                     return True # Stop if defeated
             
@@ -245,5 +251,6 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
         await character.send(f"You try to go '{exit_name}', but the way seems to vanish.")
         return True
 
+    # If all checks pass, initiate the move
     await _perform_move(character, world, target_room, exit_name)
     return True

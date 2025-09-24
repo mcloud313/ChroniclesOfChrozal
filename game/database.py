@@ -761,7 +761,7 @@ class DatabaseManager:
     
     async def update_item_instance_stats(self, instance_id: str, new_stats: dict) -> str:
         """Updates the instance_stats JSONB field for a specific item instance."""
-        query = "UPDATE item_instance SET instnace_stats = $1 WHERE id = $2"
+        query = "UPDATE item_instances SET instnace_stats = $1 WHERE id = $2"
         return await self.execute_query(query, json.dumps(new_stats), instance_id)
     
 db_manager = DatabaseManager()

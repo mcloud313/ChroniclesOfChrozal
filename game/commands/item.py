@@ -430,9 +430,12 @@ async def cmd_open(character: 'Character', world: 'World', args_str: str) -> boo
         if trap_data.get("is_active"):
             await character.send(f"{{RYou open the {container.name} and trigger a trap!{{x")
             trap_data["is_active"] = False
+            # Persist the trap being disarmed immediately
             await world.db_manager.update_item_instance_stats(container.id, container.instance_stats)
 
     container.instance_stats["is_open"] = True
+    # This call is unconditional, which is correct. It saves the state
+    # regardless of where the container was found.
     await world.db_manager.update_item_instance_stats(container.id, container.instance_stats)
     await character.send(f"You open the {container.name}.")
 
@@ -454,7 +457,7 @@ async def cmd_close(character: 'Character', world: 'World', args_str: str) -> bo
         await character.send("Close what?")
         return True
     
-    # FIX: Search for the container in inventory, then equipped, then the room.
+    # Search for the container in inventory, then equipped, then the room.
     target_item = (character.find_item_in_inventory_by_name(args_str) or
                    character.find_item_in_equipment_by_name(args_str) or
                    character.location.get_item_instance_by_name(args_str, world))
@@ -467,13 +470,10 @@ async def cmd_close(character: 'Character', world: 'World', args_str: str) -> bo
         await character.send("It's already closed.")
         return True
     
-    # Close the container
+    # Close the container in memory
     target_item.instance_stats['is_open'] = False
-
-    # If the container is in the room, the change needs to be saved to the DB
-    if target_item.id in character.location.item_instance_ids:
-         await world.db_manager.update_item_instance_stats(target_item.id, target_item.instance_stats)
-         
+    await world.db_manager.update_item_instance_stats(target_item.id, target_item.instance_stats)
+        
     await character.send(f"You close the {target_item.name}.")
     return True
 
