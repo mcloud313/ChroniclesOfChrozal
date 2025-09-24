@@ -67,6 +67,11 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send("You are floating in an endless void... somehow.")
         return True
     
+    is_dark = "DARK" in character.location.flags and not character.is_holding_light_source()
+    if is_dark and not args_str: # Can't see the room, but can still try to look at self/items
+        await character.send("It is pitch black...")
+        return True
+    
     # --- NEW: Handle "look in <container>" ---
     if args_str.lower().startswith("in "):
         container_name = args_str[3:].strip()

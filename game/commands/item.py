@@ -16,7 +16,6 @@ log = logging.getLogger(__name__)
 
 COINAGE_KEYWORDS = {"coins", "coin", "money", "coinage", "talons", "shards", "orbs", "crowns"}
 
-
 async def cmd_inventory(character: 'Character', world: 'World', args_str: str) -> bool:
     """Displays character's unique item instances."""
     output = ["\r\n{c========================= Inventory ========================{x"]
@@ -73,6 +72,10 @@ async def cmd_get(character: 'Character', world: 'World', args_str: str) -> bool
         container = character.find_container_by_name(container_name)
         if not container:
             await character.send(f"You don't have a {container_name}.")
+            return True
+        
+        if not container.is_open:
+            await character.send(f"You must open the {container.name} first.")
             return True
         
         # Find the item inside the container's contents
@@ -255,6 +258,10 @@ async def cmd_put(character: 'Character', world: 'World', args_str: str) -> bool
     container = character.find_container_by_name(container_name)
     if not container:
         await character.send(f"You don't have a {container_name}.")
+        return True
+    
+    if not container.is_open:
+        await character.send(f"You must open the {container.name} first.")
         return True
     
     # 3. Sanity check: can't put a container in itself
@@ -593,5 +600,68 @@ async def cmd_lock(character: 'Character', world: 'World', args_str: str) -> boo
         return True
 
     await character.send(f"You don't see a '{target_name}' here to lock.")
+    return True
+
+async def cmd_light(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Lights an item that is a light source."""
+    if not args_str:
+        await character.send("Light what?")
+        return True
+
+    item_to_light = character.find_item_in_inventory_by_name(args_str)
+    if not item_to_light:
+        await character.send("You aren't carrying that.")
+        return True
+
+    if item_to_light.item_type != item_defs.LIGHT_SOURCE:
+        await character.send("You can't light that.")
+        return True
+
+    if item_to_light.instance_stats.get("is_lit"):
+        await character.send(f"The {item_to_light.name} is already lit.")
+        return True
+
+    # Update the item's state in memory and save to DB
+    item_to_light.instance_stats["is_lit"] = True
+    await world.db_manager.update_item_instance_stats(item_to_light.id, item_to_light.instance_stats)
+
+    await character.send(f"You light the {item_to_light.name}, casting a warm glow.")
+    await character.location.broadcast(
+        f"\r\n{character.name} lights a {item_to_light.name}.\r\n",
+        exclude={character}
+    )
+    return True
+
+async def cmd_snuff(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Extinguishes a lit light source."""
+    if not args_str:
+        await character.send("Snuff what?")
+        return True
+
+    # A light source could be in hands or equipped (e.g., a lantern on a belt)
+    item_to_snuff = (character.find_item_in_inventory_by_name(args_str) or
+                     character.find_item_in_equipment_by_name(args_str))
+
+    if not item_to_snuff:
+        await character.send("You don't have that.")
+        return True
+
+    if item_to_snuff.item_type != item_defs.LIGHT_SOURCE:
+        await character.send("That is not a light source.")
+        return True
+
+    if not item_to_snuff.instance_stats.get("is_lit"):
+        await character.send(f"The {item_to_snuff.name} is not lit.")
+        return True
+
+    # Update the item's state
+    item_to_snuff.instance_stats["is_lit"] = False
+    await world.db_manager.update_item_instance_stats(item_to_snuff.id, item_to_snuff.instance_stats)
+
+    await character.send(f"You snuff out the {item_to_snuff.name}.")
+    await character.location.broadcast(
+        f"\r\n{character.name} snuffs out their {item_to_snuff.name}.\r\n",
+        exclude={character}
+    )
     return True
         

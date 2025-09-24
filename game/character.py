@@ -527,6 +527,16 @@ class Character:
                 total_bonus += effect.get('amount', 0)
         return total_bonus
 
+    def is_holding_light_source(self) -> bool:
+        """Checks if the character is holding or wearing a lit item."""
+        for item in self._inventory_items.values():
+            if item.instance_stats.get("is_lit"):
+                return True
+        for item in self._equipped_items.values():
+            if item.instance_stats.get("is_lit"):
+                return True
+        return False
+
     def get_stat_bonus_from_equipment(self, stat_name: str) -> int:
         """
         Calculate the total bonus for a given stat from all equipped items.

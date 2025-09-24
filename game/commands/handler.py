@@ -39,6 +39,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "help": general_cmds.cmd_help,
     "score": general_cmds.cmd_score, "stats": general_cmds.cmd_score,
     "skills": general_cmds.cmd_skills,
+    "abilities": general_cmds.cmd_abilities,
     "advance": general_cmds.cmd_advance, "level": general_cmds.cmd_advance,
     "meditate": general_cmds.cmd_meditate,
     "emote": general_cmds.cmd_emote, ":": general_cmds.cmd_emote,
@@ -89,6 +90,8 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "repair": item_cmds.cmd_repair,
     "drink": item_cmds.cmd_drink,
     "eat": item_cmds.cmd_eat,
+    "light": item_cmds.cmd_light,
+    "snuff": item_cmds.cmd_snuff,
 
     # Skill/Progression Commands
     "spend": skill_cmds.cmd_spend, "invest": skill_cmds.cmd_spend,

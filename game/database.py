@@ -668,10 +668,22 @@ class DatabaseManager:
         query = "SELECT * FROM character_equipment WHERE character_id = $1"
         return await self.fetch_one_query(query, character_id)
     
-    async def get_character_abilities(self, character_id: int) -> List[asyncpg.Record]:
-        """Fetches all known abilities for a character."""
+    async def get_character_abilities(self, character_id: int) -> Set[str]:
+        """
+        Fetches all known abilities for a character and returns them as a set of strings.
+        """
         query = "SELECT ability_internal_name FROM character_abilities WHERE character_id = $1"
-        return await self.fetch_all_query(query, character_id)
+        
+        # First, fetch the raw database records
+        ability_records = await self.fetch_all_query(query, character_id)
+        
+        # ✅ FIX: Process the records into a set of strings before returning.
+        # This ensures the function returns the data type the game expects,
+        # restoring the original behavior.
+        if not ability_records:
+            return set()
+            
+        return {record['ability_internal_name'] for record in ability_records}
     
     async def save_character_abilities(self, character_id: int, abilities: Set[str]) -> str:
         """Saves character abilities by deleting old ones and inserting the new set."""
