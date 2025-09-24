@@ -473,12 +473,12 @@ class DatabaseManager:
     async def get_instances_in_room(self, room_id: int) -> List[asyncpg.Record]:
         """Fetches all item instances on the ground in a room."""
         query ="SELECT * FROM item_instances WHERE room_id = $1"
-        return await self.fetch_all(query, room_id)
+        return await self.fetch_all_query(query, room_id)
     
     async def get_instances_for_character(self, character_id: int) -> List[asyncpg.Record]:
         """Fetches all item instances owned by a character (inventory/equipment)."""
         query = "SELECT * FROM item_instances WHERE owner_char_id = $1"
-        return await self.fetch_all(query, character_id)
+        return await self.fetch_all_query(query, character_id)
     
     async def update_item_location(self, instance_id: str, room_id: Optional[int] = None,
                                owner_char_id: Optional[int] = None, container_id: Optional[str] = None) -> str:
@@ -524,7 +524,7 @@ class DatabaseManager:
     # --- Character Functions ---
     async def load_characters_for_account(self, player_id: int) -> List[asyncpg.Record]:
         query = "SELECT id, first_name, last_name, level, race_id, class_id FROM characters WHERE player_id = $1 ORDER BY last_saved DESC NULLS LAST, id ASC"
-        return await self.fetch_all(query, player_id)
+        return await self.fetch_all_query(query, player_id)
     
     async def load_character_data(self, character_id: int) -> Optional[asyncpg.Record]:
         query = "SELECT * FROM characters WHERE id = $1"
@@ -661,7 +661,7 @@ class DatabaseManager:
     async def get_character_skills(self, character_id: int) -> List[asyncpg.Record]:
         """Fetches all skills for a character."""
         query = "SELECT skill_name, rank FROM character_skills WHERE character_id = $1"
-        return await self.fetch_all(query, character_id)
+        return await self.fetch_all_query(query, character_id)
 
     async def get_character_equipment(self, character_id: int) -> Optional[asyncpg.Record]:
         """Fetches the equipment for a character."""
@@ -671,7 +671,7 @@ class DatabaseManager:
     async def get_character_abilities(self, character_id: int) -> List[asyncpg.Record]:
         """Fetches all known abilities for a character."""
         query = "SELECT ability_internal_name FROM character_abilities WHERE character_id = $1"
-        return await self.fetch_all(query, character_id)
+        return await self._query(query, character_id)
     
     async def save_character_abilities(self, character_id: int, abilities: Set[str]) -> str:
         """Saves character abilities by deleting old ones and inserting the new set."""
