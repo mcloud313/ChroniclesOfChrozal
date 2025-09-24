@@ -27,6 +27,7 @@ class Item:
         self.id: str = instance_data['id'] # The UUID of this specific item
         self.container_id: Optional[str] = instance_data.get('container_id')
         self.condition: int = instance_data.get('condition', 100)
+        self.last_moved_at = instance_data.get('last_moved_at')
 
         # FIX: Properly handle instance_stats which might be a string or None
         stats_data = instance_data.get('instance_stats')
