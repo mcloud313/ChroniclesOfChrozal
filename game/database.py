@@ -445,7 +445,7 @@ class DatabaseManager:
         stats_json = json.dumps(instance_stats) if instance_stats else None
 
         query = """
-            INSERT INTO item_instances (id, item_template_id, owner_char_id, room_id, container_id, instance_stats)
+            INSERT INTO item_instances (id, template_id, owner_char_id, room_id, container_id, instance_stats)
             VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING *;
         """

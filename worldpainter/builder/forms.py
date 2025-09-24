@@ -121,6 +121,23 @@ class ExitAdminForm(forms.ModelForm):
 class ItemTemplateAdminForm(forms.ModelForm):
     """A custom form to manage the 'stats' JSONField for ItemTemplates."""
     # This form is correct and does not need changes
+    lock_details_help = """
+    <strong>Enter valid JSON.</strong> Use double quotes.<br><br>
+    <strong><u>Example:</u></strong><br>
+    <code>{"is_locked": true, "lockpick_dc": 25, "key_name": "a small iron key"}</code><br>
+    <em>- `is_locked`: (true/false) If the container is locked by default.</em><br>
+    <em>- `lockpick_dc`: (number) The difficulty to pick the lock.</em><br>
+    <em>- `key_name`: (string, optional) The name of the item that unlocks this.</em>
+    """
+    trap_details_help = """
+    <strong>Enter valid JSON.</strong> Use double quotes.<br><br>
+    <strong><u>Example:</u></strong><br>
+    <code>{"is_active": true, "perception_dc": 18, "disarm_dc": 20, "damage": 50}</code><br>
+    <em>- `is_active`: (true/false) If the trap is armed by default.</em><br>
+    <em>- `perception_dc`: (number) The difficulty to notice the trap.</em><br>
+    <em>- `disarm_dc`: (number) The difficulty to disarm the trap.</em><br>
+    <em>- `damage`: (number, optional) Amount of damage the trap deals.</em>
+    """
 
     # --- Core Stats ---
     value = forms.IntegerField(required=False, help_text="The base value in coinage for buying/selling.")
@@ -141,12 +158,12 @@ class ItemTemplateAdminForm(forms.ModelForm):
     lock_details = forms.CharField(
         widget=forms.Textarea(attrs={'rows': 4, 'cols': 60}),
         required=False,
-        help_text='e.g., {"is_locked": true, "lockpick_dc": 25, "key_name": "a rusty key"}'
+        help_text=lock_details_help
     )
     trap_details = forms.CharField(
         widget=forms.Textarea(attrs={'rows': 4, 'cols': 60}),
         required=False,
-        help_text='e.g., {"is_active": true, "disarm_dc": 20, "perception_dc": 18}'
+        help_text=trap_details_help
     )
     capacity = forms.IntegerField(required=False, help_text="Max weight a container can hold.")
     holds_ammo_type = forms.CharField(required=False, label="Holds Ammo Type", help_text="For quivers, e.g., 'arrow', 'bolt'.")
