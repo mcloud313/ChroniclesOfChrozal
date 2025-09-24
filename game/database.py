@@ -671,7 +671,7 @@ class DatabaseManager:
     async def get_character_abilities(self, character_id: int) -> List[asyncpg.Record]:
         """Fetches all known abilities for a character."""
         query = "SELECT ability_internal_name FROM character_abilities WHERE character_id = $1"
-        return await self._query(query, character_id)
+        return await self.fetch_all_query(query, character_id)
     
     async def save_character_abilities(self, character_id: int, abilities: Set[str]) -> str:
         """Saves character abilities by deleting old ones and inserting the new set."""
