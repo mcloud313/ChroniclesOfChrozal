@@ -1,6 +1,6 @@
 import json
 from django import forms
-from .models import Rooms, MobTemplates, ItemTemplates, Classes, AbilityTemplates
+from .models import Rooms, MobTemplates, ItemTemplates, Classes, AbilityTemplates, Exits
 from game.definitions.item_defs import ITEM_TYPE_CHOICES
 from game.definitions import abilities as ability_defs
 from game.definitions import slots
@@ -32,10 +32,8 @@ class RoomAdminForm(forms.ModelForm):
     # Define fields with a temporary empty queryset to avoid DB access on import
     spawner_1_mob = forms.ModelChoiceField(queryset=MobTemplates.objects.none(), required=False, label="Spawner 1: Mob")
     spawner_1_count = forms.IntegerField(min_value=1, required=False, label="Max Count")
-
     spawner_2_mob = forms.ModelChoiceField(queryset=MobTemplates.objects.none(), required=False, label="Spawner 2: Mob")
     spawner_2_count = forms.IntegerField(min_value=1, required=False, label="Max Count")
-
     spawner_3_mob = forms.ModelChoiceField(queryset=MobTemplates.objects.none(), required=False, label="Spawner 3: Mob")
     spawner_3_count = forms.IntegerField(min_value=1, required=False, label="Max Count")
     
@@ -77,6 +75,47 @@ class RoomAdminForm(forms.ModelForm):
                 spawners_json[str(mob.id)] = {"max_present": count}
         
         self.instance.spawners = spawners_json
+        return super().save(commit)
+    
+class ExitAdminForm(forms.ModelForm):
+    """Provides a textarea for the 'details' JSON field on Exits."""
+    details_help = """
+    <strong>Enter valid JSON.</strong> Use double quotes for keys and string values.<br><br>
+    <strong><u>Locked Door Example:</u></strong><br>
+    <code>{"is_locked": true, "lockpick_dc": 20, "key_name": "a rusty key"}</code><br>
+    <em>- `is_locked`: (true/false) If the exit is locked by default.</em><br>
+    <em>- `lockpick_dc`: (number) The difficulty to pick the lock.</em><br>
+    <em>- `key_name`: (string) The name of the item that unlocks this exit.</em><br><br>
+
+    <strong><u>Skill Check Example:</u></strong><br>
+    <code>{"skill_check": {"skill": "climbing", "dc": 15, "fail_msg": "You slip and fall!"}}</code><br>
+    <em>- `skill`: The name of the required skill (e.g., climbing, swimming).</em><br>
+    <em>- `dc`: (number) The difficulty of the check.</em><br>
+    <em>- `fail_msg`: (string) Message shown on failure.</em><br><br>
+
+    <strong><u>Combined Example (Locked & Climbable):</u></strong><br>
+    <code>{"is_locked": true, "lockpick_dc": 25, "skill_check": {"skill": "athletics", "dc": 12}}</code>
+    """
+    details = forms.CharField(widget=forms.Textarea(attrs={'rows': 15, 'cols': 60}), required=False, help_text=details_help)
+
+    class Meta:
+        model = Exits
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Populate the textarea from the existing JSON data, formatted nicely
+        if self.instance and self.instance.details:
+            self.fields['details'].initial = json.dumps(self.instance.details, indent=2)
+
+    def save(self, commit=True):
+        # Convert the string from the textarea back into JSON before saving
+        try:
+            self.instance.details = json.loads(self.cleaned_data.get('details') or '{}')
+        except json.JSONDecodeError:
+            # If the user enters invalid JSON, add an error to the form instead of crashing
+            self.add_error('details', 'Invalid JSON format.')
+            return super().save(commit=False)
         return super().save(commit)
 
 class ItemTemplateAdminForm(forms.ModelForm):

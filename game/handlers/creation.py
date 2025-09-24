@@ -40,6 +40,9 @@ class CreationState(Enum):
     GET_TRAIT_SHELL_COLOR = auto()
     GET_TRAIT_TUSK_STYLE = auto()
     GET_TRAIT_HEAD_SHAPE = auto()
+    GET_TRAIT_FUR_PATTERN = auto()
+    GET_TRAIT_FUR_COLOR = auto()
+    GET_TRAIT_TAIL_TYPE = auto()
     FINALIZE = auto()
     COMPLETE = auto()
     CANCELLED = auto()
@@ -220,8 +223,11 @@ class CreationHandler:
         if not options:
             self.state = CreationState.FINALIZE
             return
-        preferred_order = [ "Height", "Build", "Skin Tone", "Skin Pattern", "Shell Color", "Head Shape", 
-                            "Hair Style", "Hair Color", "Eye Color", "Ear Shape", "Nose Type", "Beard Style", "Tusk Style" ]
+        preferred_order = [ 
+                            "Height", "Build", "Skin Tone", "Fur Pattern", "Fur Color", "Skin Pattern",
+                            "Shell Color", "Head Shape", "Hair Style", "Hair Color", "Eye Color",
+                            "Ear Shape", "Tail Type", "Nose Type", "Beard Style", "Tusk Style" 
+                            ]
         self._trait_keys = sorted(options.keys(), key=lambda k: preferred_order.index(k) if k in preferred_order else 99)
         self._current_trait_index = 0
         self.creation_data["description_traits"] = {}
@@ -284,6 +290,7 @@ class CreationHandler:
         # Sentence 2: Skin/Shell/Fur
         s2_parts = []
         if skin_tone := get_trait("Skin Tone"): s2_parts.append(f"{skin_tone} skin")
+        if fur_pattern := get_trait("Fur Pattern"): s2_parts.append(f"a coat of {get_trait('Fur Color')} fur with a {fur_pattern} pattern")
         if skin_pattern := get_trait("Skin Pattern"): s2_parts.append(f"a {skin_pattern} pattern")
         if shell_color := get_trait("Shell Color"): s2_parts.append(f"a {shell_color} shell")
         if s2_parts:
@@ -299,6 +306,7 @@ class CreationHandler:
         if ear_shape := get_trait("Ear Shape"): s3_parts.append(f"{poss.lower()} ears are {ear_shape}")
         if nose_type := get_trait("Nose Type"): s3_parts.append(f"a {nose_type} nose")
         if beard_style := get_trait("Beard Style"): s3_parts.append(f"a {beard_style} beard")
+        if tail_type := get_trait("Tail Type"): s3_parts.append(f"a {tail_type} tail")
         
         if s3_parts:
             s3 = f"{poss} face is framed by " + ", ".join(s3_parts) + "." if "hair" in " ".join(s3_parts) else \
@@ -374,6 +382,9 @@ class CreationHandler:
             CreationState.GET_TRAIT_SKIN_PATTERN: lambda: self._handle_get_trait("Skin Pattern"),
             CreationState.GET_TRAIT_SHELL_COLOR: lambda: self._handle_get_trait("Shell Color"),
             CreationState.GET_TRAIT_TUSK_STYLE: lambda: self._handle_get_trait("Tusk Style"),
+            CreationState.GET_TRAIT_FUR_PATTERN: lambda: self._handle_get_trait("Fur Pattern"),
+            CreationState.GET_TRAIT_FUR_COLOR: lambda: self._handle_get_trait("Fur Color"),
+            CreationState.GET_TRAIT_TAIL_TYPE: lambda: self._handle_get_trait("Tail Type"),
             CreationState.FINALIZE: self._handle_finalize,
         }
 

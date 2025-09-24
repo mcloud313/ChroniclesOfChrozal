@@ -49,6 +49,8 @@ class World:
         self.abilities: Dict[str, Dict] = {}
         self.damage_types: Dict[str, Dict] = {}
         self._last_decay_check_time = time.monotonic()
+        self.loot_tables: Dict [int, Dict] = {}
+        self.loot_table_entries: Dict[int, List[Dict]] = {}
 
     async def build(self):
         """
@@ -69,10 +71,13 @@ class World:
                 self.db_manager.fetch_all("SELECT * FROM exits ORDER BY source_room_id"),
                 self.db_manager.fetch_all("SELECT * FROM shop_inventories ORDER BY room_id"),
                 self.db_manager.fetch_all("SELECT * FROM ability_templates"),
-                self.db_manager.fetch_all("SELECT * FROM damage_types") 
+                self.db_manager.fetch_all("SELECT * FROM damage_types"),
+                self.db_manager.fetch_all("SELECT * FROM loot_tables ORDER BY id"),
+                self.db_manager.fetch_all("SELECT * FROM loot_table_entries ORDER BY loot_table_id")
             )
             (area_rows, race_rows, class_rows, item_rows, mob_rows, attack_rows,
-             loot_rows, room_rows, exit_rows, shop_rows, ability_rows, damage_type_rows) = results
+             loot_rows, room_rows, exit_rows, shop_rows, ability_rows, damage_type_rows,
+             loot_table_rows, loot_entry_rows) = results
 
             self.areas = {row['id']: dict(row) for row in area_rows or []}
             self.races = {row['id']: dict(row) for row in race_rows or []}
@@ -131,6 +136,12 @@ class World:
                 for room_id, items in groupby(shop_rows, key=itemgetter('room_id')):
                     if room_id in self.rooms:
                         self.shop_inventories[room_id] = [dict(i) for i in items]
+            
+            self.loot_tables = {row['id']: dict(row) for row in loot_table_rows or []}
+            if loot_entry_rows:
+                for table_id, entries in groupby(loot_entry_rows, key=itemgetter('loot_table_id')):
+                    if table_id in self.loot_tables:
+                        self.loot_table_entries[table_id] = [dict(e) for e in entries]
 
             for room in self.rooms.values():
                 instance_records = await self.db_manager.get_instances_in_room(room.dbid)
@@ -207,7 +218,6 @@ class World:
 
     def get_mob_template(self, template_id: int) -> Optional[Dict]:
         return self.mob_templates.get(template_id)
-
 
     # --- Active Character Management ---
     def add_active_character(self, character: Character):
@@ -526,4 +536,40 @@ class World:
             await self.db_manager.delete_item_instance(item.id)
         
         log.info(f"Cleaned up {len(items_to_delete)} decayed items from the world.")
+
+    async def generate_loot_for_container(self, container: Item, loot_table_id: int):
+        """Generates items and coinage from a loot table and places them in a container."""
+        entries = self.loot_table_entries.get(loot_table_id, [])
+        if not entries:
+            log.warning(f"Attempted to generate loot for container {container.id} from empty or non-existent loot table {loot_table_id}.")
+            return
+
+        generated_items = []
+        for entry in entries:
+            # Roll to see if this item/coin drop happens
+            if random.random() <= entry['drop_chance']:
+                # Handle Coinage
+                if entry['max_coinage'] > 0:
+                    coin_amount = random.randint(entry['min_coinage'], entry['max_coinage'])
+                    # We can't put actual coins in a container yet, so we'll log it for now.
+                    # A future system could create a "coin purse" item.
+                    log.info(f"Loot gen: rolled {coin_amount} coins for container {container.id}.")
+
+                # Handle Items
+                if item_template_id := entry.get('item_template_id'):
+                    quantity = random.randint(entry['min_quantity'], entry['max_quantity'])
+                    for _ in range(quantity):
+                        new_instance_data = await self.db_manager.create_item_instance(
+                            template_id=item_template_id,
+                            container_id=container.id
+                        )
+                        if new_instance_data:
+                            template = self.get_item_template(item_template_id)
+                            new_item = Item(new_instance_data, template)
+                            self._all_item_instances[new_item.id] = new_item
+                            container.contents[new_item.id] = new_item
+                            generated_items.append(new_item.name)
+        
+        if generated_items:
+            log.info(f"Generated loot in {container.name}: {', '.join(generated_items)}")
             

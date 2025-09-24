@@ -24,8 +24,11 @@ RACIAL_STAT_MODIFIERS: Dict[str, Dict[str, int]] = {
     "grak": {
         "might": 6,
         "intellect": -3
+    },
+    "kytynn": {
+        "agility": 6,       # +6 Agility
+        "might": -3         # -3 Might
     }
-    # Add other races later
 }
 
 def get_racial_modifiers(race_name: str) -> Dict[str, int]:

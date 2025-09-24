@@ -67,9 +67,18 @@ TRAIT_OPTIONS: Dict[str, Dict[str, List[str]]] = {
         "Eye Color": ["Black", "Dark Brown", "Muddy Hazel", "Dull Green", "Bloodshot", "Fiery Orange (Rare)"],
         "Nose Type": ["Broad", "Flat", "Snub", "Pig-like Snout", "Broken"],
         "Ear Shape": ["Thick", "Rounded", "Slightly Pointed", "Torn/Notched", "Cauliflower"],
-        # --- V V V Changed to Tusk Style V V V ---
         "Tusk Style": ["None", "Small Underbite Tusks", "Medium Lower Tusks", "Prominent Tusks (Lower)", "Large Protruding Tusks", "Broken Tusk(s)"],
-        # --- ^ ^ ^ ---
+    },
+    "kytynn": {
+        "Height": ["Slightly Short", "Lithe", "Average", "Gracefully Tall", "Tall"],
+        "Build": ["Dainty", "Slender", "Lithe", "Wiry", "Sleek", "Muscular"],
+        "Fur Pattern": ["Solid Color", "Tabby", "Spotted", "Marbled", "Ticked", "Colorpoint"],
+        "Fur Color": ["Black", "Gray", "Brown", "Tawny", "Ginger", "White", "Silver", "Calico"],
+        "Eye Color": ["Green", "Emerald", "Gold", "Amber", "Blue", "Peridot", "Copper"],
+        "Ear Shape": ["Standard", "Tufted", "Rounded", "Tall and Pointed", "Folded"],
+        "Tail Type": ["Long and Tufted", "Standard", "Fluffy", "Bobtail"],
+        "Nose Type": ["Pink", "Black", "Speckled", "Brown"],
+        "Head Shape": ["Round", "Wedge-shaped", "Square"],
     }
 }
 
@@ -81,6 +90,7 @@ DEFAULT_TRAITS: Dict[str, Dict[str, str]] = {
     "elf": { "Height": "Gracefully Tall", "Build": "Slender", "Skin Tone": "Fair", "Hair Style": "Long and flowing", "Hair Color": "Silver", "Eye Color": "Blue", "Nose Type": "Straight", "Ear Shape": "Long and Pointed", "Head Shape": "Oval", "Beard Style": "None" },
     "yan-tar": { "Height": "Average", "Build": "Solid", "Skin Pattern": "Smooth", "Shell Color": "Dark Green", "Eye Color": "Black", "Nose Type": "Beak-like", "Head Shape": "Rotund" },
     "grak": { "Height": "Towering", "Build": "Brawny", "Skin Tone": "Greyish", "Head Shape": "Blocky", "Hair Style": "Sparse Tufts", "Hair Color": "Black", "Eye Color": "Dark Brown", "Nose Type": "Flat", "Ear Shape": "Thick", "Tusk Style": "Small Underbite Tusks" },
+    "kytynn": { "Height": "Average", "Build": "Lithe", "Fur Pattern": "Tabby", "Fur Color": "Brown", "Eye Color": "Green", "Ear Shape": "Standard", "Tail Type": "Standard", "Nose Type": "Pink", "Head Shape": "Round" }
 }
 
 def get_trait_options(race_name: str) -> dict:

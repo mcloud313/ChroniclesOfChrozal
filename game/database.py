@@ -255,6 +255,7 @@ class DatabaseManager:
                     source_room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
                     direction TEXT NOT NULL, -- e.g., 'north', 'south'
                     destination_room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+                    details JSONB DEFAULT '{}'::jsonb, -- For locks, skill checks etc.
                     is_hidden BOOLEAN NOT NULL DEFAULT FALSE,
                     UNIQUE (source_room_id, direction)
                 )
@@ -346,6 +347,25 @@ class DatabaseManager:
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         UNIQUE (room_id, name)
                     )
+                """)
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS loot_tables (
+                                   id SERIAL PRIMARY KEY,
+                                   name TEXT UNIQUE NOT NULL,
+                                   description TEXT
+                                   )
+                """)
+                await conn.executre("""
+                                    CREATE TABLE IF NOT EXISTS loot_table_entries (
+                                    id SERIAL PRIMARY KEY,
+                                    loot_table_id INTEGER NOT NULL REFERENCES loot_tables(id) ON DELETE CASCADE,
+                                    item_template_id INTEGER REFERENCES item_templates(id) ON DELETE SET NULL,
+                                    min_coinage INTEGER DEFAULT 0,
+                                    max_coinage INTEGER DEFAULT 0,
+                                    drop_chance REAL NOT NULL DEFAULT 1.0,
+                                    min_quantity INTEGER NOT NULL DEFAULT 1,
+                                    max_quantity INTEGER NOT NULL DEFAULT 1
+                                    )
                 """)
 
         # --- Seed Essential Data ---

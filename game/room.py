@@ -38,6 +38,10 @@ class Room:
         spawners_data = db_data.get('spawners') or {}
         spawners_dict = json.loads(spawners_data) if isinstance(spawners_data, str) else spawners_data
         self.spawners: Dict[int, Dict[str, Any]] = {int(k): v for k, v in spawners_dict.items()}
+
+        buy_filter_data = db_data.get('shop_buy_filter')
+        self.shop_buy_filter = json.loads(buy_filter_data) if isinstance(buy_filter_data, str) else buy_filter_data
+        self.shop_sell_modifier: float = db_data.get('shop_sell_modifier', 0.5)
         
         # Runtime attributes
         self.characters: Set['Character'] = set()

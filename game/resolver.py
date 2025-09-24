@@ -588,6 +588,26 @@ async def apply_effect(caster: Character, target: Union[Character, Mob], effect_
         if isinstance(target, Character):
             target.stance = new_stance
 
+    if effect_details.get("is_shapechange"):
+        # Iterate over a copy of the items, as we may modify the dictionary
+        for effect_key, effect_data in list(target.effects.items()):
+            # Find the source ability for the existing effect
+            source_key = effect_data.get("source_ability_key")
+            if not source_key: continue
+            
+            source_ability = world.abilities.get(source_key)
+            if not source_ability: continue
+
+            # Check if the existing effect is also a shapechange
+            if source_ability.get("effect_details", {}).get("is_shapechange"):
+                # Remove the old shapechange effect
+                del target.effects[effect_key]
+                # Send the expiration message for the old form
+                old_messages = source_ability.get("messages", {})
+                if msg := old_messages.get("expire_msg_self"):
+                    if isinstance(target, Character):
+                        await target.send(msg)
+
     # --- Messaging ---
     caster_name = caster.name.capitalize()
     target_name = target.name.capitalize()
