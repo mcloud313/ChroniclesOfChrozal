@@ -138,6 +138,7 @@ class World:
                     template_data = self.get_item_template(record['template_id'])
                     if template_data:
                         item_obj = Item(dict(record), template_data)
+                        item_obj.room = room
                         room.item_instance_ids.append(item_obj.id)
                         self._all_item_instances[item_obj.id] = item_obj
                         

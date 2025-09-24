@@ -179,12 +179,13 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "effect_details": {"name": "MageArmorBuff", "type": "buff", "stat_affected": STAT_BARRIER_VALUE, "amount": 15, "duration": 180.0},
         "description": "Surrounds you with a shimmering field...",
         "messages": {
-            # --- ADDED THIS LINE ---
-            "caster_self_complete": "{WYou gesture and a shimmering magical barrier forms around you.{x",
-            "apply_msg_self": "{WAn shimmering barrier surrounds you!{x",
-            "apply_msg_room": "{W{caster_name} is suddenly surrounded by a shimmering barrier.{x",
-            "expire_msg_self": "{WThe shimmering barrier around you dissipates.{x",
-            "expire_msg_room": "{WThe shimmering barrier surrounding {target_name} dissipates.{x"
+            # --- THIS BLOCK IS FIXED ---
+            # Double the curly braces to escape them for the .format() method
+            "caster_self_complete": "{{W}}You gesture and a shimmering magical barrier forms around you.{{x}}",
+            "apply_msg_self": "{{W}}An shimmering barrier surrounds you!{{x}}",
+            "apply_msg_room": "{{W}}{caster_name} is suddenly surrounded by a shimmering barrier.{{x}}",
+            "expire_msg_self": "{{W}}The shimmering barrier around you dissipates.{{x}}",
+            "expire_msg_room": "{{W}}The shimmering barrier surrounding {target_name} dissipates.{{x}}"
         }
     },
     "chill touch": {

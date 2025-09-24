@@ -583,7 +583,7 @@ async def apply_effect(caster: Character, target: Union[Character, Mob], effect_
     target.effects[effect_name] = {
         "ends_at": time.monotonic() + duration,
         "amount": amount,
-        "stat": stat,
+        "stat_affected": stat, # Changed from "stat" to "stat_affected" for consistency
         "type": effect_details.get('type'),
         "caster_id": caster.dbid,
         "source_ability_key": ability_data.get("internal_name")
