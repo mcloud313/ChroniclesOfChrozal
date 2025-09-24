@@ -537,23 +537,27 @@ class World:
         
         log.info(f"Cleaned up {len(items_to_delete)} decayed items from the world.")
 
-    async def generate_loot_for_container(self, container: Item, loot_table_id: int):
-        """Generates items and coinage from a loot table and places them in a container."""
-        entries = self.loot_table_entries.get(loot_table_id, [])
+    async def generate_loot_for_container(self, container: Item, loot_table_id: int, character: Character):
+        """
+        Generates items and coinage from a loot table and places them in a container.
+        This version fetches data live from the database.
+        """
+        # Fetch loot table entries live from the database
+        entries = await self.db_manager.fetch_loot_table_entries(loot_table_id)
         if not entries:
             log.warning(f"Attempted to generate loot for container {container.id} from empty or non-existent loot table {loot_table_id}.")
             return
 
         generated_items = []
+        generated_coinage = 0
+
         for entry in entries:
             # Roll to see if this item/coin drop happens
             if random.random() <= entry['drop_chance']:
                 # Handle Coinage
                 if entry['max_coinage'] > 0:
                     coin_amount = random.randint(entry['min_coinage'], entry['max_coinage'])
-                    # We can't put actual coins in a container yet, so we'll log it for now.
-                    # A future system could create a "coin purse" item.
-                    log.info(f"Loot gen: rolled {coin_amount} coins for container {container.id}.")
+                    generated_coinage += coin_amount
 
                 # Handle Items
                 if item_template_id := entry.get('item_template_id'):
@@ -561,15 +565,23 @@ class World:
                     for _ in range(quantity):
                         new_instance_data = await self.db_manager.create_item_instance(
                             template_id=item_template_id,
-                            container_id=container.id
+                            container_id=container.id  # This places the item inside the container
                         )
                         if new_instance_data:
                             template = self.get_item_template(item_template_id)
                             new_item = Item(new_instance_data, template)
+                            # Add the new item to the world and container's in-memory state
                             self._all_item_instances[new_item.id] = new_item
                             container.contents[new_item.id] = new_item
                             generated_items.append(new_item.name)
         
+        # Add all generated coinage to the floor of the character's room and notify them.
+        if generated_coinage > 0 and character.location:
+            await character.location.add_coinage(generated_coinage, self)
+            await character.send(f"You find {utils.format_coinage(generated_coinage)} inside.")
+
         if generated_items:
             log.info(f"Generated loot in {container.name}: {', '.join(generated_items)}")
+            # You can optionally add a message to the player here as well.
+            await character.send(f"You also find: {', '.join(generated_items)}.")
             

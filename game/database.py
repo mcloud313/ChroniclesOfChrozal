@@ -52,15 +52,13 @@ class DatabaseManager:
         async with self.pool.acquire() as conn:
             return await conn.execute(query, *params)
     
-    async def fetch_one(self, query: str, *params) -> Optional[asyncpg.Record]:
-        """Executes a SELECT query and fetches the first result."""
-        if not self.pool: raise ConnectionError("Database pool not initialized.")
+    async def fetch_one_query(self, query: str, *params) -> Optional[asyncpg.Record]:
+        """Executes a query that is expected to return at most one row."""
         async with self.pool.acquire() as conn:
             return await conn.fetchrow(query, *params)
     
-    async def fetch_all(self, query: str, *params) -> List[asyncpg.Record]:
-        """Executes a SELECT query and fetches all results."""
-        if not self.pool: raise ConnectionError("Database pool not initialized.")
+    async def fetch_all_query(self, query: str, *params) -> List[asyncpg.Record]:
+        """Executes a query that returns multiple rows."""
         async with self.pool.acquire() as conn:
             return await conn.fetch(query, *params)
             
@@ -452,11 +450,20 @@ class DatabaseManager:
             RETURNING *;
         """
         try:
+            # This call will now work because fetch_one_query is defined above.
             record = await self.fetch_one_query(query, new_id, template_id, owner_char_id, room_id, container_id, stats_json)
             return dict(record) if record else None
         except Exception:
             log.exception("Database error while creating item instance for template %d", template_id)
             return None
+        
+    async def fetch_loot_table_entries(self, loot_table_id: int) -> List[Dict[str, Any]]:
+        """
+        Fetches all loot table entries associated with a given ID.
+        """
+        query = "SELECT * FROM mob_loot_table WHERE mob_template_id = $1"
+        records = await self.fetch_all_query(query, loot_table_id)
+        return [dict(record) for record in records]
     
     async def get_item_instance(self, instance_id: str) -> Optional[asyncpg.Record]:
         """Retrives a single item instance by its UUID."""
