@@ -123,7 +123,7 @@ class CreationHandler:
         self.state = CreationState.GET_RACE
 
     async def _handle_get_race(self):
-        races = await self.db_manager.fetch_all("SELECT id, name, description FROM races ORDER BY id")
+        races = await self.db_manager.fetch_all_query("SELECT id, name, description FROM races ORDER BY id")
         if not races:
             await self._send("Error loading races. Cannot continue creation.")
             self.state = CreationState.CANCELLED
@@ -147,7 +147,7 @@ class CreationHandler:
             await self._send("Invalid input. Please enter a number.")
 
     async def _handle_get_class(self):
-        classes = await self.db_manager.fetch_all("SELECT id, name, description FROM classes ORDER BY id")
+        classes = await self.db_manager.fetch_all_query("SELECT id, name, description FROM classes ORDER BY id")
         if not classes:
             await self._send("Error loading classes. Cannot continue creation.")
             self.state = CreationState.CANCELLED

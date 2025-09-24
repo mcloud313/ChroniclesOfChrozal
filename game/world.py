@@ -60,20 +60,20 @@ class World:
         
         try:
             results = await asyncio.gather(
-                self.db_manager.fetch_all("SELECT * FROM areas ORDER BY id"),
-                self.db_manager.fetch_all("SELECT * FROM races ORDER BY id"),
-                self.db_manager.fetch_all("SELECT * FROM classes ORDER BY id"),
-                self.db_manager.fetch_all("SELECT * FROM item_templates ORDER BY id"),
-                self.db_manager.fetch_all("SELECT * FROM mob_templates ORDER BY id"),
-                self.db_manager.fetch_all("SELECT * FROM mob_attacks ORDER BY mob_template_id"),
-                self.db_manager.fetch_all("SELECT * FROM mob_loot_table ORDER BY mob_template_id"),
-                self.db_manager.fetch_all("SELECT * FROM rooms ORDER BY id"),
-                self.db_manager.fetch_all("SELECT * FROM exits ORDER BY source_room_id"),
-                self.db_manager.fetch_all("SELECT * FROM shop_inventories ORDER BY room_id"),
-                self.db_manager.fetch_all("SELECT * FROM ability_templates"),
-                self.db_manager.fetch_all("SELECT * FROM damage_types"),
-                self.db_manager.fetch_all("SELECT * FROM loot_tables ORDER BY id"),
-                self.db_manager.fetch_all("SELECT * FROM loot_table_entries ORDER BY loot_table_id")
+                self.db_manager.fetch_all_query("SELECT * FROM areas ORDER BY id"),
+                self.db_manager.fetch_all_query("SELECT * FROM races ORDER BY id"),
+                self.db_manager.fetch_all_query("SELECT * FROM classes ORDER BY id"),
+                self.db_manager.fetch_all_query("SELECT * FROM item_templates ORDER BY id"),
+                self.db_manager.fetch_all_query("SELECT * FROM mob_templates ORDER BY id"),
+                self.db_manager.fetch_all_query("SELECT * FROM mob_attacks ORDER BY mob_template_id"),
+                self.db_manager.fetch_all_query("SELECT * FROM mob_loot_table ORDER BY mob_template_id"),
+                self.db_manager.fetch_all_query("SELECT * FROM rooms ORDER BY id"),
+                self.db_manager.fetch_all_query("SELECT * FROM exits ORDER BY source_room_id"),
+                self.db_manager.fetch_all_query("SELECT * FROM shop_inventories ORDER BY room_id"),
+                self.db_manager.fetch_all_query("SELECT * FROM ability_templates"),
+                self.db_manager.fetch_all_query("SELECT * FROM damage_types"),
+                self.db_manager.fetch_all_query("SELECT * FROM loot_tables ORDER BY id"),
+                self.db_manager.fetch_all_query("SELECT * FROM loot_table_entries ORDER BY loot_table_id")
             )
             (area_rows, race_rows, class_rows, item_rows, mob_rows, attack_rows,
              loot_rows, room_rows, exit_rows, shop_rows, ability_rows, damage_type_rows,
@@ -153,7 +153,7 @@ class World:
                         room.item_instance_ids.append(item_obj.id)
                         self._all_item_instances[item_obj.id] = item_obj
                         
-                object_rows = await self.db_manager.fetch_all("SELECT * FROM room_objects WHERE room_id = $1", room.dbid)
+                object_rows = await self.db_manager.fetch_all_query("SELECT * FROM room_objects WHERE room_id = $1", room.dbid)
                 room.objects = [dict(r) for r in object_rows]
                 
                 # Initial spawn of mobs at server startup

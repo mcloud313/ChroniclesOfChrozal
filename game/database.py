@@ -468,7 +468,7 @@ class DatabaseManager:
     async def get_item_instance(self, instance_id: str) -> Optional[asyncpg.Record]:
         """Retrives a single item instance by its UUID."""
         query = "SELECT * FROM item_instances WHERE id = $1"
-        return await self.fetch_one(query, instance_id)
+        return await self.fetch_one_query(query, instance_id)
     
     async def get_instances_in_room(self, room_id: int) -> List[asyncpg.Record]:
         """Fetches all item instances on the ground in a room."""
@@ -499,12 +499,12 @@ class DatabaseManager:
     # --- Creator Functions (for seeding and building) ---
     async def create_item_template(self, name: str, item_type: str, description: str, stats: dict, flags: list, damage_type: Optional[str]) -> Optional[int]:
         query = "INSERT INTO item_templates (name, type, description, stats, flags, damage_type) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
-        record = await self.fetch_one(query, name, item_type, description, json.dumps(stats), json.dumps(flags), damage_type)
+        record = await self.fetch_one_query(query, name, item_type, description, json.dumps(stats), json.dumps(flags), damage_type)
         return record['id'] if record else None
 
     async def create_mob_template(self, name: str, level: int, description: str, stats: dict, attacks: list, loot: dict, flags: list) -> Optional[int]:
         query = "INSERT INTO mob_templates (name, level, description, stats, attacks, loot, flags) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id"
-        record = await self.fetch_one(query, name, level, description, json.dumps(stats), json.dumps(attacks), json.dumps(loot), json.dumps(flags))
+        record = await self.fetch_one_query(query, name, level, description, json.dumps(stats), json.dumps(attacks), json.dumps(loot), json.dumps(flags))
         return record['id'] if record else None
 
     async def update_room_exits(self, room_id: int, exits: dict) -> str:
@@ -514,11 +514,11 @@ class DatabaseManager:
     # --- Player Functions ---
     async def load_player_account(self, username: str) -> Optional[asyncpg.Record]:
         query = "SELECT * FROM players WHERE lower(username) = lower($1)"
-        return await self.fetch_one(query, username)
+        return await self.fetch_one_query(query, username)
     
     async def create_player_account(self, username: str, hashed_password: str, email: str) -> Optional[int]:
         query = "INSERT INTO players (username, hashed_password, email, last_login) VALUES ($1, $2, $3, NOW()) RETURNING id"
-        record = await self.fetch_one(query, username, hashed_password, email)
+        record = await self.fetch_one_query(query, username, hashed_password, email)
         return record['id'] if record else None
 
     # --- Character Functions ---
@@ -528,7 +528,7 @@ class DatabaseManager:
     
     async def load_character_data(self, character_id: int) -> Optional[asyncpg.Record]:
         query = "SELECT * FROM characters WHERE id = $1"
-        return await self.fetch_one(query, character_id)
+        return await self.fetch_one_query(query, character_id)
     
     async def create_character(self, player_id: int, first_name: str, last_name: str, sex: str,
                            race_id: int, class_id: int, class_name: str, stats: dict,
@@ -656,7 +656,7 @@ class DatabaseManager:
     async def get_character_stats(self, character_id: int) -> Optional[asyncpg.Record]:
         """Fetches the core stats for a character."""
         query = "SELECT * FROM character_stats WHERE character_id = $1"
-        return await self.fetch_one(query, character_id)
+        return await self.fetch_one_query(query, character_id)
 
     async def get_character_skills(self, character_id: int) -> List[asyncpg.Record]:
         """Fetches all skills for a character."""
@@ -666,7 +666,7 @@ class DatabaseManager:
     async def get_character_equipment(self, character_id: int) -> Optional[asyncpg.Record]:
         """Fetches the equipment for a character."""
         query = "SELECT * FROM character_equipment WHERE character_id = $1"
-        return await self.fetch_one(query, character_id)
+        return await self.fetch_one_query(query, character_id)
     
     async def get_character_abilities(self, character_id: int) -> List[asyncpg.Record]:
         """Fetches all known abilities for a character."""
@@ -706,7 +706,7 @@ class DatabaseManager:
     async def get_character_balance(self, character_id: int) -> int:
         """Fetches the coin balance for a character's bank account."""
         query = "SELECT balance FROM bank_accounts WHERE character_id = $1"
-        record = await self.fetch_one(query, character_id)
+        record = await self.fetch_one_query(query, character_id)
         return record['balance'] if record else 0
     
     async def update_character_balance(self, character_id: int, amount_change: int) -> str:
@@ -751,7 +751,7 @@ class DatabaseManager:
             """
         # Add wildcards for partial name matching
         search_pattern = f"%{item_name}"
-        record = await self.fetch_one(query, character_id, search_pattern)
+        record = await self.fetch_one_query(query, character_id, search_pattern)
         return dict(record) if record else None
 
     async def unbank_item(self, character_id: int, item_instance_id: str) -> bool:

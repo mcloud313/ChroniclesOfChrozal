@@ -32,7 +32,7 @@ class TestCharacterCreation(unittest.IsolatedAsyncioTestCase):
         mock_player = Player(id=1, username="test", email="t@t.com", hashed_password="...")
         mock_world = Mock()
 
-        mock_db_manager.fetch_all.side_effect = [
+        mock_db_manager.fetch_all_query.side_effect = [
             [{'id': 1, 'name': 'Chrozalin', 'description': '...'}, {'id': 2, 'name': 'Dwarf', 'description': '...'}],
             [{'id': 1, 'name': 'Warrior', 'description': '...'}, {'id': 2, 'name': 'Mage', 'description': '...'}]
         ]
