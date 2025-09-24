@@ -114,6 +114,7 @@ async def cmd_get(character: 'Character', world: 'World', args_str: str) -> bool
         # Move item in memory
         character.location.item_instance_ids.remove(item_to_get.id)
         character._inventory_items[item_to_get.id] = item_to_get
+        item_to_get.room = None
         
         await character.send(f"You get {item_to_get.name}.")
         await character.location.broadcast(f"\r\n{character.name} gets {item_to_get.name}.\r\n", exclude={character})
@@ -132,6 +133,8 @@ async def cmd_drop(character: 'Character', world: 'World', args_str: str) -> boo
     
     # Move item in the database
     await world.db_manager.update_item_location(item_to_drop.id, room_id=character.location_id)
+
+    item_to_drop.room = character.location
 
     # Move item in memory
     del character._inventory_items[item_to_drop.id]
@@ -270,6 +273,8 @@ async def cmd_put(character: 'Character', world: 'World', args_str: str) -> bool
 
     #6. Perform the move in the database
     await world.db_manager.update_item_location(item_to_put.id, container_id=container.id)
+
+    item_to_put.room = None
 
     await character.send(f"You put the {item_to_put.name} in the {container.name}.")
     return True

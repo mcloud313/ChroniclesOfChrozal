@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Dict, Any, Optional, Set, List, Union, TYPE_CHECKING
+from room import Room
 
 if TYPE_CHECKING:
     from .character import Character

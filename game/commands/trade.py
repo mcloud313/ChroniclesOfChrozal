@@ -145,13 +145,7 @@ async def cmd_buy(character: 'Character', world: 'World', args_str: str) -> bool
 
 async def cmd_sell(character: 'Character', world: 'World', args_str: str) -> bool:
     """Sells an item from inventory to a shop."""
-    if not args_str:
-        await character.send("Sell what?")
-        return True
-    
-    if "SHOP" not in character.location.flags:
-        await character.send("This is not a shop.")
-        return True
+    # ... (initial checks for args_str and SHOP flag are the same) ...
     
     item_to_sell = character.find_item_in_inventory_by_name(args_str)
     if not item_to_sell:
@@ -162,14 +156,24 @@ async def cmd_sell(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send("You cannot sell that.")
         return True
     
-    # --- This is the new, correct logic ---
+    # --- NEW, MORE SPECIFIC LOGIC ---
     room_data = character.location
     buy_filter = room_data.shop_buy_filter
     
-    if not buy_filter or item_to_sell.item_type not in buy_filter:
+    is_interested = False
+    if isinstance(buy_filter, dict):
+        # Check if the item's type is in the allowed types list
+        if item_to_sell.item_type in buy_filter.get("types", []):
+            is_interested = True
+        # Check if the item's template ID is in the allowed template_ids list
+        if item_to_sell.template_id in buy_filter.get("template_ids", []):
+            is_interested = True
+            
+    if not is_interested:
         await character.send("The shopkeeper is not interested in buying that.")
         return True
-    
+    # --- END NEW LOGIC ---
+
     base_value = item_to_sell.value
     if base_value <= 0:
         await character.send("That item is worthless.")

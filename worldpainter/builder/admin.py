@@ -77,7 +77,8 @@ class RoomAdmin(admin.ModelAdmin):
         ('Shop Logic (Optional)', {
             'classes': ('collapse',),
             'fields': ('shop_buy_filter', 'shop_sell_modifier'),
-            'description': 'Set these fields if the room has the "SHOP" flag.'
+            # --- UPDATED HELP TEXT ---
+            'description': 'Set these fields if the room has the "SHOP" flag. <br><b>Filter Format:</b> {"types": ["WEAPON"], "template_ids": [8, 15]}'
         }),
         ('Treasure', {'fields': ('coinage',)})
     )

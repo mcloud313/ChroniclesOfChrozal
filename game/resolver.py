@@ -206,26 +206,7 @@ async def resolve_magical_attack(
     outcome_handler.apply_damage(target, final_damage)
 
     await outcome_handler.send_magical_attack_messages(caster, target, hit_result, damage_info, final_damage)
-
-    # --- Create verbose combat messages ---
-    hit_desc = "{rCRITICALLY HITS{x" if hit_result.is_crit else "hits"
-    roll_details = (
-        f"{{i[Roll: {hit_result.roll} + {rating_name}: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]"
-        f" -> Damage: {final_damage}{{x"
-    )
     
-    if isinstance(caster, Character):
-        await caster.send(f"Your {spell_data['name']} {hit_desc.lower()} {target_name} for {{y{final_damage}{{x damage! {roll_details}")
-
-    if isinstance(target, Character):
-        mit_details = f"{{i[Mitigation: {target.sds}(SDS) + {target.barrier_value}(Barrier)]{{x"
-        await target.send(f"{{R{caster_name}'s {spell_data['name']} {hit_desc} you for {{y{final_damage}{{x damage!{mit_details} ({int(target.hp)}/{int(target.max_hp)} HP)")
-
-    # --- 4. Send Room Message ---
-    if caster.location:
-        room_msg_hit_desc = "critically hits" if hit_result.is_crit else "hits"
-        await caster.location.broadcast(f"\r\n{caster_name}'s {spell_data['name']} {room_msg_hit_desc} {target_name}!\r\n", exclude={caster, target})
-
     # --- 5. Handle Post-Damage Effects ---
     if isinstance(target, Character) and target.status == "MEDITATING" and final_damage > 0:
         target.status = "ALIVE"
