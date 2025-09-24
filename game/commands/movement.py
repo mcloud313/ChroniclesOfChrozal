@@ -3,6 +3,7 @@
 Movement commands.
 """
 import logging
+import json
 from typing import TYPE_CHECKING, Optional, Dict, Any
 
 from .. import utils
@@ -196,7 +197,16 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
         return True
 
     # Extract the exit's 'details' dictionary. This contains all complex exit info.
-    exit_details = exit_data.get('details', {}) or {}
+    exit_details_raw = exit_data.get('details')
+    exit_details: Dict[str, Any] = {}
+    if isinstance(exit_details_raw, str) and exit_details_raw:
+        try:
+            exit_details = json.loads(exit_details_raw)
+        except json.JSONDecodeError:
+            log.warning("Room %d exit '%s' has malformed JSON in details: %s", 
+                        character.location.dbid, exit_name, exit_details_raw)
+    elif isinstance(exit_details_raw, dict):
+        exit_details = exit_details_raw
 
     # --- Handle Doors and Locks ---
     if exit_details.get("is_door"):

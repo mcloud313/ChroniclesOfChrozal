@@ -3,6 +3,7 @@
 Handles asynchronous database interactions using asyncpg for PostgreSQL.
 Encapsulates all database logic within the DatabaseManager class.
 """
+import uuid
 import logging
 import json
 import asyncio
@@ -437,15 +438,34 @@ class DatabaseManager:
         log.info("--- PostgreSQL schema check complete ---")
 
     # --- Item Instance Management Functions ---
-    async def create_item_instance(self, template_id: int, room_id: Optional[int] = None, owner_char_id: Optional[int] = None) -> Optional[Dict]:
-        """Creates a new item instance ina  room or a character's inventory."""
+    async def create_item_instance(
+        self, 
+        template_id: int, 
+        owner_char_id: int = None, 
+        room_id: int = None, 
+        container_id: str = None,
+        instance_stats: Optional[Dict[str, Any]] = None  # ✅ ADDED: Accept optional initial stats
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Creates a new, unique instance of an item in the database.
+        Returns a dictionary of the new instance's data or None on failure.
+        """
+        new_id = str(uuid.uuid4())
+        # ✅ MODIFIED: Convert the instance_stats dict to a JSON string for the DB
+        stats_json = json.dumps(instance_stats) if instance_stats else None
+
         query = """
-            INSERT INTO item_instances (template_id, room_id, owner_char_id)
-            VALUES ($1, $2, $3)
-            RETURNING id, template_id, room_id, owner_char_id, condition, instance_stats
-            """
-        record = await self.fetch_one(query, template_id, room_id, owner_char_id)
-        return dict(record) if record else None
+            INSERT INTO item_instances (id, template_id, owner_char_id, room_id, container_id, instance_stats)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id, template_id, owner_char_id, room_id, container_id, condition, instance_stats, last_moved_at
+        """
+        try:
+            # ✅ MODIFIED: Pass the new stats_json to the query
+            record = await self.fetch_query(query, new_id, template_id, owner_char_id, room_id, container_id, stats_json, single_row=True)
+            return dict(record) if record else None
+        except Exception:
+            log.exception("Database error while creating item instance for template %d", template_id)
+            return None
     
     async def get_item_instance(self, instance_id: str) -> Optional[asyncpg.Record]:
         """Retrives a single item instance by its UUID."""
