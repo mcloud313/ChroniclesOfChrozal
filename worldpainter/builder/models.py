@@ -65,7 +65,7 @@ class DamageTypes(models.Model):
 class ItemTemplates(models.Model):
     name = models.CharField(unique=True, max_length=100)
     description = models.TextField(blank=True, null=True)
-    type = models.CharField(max_length=20, choices=ITEM_TYPE_CHOICES, default=GENERAL)
+    item_type = models.CharField(max_length=50, choices=ITEM_TYPE_CHOICES, default=GENERAL)
     stats = models.JSONField(blank=True, null=True, help_text='Ex: {"might": 5, "value": 100, "damage_base": 10}')
     flags = models.JSONField(blank=True, null=True, help_text='Ex: ["GLOWS", "NO_DROP"]')
     damage_type = models.TextField(blank=True, null=True)
