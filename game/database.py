@@ -355,7 +355,7 @@ class DatabaseManager:
                                    description TEXT
                                    )
                 """)
-                await conn.executre("""
+                await conn.execute("""
                                     CREATE TABLE IF NOT EXISTS loot_table_entries (
                                     id SERIAL PRIMARY KEY,
                                     loot_table_id INTEGER NOT NULL REFERENCES loot_tables(id) ON DELETE CASCADE,
