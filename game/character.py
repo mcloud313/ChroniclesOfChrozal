@@ -122,13 +122,12 @@ class Character:
     def barrier_value(self) -> int:
         """Calculates total Barrier Value (BV) from active effects."""
         total_bv = 0
-        current_time = time.monotonic()
         for effect_data in self.effects.values():
-            if effect_data.get("stat") == ability_defs.STAT_BARRIER_VALUE:
-                if effect_data.get("ends_at", 0) > current_time:
-                    total_bv += effect_data.get("amount", 0)
+            # --- FIX: Look for the correct key, "stat_affected" ---
+            if effect_data.get("stat_affected") == ability_defs.STAT_BARRIER_VALUE:
+                total_bv += effect_data.get("amount", 0)
         return total_bv
-    
+
     @property
     def total_spell_failure(self) -> int:
         """Calculates total spell failure chance from all equipped items."""
