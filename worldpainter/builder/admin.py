@@ -130,7 +130,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
     form = ItemTemplateAdminForm
     list_display = ('name', 'id', 'item_type', 'get_value')
     search_fields = ('name', 'description')
-    list_filter = ('type',)
+    list_filter = ('item_type',)
 
     fieldsets = (
         ('Core Details', {
