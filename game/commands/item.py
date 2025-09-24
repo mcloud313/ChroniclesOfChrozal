@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from ..item import Item
 from .. import utils
 from ..definitions import item_defs
+from ..combat import outcome_handler
 
 
 if TYPE_CHECKING:
@@ -425,26 +426,42 @@ async def cmd_open(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send(f"The {container.name} is locked.")
         return True
     
-    # Check for traps
+    # --- IMPROVED TRAP LOGIC ---
+    # We check for a 'trap' key in the instance_stats, which holds the trap's details.
     if trap_data := container.instance_stats.get("trap"):
         if trap_data.get("is_active"):
             await character.send(f"{{RYou open the {container.name} and trigger a trap!{{x")
+            
+            # Apply damage or other effects from the trap
+            if damage := trap_data.get("damage", 0):
+                await outcome_handler.apply_damage(character, damage)
+                await character.send(f"{{rYou take {damage} damage!{{x")
+
+            # Deactivate the trap so it doesn't fire again
             trap_data["is_active"] = False
-            # Persist the trap being disarmed immediately
             await world.db_manager.update_item_instance_stats(container.id, container.instance_stats)
 
+            # If the character was killed by the trap, handle defeat
+            if not character.is_alive():
+                await outcome_handler.handle_defeat(character, character, world)
+
+            # Stop the command here. The trap interrupts the action.
+            return True
+    # --- END IMPROVED TRAP LOGIC ---
+
     container.instance_stats["is_open"] = True
-    # This call is unconditional, which is correct. It saves the state
-    # regardless of where the container was found.
     await world.db_manager.update_item_instance_stats(container.id, container.instance_stats)
     await character.send(f"You open the {container.name}.")
 
     # --- Generate Loot if it's the first time opening ---
     if not container.instance_stats.get("has_been_looted"):
         template = world.get_item_template(container.template_id)
+        # Note: 'loot_table_id' on an item template corresponds to a mob_template_id
+        # whose loot table we want to use.
         if template and (loot_table_id := template.get('loot_table_id')):
             log.info(f"Generating loot for container {container.id} from table {loot_table_id}.")
-            await world.generate_loot_for_container(container, loot_table_id)
+            await world.generate_loot_for_container(container, loot_table_id, character)
+            
             # Mark as looted so it doesn't generate again
             container.instance_stats["has_been_looted"] = True
             await world.db_manager.update_item_instance_stats(container.id, container.instance_stats)

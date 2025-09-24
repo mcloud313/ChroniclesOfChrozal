@@ -3,6 +3,7 @@
 Handles the consequences of combat actions: applying damage, durability,
 messaging, and processing defeat.
 """
+import json
 import random
 import asyncio
 import math
@@ -280,20 +281,37 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
                 await target_loc.add_coinage(dropped_coinage, world)
                 await target_loc.broadcast(f"\r\n{utils.format_coinage(dropped_coinage)} falls from {target_name}!\r\n")
 
-        # --- Item Drop Logic (Shared by Solo and Group) ---
+        # --- MODIFIED ITEM DROP LOGIC ---
         if dropped_item_ids and target_loc:
             dropped_item_names = []
             for template_id in dropped_item_ids:
-                # Create a new unique instance of the item in the room
-                instance_data = await world.db_manager.create_item_instance(template_id, room_id=target_loc.dbid)
+                template = world.get_item_template(template_id)
+                if not template:
+                    continue
+
+                # 1. Check the template for lock or trap details.
+                initial_stats = {}
+                if lock_details := template.get("lock_details"):
+                    # Important: Ensure we get a dict, not a string
+                    initial_stats.update(json.loads(lock_details) if isinstance(lock_details, str) else lock_details)
+                if trap_details := template.get("trap_details"):
+                    initial_stats.update(json.loads(trap_details) if isinstance(trap_details, str) else trap_details)
+
+                # 2. Create the item instance, passing the initial stats if they exist.
+                instance_data = await world.db_manager.create_item_instance(
+                    template_id=template_id,
+                    room_id=target_loc.dbid,
+                    instance_stats=initial_stats if initial_stats else None
+                )
+                
                 if instance_data:
-                    template = world.get_item_template(template_id)
                     item_obj = Item(instance_data, template)
 
-                    # Add the new item to the world's in memory state
+                    # 3. Add the new item to the world's in-memory state (your existing method)
                     world._all_item_instances[item_obj.id] = item_obj
                     target_loc.item_instance_ids.append(item_obj.id)
                     dropped_item_names.append(template['name'])
+            
             if dropped_item_names:
                 await target_loc.broadcast(f"\r\n{target_name}'s corpse drops: {', '.join(dropped_item_names)}.\r\n")
 

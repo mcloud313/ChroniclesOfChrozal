@@ -438,30 +438,21 @@ class DatabaseManager:
         log.info("--- PostgreSQL schema check complete ---")
 
     # --- Item Instance Management Functions ---
-    async def create_item_instance(
-        self, 
-        template_id: int, 
-        owner_char_id: int = None, 
-        room_id: int = None, 
-        container_id: str = None,
-        instance_stats: Optional[Dict[str, Any]] = None  # ✅ ADDED: Accept optional initial stats
-    ) -> Optional[Dict[str, Any]]:
+    async def create_item_instance(self, template_id: int, room_id: Optional[int] = None, owner_char_id: Optional[int] = None, container_id: Optional[str] = None, instance_stats: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """
         Creates a new, unique instance of an item in the database.
-        Returns a dictionary of the new instance's data or None on failure.
+        Returns the new instance's data as a dictionary.
         """
         new_id = str(uuid.uuid4())
-        # ✅ MODIFIED: Convert the instance_stats dict to a JSON string for the DB
         stats_json = json.dumps(instance_stats) if instance_stats else None
 
         query = """
-            INSERT INTO item_instances (id, template_id, owner_char_id, room_id, container_id, instance_stats)
+            INSERT INTO item_instances (id, item_template_id, owner_char_id, room_id, container_id, instance_stats)
             VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING id, template_id, owner_char_id, room_id, container_id, condition, instance_stats, last_moved_at
+            RETURNING *;
         """
         try:
-            # ✅ MODIFIED: Pass the new stats_json to the query
-            record = await self.fetch_query(query, new_id, template_id, owner_char_id, room_id, container_id, stats_json, single_row=True)
+            record = await self.fetch_one_query(query, new_id, template_id, owner_char_id, room_id, container_id, stats_json)
             return dict(record) if record else None
         except Exception:
             log.exception("Database error while creating item instance for template %d", template_id)
@@ -781,7 +772,7 @@ class DatabaseManager:
     
     async def update_item_instance_stats(self, instance_id: str, new_stats: dict) -> str:
         """Updates the instance_stats JSONB field for a specific item instance."""
-        query = "UPDATE item_instances SET instnace_stats = $1 WHERE id = $2"
+        query = "UPDATE item_instances SET instance_stats = $1 WHERE id = $2"
         return await self.execute_query(query, json.dumps(new_stats), instance_id)
     
 db_manager = DatabaseManager()
