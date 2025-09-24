@@ -128,7 +128,7 @@ class CharacterAdmin(admin.ModelAdmin):
 @admin.register(ItemTemplates)
 class ItemTemplateAdmin(admin.ModelAdmin):
     form = ItemTemplateAdminForm
-    list_display = ('name', 'id', 'type', 'get_value')
+    list_display = ('name', 'id', 'item_type', 'get_value')
     search_fields = ('name', 'description')
     list_filter = ('type',)
 
