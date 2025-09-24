@@ -6,10 +6,10 @@ from __future__ import annotations
 import json
 import logging
 from typing import Dict, Any, Optional, Set, List, Union, TYPE_CHECKING
-from room import Room
 
 if TYPE_CHECKING:
     from .character import Character
+    from .room import Room
 
 log = logging.getLogger(__name__)
 
