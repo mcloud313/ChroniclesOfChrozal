@@ -417,9 +417,9 @@ async def cmd_open(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send("Open what?")
         return True
 
-    container = character.find_item_in_inventory_by_name(args_str)
-    if not container:
-        container = character.location.get_item_instance_by_name(args_str, world)
+    container = (character.find_item_in_inventory_by_name(args_str) or
+                 character.find_item_in_equipment_by_name(args_str) or
+                 character.location.get_item_instance_by_name(args_str, world))
     
     if not container or container.capacity <= 0:
         await character.send("You can't open that.")
