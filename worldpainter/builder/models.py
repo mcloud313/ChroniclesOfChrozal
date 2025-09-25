@@ -163,6 +163,7 @@ class Exits(models.Model):
     direction = models.TextField()
     destination_room = models.ForeignKey(Rooms, on_delete=models.CASCADE, related_name='destination_exits')
     is_hidden = models.BooleanField()
+    details = models.JSONField(blank=True, null=True)
 
     def __str__(self):
         return f"From {self.source_room.id} -> {self.direction} -> {self.destination_room.id}"

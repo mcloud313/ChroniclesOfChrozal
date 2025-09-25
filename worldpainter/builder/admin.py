@@ -8,7 +8,7 @@ from .models import (
     Players, Characters, CharacterStats, CharacterSkills, CharacterEquipment,
     ItemInstances, ShopInventories, BankAccounts, AbilityTemplates
 )
-from .forms import RoomAdminForm, ItemTemplateAdminForm, MobTemplateAdminForm, AbilityTemplateAdminForm # Add new form
+from .forms import RoomAdminForm, ItemTemplateAdminForm, MobTemplateAdminForm, AbilityTemplateAdminForm, ExitAdminForm # Add new form
 
 # --- Helper Dictionaries ---
 OPPOSITE_DIRECTIONS = {
@@ -28,6 +28,7 @@ class ExitsInline(admin.TabularInline):
     fk_name = 'source_room'
     extra = 1
     verbose_name_plural = "Exits from this Room"
+    form = ExitAdminForm
 
 class RoomObjectsInline(admin.TabularInline):
     model = RoomObjects
