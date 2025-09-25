@@ -86,17 +86,20 @@ class World:
             for record in item_template_records:
                 stats_data = record.get('stats')
                 parsed_stats = {}
+                # Check if the stats data is a string that needs parsing.
                 if isinstance(stats_data, str) and stats_data:
                     try:
                         parsed_stats = json.loads(stats_data)
                     except json.JSONDecodeError:
                         log.warning("Malformed JSON in stats for item template %d", record['id'])
                 elif isinstance(stats_data, dict):
-                    parsed_stats = stats_data # Already a dict, use as-is
+                    parsed_stats = stats_data # It's already a dictionary, so we can use it directly.
                 
-                # Create a mutable copy of the record to modify it
+                # Create a new, mutable version of the record
                 mutable_record = dict(record)
+                # Replace the original stats string with our parsed dictionary
                 mutable_record['stats'] = parsed_stats
+                # Store the corrected blueprint in the world's item template library
                 self.item_templates[record['id']] = mutable_record
 
             self.mob_templates = {row['id']: dict(row) for row in mob_rows or []}

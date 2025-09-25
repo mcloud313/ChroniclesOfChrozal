@@ -199,6 +199,7 @@ class Character:
         self.resistances: Dict[str, float] = {} # Can be populated by effects/items
         self.casting_info: Optional[Dict[str, Any]] = None
         self.pending_give_offer: Optional[Dict[str, Any]] = None
+        self.is_dirty: bool = True
         self.login_timestamp: Optional[float] = None
         self.death_timer_ends_at: Optional[float] = None
         self.roundtime: float = 0.0
