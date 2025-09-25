@@ -72,7 +72,14 @@ class ItemTemplates(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    loot_table = models.ForeignKey('MobLootTable', models.DO_NOTHING, blank=True, null=True, db_column='loot_table_id', help_text="If this item is a container, which loot table should be used to populate it the first time it's opened?")
+    loot_table = models.ForeignKey(
+        'MobTemplates',  # <-- This is the corrected model name
+        models.DO_NOTHING,
+        blank=True,
+        null=True,
+        db_column='loot_table_id',
+        help_text="If this item is a container, which mob's loot table should be used to populate it?"
+    )
     lock_details = models.JSONField(blank=True, null=True, help_text="JSON defining lock properties, e.g., {\"is_locked\": true, \"lockpick_dc\": 25, \"key_name\": \"a rusty key\"}")
     trap_details = models.JSONField(blank=True, null=True, help_text="JSON defining trap properties, e.g., {\"is_active\": true, \"disarm_dc\": 20, \"perception_dc\": 18}")
 
