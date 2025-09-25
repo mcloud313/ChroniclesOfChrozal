@@ -69,8 +69,14 @@ async def resolve_physical_attack(
     if not target.can_see() and attacker.can_see():
         hit_modifier += 4 # A +4 bonus if you can see a blind target
 
+    use_rar = False
+    if isinstance(attacker, Mob) and isinstance(attack_source, dict):
+        # We'll use the attack_type 'ranged' to signify a RAR attack for mobs.
+        if attack_source.get("attack_type") == "ranged":
+            use_rar = True
+
     # ---Resolve Hit/Miss ---
-    hit_result = hit_resolver.check_physical_hit(attacker, target, hit_modifier=hit_modifier)
+    hit_result = hit_resolver.check_physical_hit(attacker, target, use_rar=use_rar, hit_modifier=hit_modifier)
     rt_penalty = attacker.total_av * 0.05 if isinstance(attacker, Character) else 0.0
     
     if not hit_result.is_hit:

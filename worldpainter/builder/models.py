@@ -238,6 +238,7 @@ class MobAttacks(models.Model):
     damage_rng = models.IntegerField(blank=True, null=True)
     speed = models.FloatField(blank=True, null=True)
     attack_type = models.TextField(blank=True, null=True)
+    effect_details = models.JSONField(blank=True, null=True, help_text='Ex: {"school": "Arcane"}')
 
     def __str__(self):
         return f"{self.name} ({self.mob_template.name})"
