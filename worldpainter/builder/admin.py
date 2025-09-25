@@ -45,7 +45,6 @@ class MobLootTableInline(admin.TabularInline):
 class CharacterStatsInline(admin.StackedInline):
     model = CharacterStats
     can_delete = False
-    readonly_fields = [f.name for f in CharacterStats._meta.get_fields() if f.name != 'character']
 
 class CharacterSkillsInline(admin.TabularInline):
     model = CharacterSkills
