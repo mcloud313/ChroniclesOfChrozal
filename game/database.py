@@ -651,7 +651,70 @@ class DatabaseManager:
         )
         return await self.execute_query(query, *params)
 
+    async def save_character_full(self, char_id: int, core_data: dict, stats: dict, skills: dict, equipment: dict, abilities: Set[str]) -> bool:
+        """
+        Saves all components of a character's state in a single, atomic transaction.
+        Returns True on success, False on failure.
+        """
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                try:
+                    # 1. Save Core Data
+                    if core_data:
+                        set_clauses = [f"{key} = ${i+1}" for i, key in enumerate(core_data.keys())]
+                        params = list(core_data.values())
+                        params.append(char_id)
+                        query = f"UPDATE characters SET {', '.join(set_clauses)}, last_saved = NOW() WHERE id = ${len(params)}"
+                        await conn.execute(query, *params)
 
+                    # 2. Save Stats (Upsert)
+                    if stats:
+                        stats_query = """
+                            INSERT INTO character_stats (character_id, might, vitality, agility, intellect, aura, persona)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                            ON CONFLICT (character_id) DO UPDATE SET
+                                might = EXCLUDED.might, vitality = EXCLUDED.vitality, agility = EXCLUDED.agility,
+                                intellect = EXCLUDED.intellect, aura = EXCLUDED.aura, persona = EXCLUDED.persona;
+                        """
+                        await conn.execute(stats_query, char_id, stats.get('might', 10), stats.get('vitality', 10),
+                                           stats.get('agility', 10), stats.get('intellect', 10), stats.get('aura', 10),
+                                           stats.get('persona', 10))
+
+                    # 3. Save Skills (Delete-then-Insert)
+                    if skills is not None: # Allow saving an empty skill set
+                        await conn.execute("DELETE FROM character_skills WHERE character_id = $1", char_id)
+                        if skills:
+                            skill_records = [(char_id, name, rank) for name, rank in skills.items()]
+                            await conn.copy_records_to_table('character_skills',
+                                                             columns=['character_id', 'skill_name', 'rank'],
+                                                             records=skill_records)
+
+                    # 4. Save Equipment (Upsert)
+                    if equipment:
+                        equip_query = """
+                            INSERT INTO character_equipment (character_id, head, torso, legs, feet, hands, main_hand, off_hand)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                            ON CONFLICT (character_id) DO UPDATE SET
+                                head = EXCLUDED.head, torso = EXCLUDED.torso, legs = EXCLUDED.legs, feet = EXCLUDED.feet,
+                                hands = EXCLUDED.hands, main_hand = EXCLUDED.main_hand, off_hand = EXCLUDED.off_hand;
+                        """
+                        await conn.execute(equip_query, char_id, equipment.get('head'), equipment.get('torso'),
+                                           equipment.get('legs'), equipment.get('feet'), equipment.get('hands'),
+                                           equipment.get('main_hand'), equipment.get('off_hand'))
+                    
+                    # 5. Save Abilities (Delete-then-Insert)
+                    if abilities is not None:
+                        await conn.execute("DELETE FROM character_abilities WHERE character_id = $1", char_id)
+                        if abilities:
+                            ability_records = [(char_id, name) for name in abilities]
+                            await conn.copy_records_to_table('character_abilities',
+                                                             columns=['character_id', 'ability_internal_name'],
+                                                             records=ability_records)
+                    return True
+                except Exception:
+                    log.exception(f"Transaction failed for saving character {char_id}. Rolling back.")
+                    # The transaction will automatically roll back on exception
+                    return False
     
     async def get_character_stats(self, character_id: int) -> Optional[asyncpg.Record]:
         """Fetches the core stats for a character."""
