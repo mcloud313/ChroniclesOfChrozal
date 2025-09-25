@@ -6,7 +6,7 @@ from .models import (
     Areas, Races, Classes, DamageTypes, ItemTemplates, MobTemplates,
     Rooms, Exits, RoomObjects, MobAttacks, MobLootTable,
     Players, Characters, CharacterStats, CharacterSkills, CharacterEquipment,
-    ItemInstances, ShopInventories, BankAccounts, AbilityTemplates
+    ItemInstances, ShopInventories, BankAccounts, AbilityTemplates, AmbientScripts
 )
 from .forms import RoomAdminForm, ItemTemplateAdminForm, MobTemplateAdminForm, AbilityTemplateAdminForm, ExitAdminForm # Add new form
 
@@ -100,6 +100,18 @@ class RoomAdmin(admin.ModelAdmin):
                         destination_room=exit_instance.source_room,
                         is_hidden=False
                     )
+
+@admin.register(AmbientScripts)
+class AmbientScriptsAdmin(admin.ModelAdmin):
+    list_display = ('get_short_script', 'area', 'room')
+    list_filter = ('area')
+    search_fields = ('script_text',)
+
+    @admin.display(description='Script Text')
+    def get_short_script(self, obj):
+        if len(obj.script_text) > 80:
+            return f"{obj.script_text[:80]}..."
+        return obj.script_text
 
 @admin.register(MobTemplates)
 class MobTemplateAdmin(admin.ModelAdmin):
@@ -210,4 +222,5 @@ admin.site.register(DamageTypes)
 admin.site.register(ItemInstances)
 admin.site.register(ShopInventories)
 admin.site.register(BankAccounts)
+admin.site.register(AmbientScripts)
 # We don't register RoomObjects here because it's handled by an Inline

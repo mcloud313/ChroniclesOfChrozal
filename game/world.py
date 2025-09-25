@@ -51,6 +51,7 @@ class World:
         self._last_decay_check_time = time.monotonic()
         self.loot_tables: Dict [int, Dict] = {}
         self.loot_table_entries: Dict[int, List[Dict]] = {}
+        self.ambient_scripts: List[Dict] = []
 
     async def build(self):
         """
@@ -73,11 +74,12 @@ class World:
                 self.db_manager.fetch_all_query("SELECT * FROM ability_templates"),
                 self.db_manager.fetch_all_query("SELECT * FROM damage_types"),
                 self.db_manager.fetch_all_query("SELECT * FROM loot_tables ORDER BY id"),
-                self.db_manager.fetch_all_query("SELECT * FROM loot_table_entries ORDER BY loot_table_id")
+                self.db_manager.fetch_all_query("SELECT * FROM loot_table_entries ORDER BY loot_table_id"),
+                self.db_manager.fetch_all_query("SELECT * FROM ambient_scripts")
             )
             (area_rows, race_rows, class_rows, item_template_records, mob_rows, attack_rows,
              loot_rows, room_rows, exit_rows, shop_rows, ability_rows, damage_type_rows,
-             loot_table_rows, loot_entry_rows) = results
+             loot_table_rows, loot_entry_rows, scripts_rows) = results
 
             self.areas = {row['id']: dict(row) for row in area_rows or []}
             self.races = {row['id']: dict(row) for row in race_rows or []}
@@ -161,6 +163,8 @@ class World:
                 for table_id, entries in groupby(loot_entry_rows, key=itemgetter('loot_table_id')):
                     if table_id in self.loot_tables:
                         self.loot_table_entries[table_id] = [dict(e) for e in entries]
+
+            self.ambient_scripts = [dict(row) for row in scripts_rows or []]  
 
             for room in self.rooms.values():
                 instance_records = await self.db_manager.get_instances_in_room(room.dbid)
@@ -272,6 +276,7 @@ class World:
         ticker.subscribe(self.update_stealth_checks)
         ticker.subscribe(self.update_room_effects)
         ticker.subscribe(self.update_item_decay)
+        ticker.subscribe(self.update_ambient_scripts)
 
     # --- Ticker Callback Functions ---
     async def update_roundtimes(self, dt: float):
@@ -603,4 +608,30 @@ class World:
             log.info(f"Generated loot in {container.name}: {', '.join(generated_items)}")
             # You can optionally add a message to the player here as well.
             await character.send(f"You also find: {', '.join(generated_items)}.")
-            
+
+    async def update_ambient_scripts(self, dt: float):
+        """Ticker: Periodically shows immersive messages to players."""
+        # Run this check infrequently (10% chance per second)
+        if random.random() > 0.1:
+            return
+
+        active_chars = self.get_active_characters_list()
+        if not active_chars:
+            return
+
+        for char in active_chars:
+            if not char.location:
+                continue
+
+            # Find all scripts relevant to the character's current location
+            possible_scripts = [
+                script for script in self.ambient_scripts
+                if (script['room_id'] == char.location.dbid or
+                    script['area_id'] == char.location.area_id)
+            ]
+
+            if possible_scripts:
+                # Pick one script at random and send it
+                chosen_script = random.choice(possible_scripts)
+                # The {i} code is a common MUD convention for gray/italic text
+                await char.send(f"{{i{chosen_script['script_text']}{{x")    
