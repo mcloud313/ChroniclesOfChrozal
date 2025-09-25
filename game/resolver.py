@@ -63,8 +63,14 @@ async def resolve_physical_attack(
     rt_penalty = attacker.total_av * 0.05 if isinstance(attacker, Character) else 0.0
     attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
 
+    hit_modifier = 0
+    if not attacker.can_see():
+        hit_modifier -= 4 # A -4 penalty on a d20 roll (20% reduced chance)
+    if not target.can_see() and attacker.can_see():
+        hit_modifier += 4 # A +4 bonus if you can see a blind target
+
     # ---Resolve Hit/Miss ---
-    hit_result = hit_resolver.check_physical_hit(attacker, target)
+    hit_result = hit_resolver.check_physical_hit(attacker, target, hit_modifier=hit_modifier)
     rt_penalty = attacker.total_av * 0.05 if isinstance(attacker, Character) else 0.0
     
     if not hit_result.is_hit:
@@ -139,8 +145,14 @@ async def resolve_ranged_attack(
     rt_penalty = attacker.total_av * 0.05 if isinstance(attacker, Character) else 0.0
     attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
 
+    hit_modifier = 0
+    if not attacker.can_see():
+        hit_modifier -= 8 # A -8 penalty on a d20 roll (40% reduced chance)
+    if not target.can_see() and attacker.can_see():
+        hit_modifier += 4 # Same bonus applies
+
     # --- Resolve Hit/Miss (using RAR instead of MAR) ---
-    hit_result = hit_resolver.check_physical_hit(attacker, target, use_rar=True) # We will add this flag
+    hit_result = hit_resolver.check_physical_hit(attacker, target, use_rar=True, hit_modifier=hit_modifier)
 
     if not hit_result.is_hit:
         roll_details = f"{{i[Roll: {hit_result.roll} + RAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]{{x"

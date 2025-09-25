@@ -2,6 +2,7 @@
 """
 Movement commands.
 """
+import random
 import logging
 import json
 from typing import TYPE_CHECKING, Optional, Dict, Any
@@ -36,6 +37,9 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
     base_rt = 1.0
     leader_penalty = character.total_av * 0.05
     move_rt = base_rt + leader_penalty + character.slow_penalty
+
+    if "ROUGH_TERRAIN" in current_room.flags:
+        move_rt *= 2
     
     final_rt = move_rt
     if is_group_move:
@@ -142,6 +146,15 @@ async def cmd_move(character: 'Character', world: 'World', args_str: str, *, dir
     if character.roundtime > 0:
         await character.send(f"You are still recovering for {character.roundtime:.1f} seconds.")
         return True
+    
+    if not character.can_see():
+        if random.random() < 0.25: # 25% chance to trip and fail
+            await character.send("{rYou stumble in the darkness and fall!{x}")
+            await combat_logic.apply_damage(character, 3) # Apply 3 damage
+            character.roundtime = 2.0
+            if not character.is_alive():
+                await combat_logic.handle_defeat(character, character, world)
+            return True # Stop movement
 
     exit_data = character.location.exits.get(direction.lower())
 
@@ -175,6 +188,15 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
     if character.roundtime > 0:
         await character.send(f"You are still recovering for {character.roundtime:.1f} seconds.")
         return True
+    
+    if not character.can_see():
+        if random.random() < 0.25: # 25% chance to trip and fail
+            await character.send("{rYou stumble in the darkness and fall!{x}")
+            await combat_logic.apply_damage(character, 3) # Apply 3 damage
+            character.roundtime = 2.0
+            if not character.is_alive():
+                await combat_logic.handle_defeat(character, character, world)
+            return True # Stop movement
 
     exit_name = args_str.strip().lower()
     if not exit_name:

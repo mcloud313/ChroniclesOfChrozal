@@ -166,6 +166,22 @@ class Mob:
             return None
         return random.choice(self.attacks)
 
+    def can_see(self) -> bool:
+        """Determines if the mob can see in its current room."""
+        if not self.location:
+            return False
+        # Mobs with INFRAVISION can always see in the dark
+        if self.has_flag("INFRAVISION"):
+            return True
+        # If the room isn't dark, you can see.
+        if "DARK" not in self.location.flags:
+            return True
+        # If it is dark, check if any players in the room have a light
+        for char in self.location.characters:
+            if char.is_holding_light_source():
+                return True
+        return False
+
     def die(self):
         """Handles mob death."""
         log.info("MOB DEATH: %s (Instance: %d) has died.", self.name.capitalize(), self.instance_id)

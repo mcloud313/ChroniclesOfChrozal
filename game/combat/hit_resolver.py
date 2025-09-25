@@ -19,7 +19,7 @@ class HitResult:
     attacker_rating: int
     target_dv: int
 
-def check_physical_hit(attacker: Union[Character, Mob], target: Union[Character, Mob], use_rar: bool = False) -> HitResult:
+def check_physical_hit(attacker: Union[Character, Mob], target: Union[Character, Mob], use_rar: bool = False, hit_modifier: int = 0) -> HitResult:
     """
     Performs a physical hit check (d20 + MAR vs DV).
 
@@ -46,17 +46,19 @@ def check_physical_hit(attacker: Union[Character, Mob], target: Union[Character,
 
     target_dv = target.dv
     roll = random.randint(1, 20)
+    modified_roll = roll + hit_modifier
 
-    is_crit = (roll == 20)
-    is_fumble = (roll == 1)
-
-    # An attack hits if it's a cirtical or if it's not a fumble and the check beats the dv.
-    is_hit = is_crit or (not is_fumble and (attacker_rating + roll) >= target_dv)
+    if modified_roll <= 1:
+        is_hit, is_crit = False, False  # Critical miss
+    elif modified_roll >= 20:
+        is_hit, is_crit = True, True   # Critical hit
+    else:
+        is_hit = (modified_roll + attacker_rating) > target_dv
+        is_crit = False
 
     return HitResult(
         is_hit=is_hit,
         is_crit=is_crit,
-        is_fumble=is_fumble,
         roll=roll,
         attacker_rating=attacker_rating,
         target_dv=target_dv

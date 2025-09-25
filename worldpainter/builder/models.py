@@ -166,6 +166,29 @@ class Exits(models.Model):
         unique_together = (('source_room', 'direction'),)
         verbose_name_plural = "Exits"
 
+class AmbientScripts(models.Model):
+    """Scripts that are displayed to players based on their location."""
+    area = models.ForeignKey(Areas, models.SET_NULL, blank=True, null=True,
+                             help_text="If set, this script can appear in any room within this area.")
+    room = models.ForeignKey(Rooms, models.SET_NULL, blank=True, null=True,
+                             help_text="If set, this script will only appear in this specific room.")
+    script_text = models.TextField(help_text="The text to be displayed to the player. e.g., 'A floorboard creaks in the distance.'")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        location = "Global"
+        if self.area:
+            location = f"Area: {self.area.name}"
+        elif self.room:
+            location = f"Room: {self.room.name} ({self.room.id})"
+        return f"'{self.script_text[:50]}...' ({location})"
+
+    class Meta:
+        managed = False
+        db_table = 'ambient_scripts'
+        verbose_name_plural = "Ambient Scripts"
+
+
 class RoomObjects(models.Model):
     room = models.ForeignKey(Rooms, on_delete=models.CASCADE, related_name='objects')
     name = models.TextField()

@@ -234,7 +234,7 @@ class Character:
             self.world.db_manager.get_instances_for_character(self.dbid)
             
         )
-        stats_record, skills_records, ability_records, equipment_record, instance_records = results
+        stats_record, skills_records, ability_set, equipment_record, instance_records = results
 
         # Populate stats from the character_stats table
         if stats_record:
@@ -245,8 +245,7 @@ class Character:
         if skills_records:
             self.skills = {record['skill_name']: record['rank'] for record in skills_records}
 
-        if ability_records:
-            self.known_abilities = {record['ability_internal_name'] for record in ability_records}
+        self.known_abilities = ability_set if ability_set else set()
 
         # --- Item and Equipment Loading ---
         all_owned_items: Dict[str, Item] = {}
