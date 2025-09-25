@@ -75,14 +75,30 @@ class World:
                 self.db_manager.fetch_all_query("SELECT * FROM loot_tables ORDER BY id"),
                 self.db_manager.fetch_all_query("SELECT * FROM loot_table_entries ORDER BY loot_table_id")
             )
-            (area_rows, race_rows, class_rows, item_rows, mob_rows, attack_rows,
+            (area_rows, race_rows, class_rows, item_template_records, mob_rows, attack_rows,
              loot_rows, room_rows, exit_rows, shop_rows, ability_rows, damage_type_rows,
              loot_table_rows, loot_entry_rows) = results
 
             self.areas = {row['id']: dict(row) for row in area_rows or []}
             self.races = {row['id']: dict(row) for row in race_rows or []}
             self.classes = {row['id']: dict(row) for row in class_rows or []}
-            self.item_templates = {row['id']: dict(row) for row in item_rows or []}
+
+            for record in item_template_records:
+                stats_data = record.get('stats')
+                parsed_stats = {}
+                if isinstance(stats_data, str) and stats_data:
+                    try:
+                        parsed_stats = json.loads(stats_data)
+                    except json.JSONDecodeError:
+                        log.warning("Malformed JSON in stats for item template %d", record['id'])
+                elif isinstance(stats_data, dict):
+                    parsed_stats = stats_data # Already a dict, use as-is
+                
+                # Create a mutable copy of the record to modify it
+                mutable_record = dict(record)
+                mutable_record['stats'] = parsed_stats
+                self.item_templates[record['id']] = mutable_record
+
             self.mob_templates = {row['id']: dict(row) for row in mob_rows or []}
             self.abilities = {row['internal_name']: dict(row) for row in ability_rows or []}
 

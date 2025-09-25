@@ -282,7 +282,11 @@ class Character:
             log.warning("Connection lost for %s during write.", self.name)
 
     async def save(self):
-        """Gathers character data and saves it to the normalized database tables."""
+        """Gathers all character data and saves it to the database if changes were made."""
+        # ✅ FIX: Add the is_dirty check to your complete save method.
+        if not self.is_dirty:
+            return
+
         if self.login_timestamp:
             session_duration = int(time.monotonic() - self.login_timestamp)
             if session_duration > 0:
@@ -290,50 +294,49 @@ class Character:
             self.login_timestamp = time.monotonic()
 
         core_data = {
-            "location_id": self.location_id,
-            "hp": self.hp,
-            "max_hp": self.max_hp, # <-- ADD THIS LINE
-            "essence": self.essence,
-            "max_essence": self.max_essence, # <-- ADD THIS LINE
-            "xp_pool": self.xp_pool,
-            "xp_total": self.xp_total,
-            "level": self.level,
+            "location_id": self.location_id, "hp": self.hp, "max_hp": self.max_hp,
+            "essence": self.essence, "max_essence": self.max_essence, "xp_pool": self.xp_pool,
+            "xp_total": self.xp_total, "level": self.level,
             "unspent_skill_points": self.unspent_skill_points,
             "unspent_attribute_points": self.unspent_attribute_points,
-            "status": self.status,
-            "stance": self.stance,
-            "coinage": self.coinage,
+            "status": self.status, "stance": self.stance, "coinage": self.coinage,
             "total_playtime_seconds": self.total_playtime_seconds
         }
-
         equipment_data = {slot.lower(): (item.id if item else None) for slot, item in self._equipped_items.items()}
 
         try:
-            # FIX: Save core data first, then related data sequentially.
-            # This is safer than running all saves in parallel.
+            log.info(f"Saving character state for {self.name} (ID: {self.dbid})")
+            # Your sequential save logic is safer than running in parallel. We'll keep it.
             await self.world.db_manager.save_character_core(self.dbid, core_data)
             await self.world.db_manager.save_character_stats(self.dbid, self.stats)
             await self.world.db_manager.save_character_skills(self.dbid, self.skills)
             await self.world.db_manager.save_character_equipment(self.dbid, equipment_data)
+            # ✅ FIX: The ability save call is correctly part of this single, atomic transaction.
             await self.world.db_manager.save_character_abilities(self.dbid, self.known_abilities)
 
+            self.is_dirty = False # Reset the dirty flag after a successful save
             log.info("Successfully saved character %s (ID: %s).", self.name, self.dbid)
         except Exception:
             log.exception("Unexpected error saving character %s (ID: %s):", self.name, self.dbid)
 
-    async def check_and_learn_new_abilities(self, world: 'World'):
+    async def check_and_learn_new_abilities(self):
         """Checks for and learns new abilities upon leveling up."""
-        char_class_name = world.get_class_name(self.class_id).lower()
+        char_class_name = self.world.get_class_name(self.class_id).lower()
         
-        for key, ability in world.abilities.items():
-            # Check if the character is the right class and level, and doesn't already know it
-            if (self.level == ability['level_req'] and
+        new_abilities_learned = False
+        # Use world.abilities which is the pre-loaded dictionary of all ability templates
+        for key, ability in self.world.abilities.items():
+            # Character learns any ability they meet the level for that they don't already know.
+            if (self.level >= ability['level_req'] and
                     char_class_name in ability['class_req'] and
                     key not in self.known_abilities):
                 
                 self.known_abilities.add(key)
                 await self.send(f"{{gYou have learned a new {ability['ability_type'].lower()}: {ability['name']}!{{x")
                 log.info(f"Character {self.name} learned new ability: {ability['name']}")
+                new_abilities_learned = True
+        if new_abilities_learned:
+            self.is_dirty = True
 
 
     def respawn(self):

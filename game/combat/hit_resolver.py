@@ -14,7 +14,6 @@ class HitResult:
     """A structured result for a hit check."""
     is_hit: bool
     is_crit: bool
-    is_fumble: bool
     roll: int
     attacker_rating: int
     target_dv: int
@@ -86,7 +85,6 @@ def check_magical_hit(caster: Union[Character, Mob], target: Union[Character, Mo
     return HitResult(
         is_hit=is_hit,
         is_crit=is_crit,
-        is_fumble=is_fumble,
         roll=roll,
         attacker_rating=attacker_rating,
         target_dv=target_dv
