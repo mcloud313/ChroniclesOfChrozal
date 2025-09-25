@@ -134,7 +134,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('Core Details', {
-            'fields': ('name', 'description', 'type', 'damage_type', 'flags')
+            'fields': ('name', 'description', 'item_type', 'damage_type', 'flags')
         }),
         ('Core Stats', {
             'fields': ('value', 'weight')
