@@ -50,12 +50,10 @@ class Item:
 
         # --- Shared Template Data ---
         self._template = template_data
-        self._template_stats: Dict[str, Any] = {}
-        try:
-            # Pre-parse the stats JSON from the template for easier access via properties.
-            self._template_stats = json.loads(self._template.get('stats', '{}') or '{}')
-        except (json.JSONDecodeError, TypeError):
-            log.warning("Could not parse stats JSON for item template %s", self._template.get('id'))
+        self._template_stats: Dict[str, Any] = self._template.get('stats', {})
+        if not isinstance(self._template_stats, dict):
+            log.warning("Item template %s has non-dict stats: %s", self._template.get('id'), type(self._template_stats))
+            self._template_stats = {} # Default to empty dict to prevent errors
 
     def get_total_contents_weight(self) -> int:
         """Calculates the total weight of all items inside this container."""
@@ -96,7 +94,6 @@ class Item:
     @property
     def flags(self) -> Set[str]:
         flags_data = self._template.get('flags')
-        # FIX: Check for both string and list/set types for flags
         if isinstance(flags_data, str):
             try:
                 return set(json.loads(flags_data or '[]'))
