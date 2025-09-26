@@ -57,6 +57,12 @@ class CharacterEquipmentInline(admin.StackedInline):
     can_delete = False
     readonly_fields = [f.name for f in CharacterEquipment._meta.get_fields() if f.name != 'character']
 
+class LootTableEntriesInline(admin.TabularInline):
+    model = LootTableEntries
+    extra = 1
+    verbose_name_plural = "Loot Entries"
+    # Optional: Autocomplete for easier item selection
+    autocomplete_fields = ['item_template']
 
 # --- Main Model Admin Configurations ---
 @admin.register(Areas)
@@ -130,8 +136,8 @@ class CharacterAdmin(admin.ModelAdmin):
 
     # Make most fields read-only, but leave some editable for GM tasks
     readonly_fields = ('player', 'first_name', 'last_name', 'sex', 'race', 
-                       'class_field', 'description', 'created_at', 'last_saved', 
-                       'total_playtime_seconds')
+                    'class_field', 'created_at', 'last_saved', 
+                    'total_playtime_seconds')
 
     # This prevents new characters from being created here
     def has_add_permission(self, request):
@@ -141,7 +147,7 @@ class CharacterAdmin(admin.ModelAdmin):
 class ItemTemplateAdmin(admin.ModelAdmin):
     form = ItemTemplateAdminForm
     list_display = ('name', 'id', 'item_type', 'get_value')
-    search_fields = ('name', 'description')
+    search_fields = ('name', 'id', 'description')
     list_filter = ('item_type',)
 
     fieldsets = (
@@ -175,6 +181,12 @@ class ItemTemplateAdmin(admin.ModelAdmin):
             'fields': ('bonus_might', 'bonus_vitality', 'bonus_agility', 'bonus_intellect', 'bonus_aura', 'bonus_persona'),
             'classes': ('collapse',)
         }),
+
+        ('Special Properties', {
+            'fields': ('loot_table', 'lock_details', 'trap_details'),
+            'classes': ('collapse',),
+            'description': 'Configure container loot, locks, or traps here.'
+        })
     )
 
     @admin.display(description='Value')
@@ -213,6 +225,12 @@ class AbilityTemplateAdmin(admin.ModelAdmin):
         if isinstance(obj.class_req, list):
             return ", ".join(c.capitalize() for c in obj.class_req)
         return "None"
+
+@admin.register(LootTables)
+class LootTableAdmin(admin.ModelAdmin):
+    list_display = ('name', 'id', 'description')
+    search_fields = ('name',)
+    inlines = [LootTableEntriesInline]
 
 # --- Standard Registration for other models ---
 admin.site.register(Players)
