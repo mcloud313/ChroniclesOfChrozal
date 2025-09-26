@@ -16,6 +16,7 @@ from .definitions import skills as skill_defs
 from .definitions import abilities as ability_defs
 from .definitions import classes as class_defs
 from .definitions import item_defs
+from .definitions import slots
 
 log = logging.getLogger(__name__)
 
@@ -692,7 +693,7 @@ class DatabaseManager:
                     # --- 4. Save Equipment (Upsert) - DYNAMICALLY CORRECTED ---
                     if equipment:
                         # Dynamically build the query from the canonical list of all slots
-                        all_slots = item_defs.ALL_SLOTS 
+                        all_slots = slots.ALL_SLOTS 
                         
                         columns = ", ".join(all_slots)
                         value_placeholders = ", ".join([f"${i+2}" for i in range(len(all_slots))])

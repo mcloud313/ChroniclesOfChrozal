@@ -114,16 +114,16 @@ class ConnectionHandler:
         await self.writer.drain()
 
     async def _handle_get_username(self):
-        log.info("Now prompting for username...")
         await self._prompt("Enter your account name")
-        
-        username = await self._read_line()
-        log.info(f"Username received: '{username}'.")
-        if username is None: return
+        username_raw = await self._read_line()
+        username = "".join(char for char in username_raw if char.isprintable())
+        if not username:
+        # If the sanitized string is empty, the input was pure garbage.
+            await self.send("Invalid username.")
+            self.state = ConnectionState.GET_USERNAME # Prompt again
+            return
 
-        log.info(f"Querying database for '{username}'...")
         player_data = await self.db_manager.load_player_account(username)
-        log.info("Database query complete.")
 
         if player_data:
             self.player_account = Player(**dict(player_data))
