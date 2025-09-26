@@ -452,6 +452,7 @@ class World:
                 absorb_amount = min(char.xp_pool, absorb_this_tick)
                 char.xp_pool -= absorb_amount
                 char.xp_total += absorb_amount
+                char.is_dirty = True
                 if char.xp_pool <= 0:
                     char.xp_pool = 0
                     await char.send("You feel you have absorbed all you can for now.")

@@ -68,6 +68,7 @@ async def _award_xp_to_character(character: Character, xp_amount: int):
 
     if actual_xp_added > 0:
         character.xp_pool += actual_xp_added
+        character.is_dirty = True
         await character.send(f"You gain {int(actual_xp_added)} experience points into your pool.")
     elif not character.group:
         await character.send("Your mind cannot hold any more raw experience right now.")
