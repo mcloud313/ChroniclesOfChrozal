@@ -202,19 +202,25 @@ async def resolve_magical_attack(
     target_name = target.name.capitalize()
     spell_name = spell_data.get("name", "a spell")
 
+    if effect_details.get("always_hits"):
+        # If the spell can't miss, create a fake HitResult and skip the roll.
+        hit_result = hit_resolver.HitResult(is_hit=True, is_crit=False, roll=0, attacker_rating=0, target_dv=0)
+    else:
+
+
     # ---Get Power and Defense Ratings ---
-    school = effect_details.get("school", "Arcane")
-    rating_name = "APR" if school == "Arcane" else "DPR"
+        school = effect_details.get("school", "Arcane")
+        rating_name = "APR" if school == "Arcane" else "DPR"
 
-    hit_result = hit_resolver.check_magical_hit(caster, target, school)
+        hit_result = hit_resolver.check_magical_hit(caster, target, school)
 
-    if not hit_result.is_hit:
-        roll_details = f"{{i[Roll: {hit_result.roll} + {rating_name}: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]{{x"
-        if isinstance(caster, Character):
-            await caster.send(f"Your {spell_name} misses {target_name}. {roll_details}")
-        if isinstance(target, Character):
-             await target.send(f"{caster_name}'s {spell_name} misses you.")
-        return
+        if not hit_result.is_hit:
+            roll_details = f"{{i[Roll: {hit_result.roll} + {rating_name}: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]{{x"
+            if isinstance(caster, Character):
+                await caster.send(f"Your {spell_name} misses {target_name}. {roll_details}")
+            if isinstance(target, Character):
+                await target.send(f"{caster_name}'s {spell_name} misses you.")
+            return
     
     # ---Calculate Damage ---
     damage_info = damage_calculator.calculate_magical_damage(caster, spell_data, hit_result.is_crit)

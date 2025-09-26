@@ -66,7 +66,6 @@ def get_canonical_direction(direction: str) -> Optional[str]:
     """Returns the canonical (short) form of a direction string (lowercase)."""
     return CANONICAL_DIRECTIONS_MAP.get(direction.lower())
 
-
 def get_opposite_direction(direction: str) -> Optional[str]:
     """Returns the opposite direction for a given direction string (lowercase)."""
     return OPPOSITE_DIRECTIONS.get(direction.lower())
@@ -410,3 +409,24 @@ def get_health_desc(character: 'Character') -> str:
         return f"{name} is in critical condition."
     else:
         return f"{name} is on the verge of death."
+    
+def format_departure_message(character_name: str, direction: str) -> str:
+    """Formats a grammatically correct departure message."""
+    # Directions that don't need a preposition (e.g., "leaves north")
+    simple_directions = {
+        "north", "south", "east", "west", "up", "down",
+        "northeast", "southeast", "southwest", "northwest"
+    }
+    
+    # Special cases with unique phrasing
+    if direction.lower() == "out":
+        return f"\r\n{character_name} leaves.\r\n"
+    if direction.lower() == "in":
+        return f"\r\n{character_name} goes inside.\r\n"
+
+    # Check for simple directions (and their abbreviations)
+    if get_canonical_direction(direction):
+        return f"\r\n{character_name} leaves {direction.lower()}.\r\n"
+    
+    # Default for complex exits like "portal", "door", "fissure"
+    return f"\r\n{character_name} leaves through the {direction.lower()}.\r\n"

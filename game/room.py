@@ -90,6 +90,15 @@ class Room:
             formatted_mob_list = [f"{name.capitalize()}" + (f" (x{count})" if count > 1 else "") for name, count in sorted(mob_counts.items())]
             output_lines.append("Visible Creatures: " + ", ".join(formatted_mob_list) + ".")
 
+        if self.item_instance_ids:
+            item_names = []
+            for instance_id in self.item_instance_ids:
+                item = world.get_item_object(instance_id)
+                if item:
+                    item_names.append(item.name)
+            if item_names:
+                output_lines.append("On the ground: " + ", ".join(sorted(item_names)) + ".")
+
         if self.objects:
             object_names = sorted([obj.get('name', 'an object') for obj in self.objects])
             output_lines.append("Objects of interest: " + ", ".join(object_names) + ".")

@@ -414,12 +414,15 @@ class World:
                         p.hp = min(p.hp, p.max_hp) # Ensure current HP isn't over the new max
 
                     if ability_data and p.location:
+                        messages = ability_data.get('messages', {})
                         target_name = p.name.capitalize()
-                        if isinstance(p, Character) and (msg := ability_data.get('expire_msg_self')):
+                        
+                        if isinstance(p, Character) and (msg := messages.get("expire_msg_self")):
                             await p.send(msg.format(target_name=target_name))
-                        if msg_room := ability_data.get('expire_msg_room'):
+                        
+                        if msg_room := messages.get("expire_msg_room"):
                             await p.location.broadcast(f"\r\n{msg_room.format(target_name=target_name)}\r\n", exclude={p})
-
+                            
     async def update_room_effects(self, dt: float):
         """Ticker: Applies effects from room flags to characters within them."""
         for char in self.get_active_characters_list():

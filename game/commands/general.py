@@ -279,9 +279,8 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
         modifier = utils.calculate_modifier(value)
         attributes_display.append(f" {stat_name.capitalize():<10}: {value:>2} [{modifier:+}]")
 
-    total_av = character.total_av
-    armor_training_rank = character.get_skill_rank("armor training")
-    effective_av = math.floor(total_av * (0.20 + (armor_training_rank * 0.01)))
+    effective_av = character.total_av
+    base_av_for_display = character.base_av
 
     output = (
         f"\r\n=================================================="
@@ -290,7 +289,7 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
         f"\r\n Level: {character.level:<31}"
         f"\r\n=================================================="
         f"\r\n HP   : {int(character.hp):>4}/{int(character.max_hp):<28} Carry: {character.get_current_weight():>2}/{character.get_max_weight():<3} stones"
-        f"\r\n Armor: {effective_av:>4}/{total_av:<28} (Effective/Total)"
+        f"\r\n Armor: {effective_av:>4}/{base_av_for_display:<28} (Effective/Total)"
         f"\r\n Barrier: {character.barrier_value:<28} "
         f"\r\n Essn : {int(character.essence):>4}/{int(character.max_essence):<31}"
         f"\r\n XP   : {int(character.xp_total):>4}/{xp_needed_str:<28} Pool: {int(character.xp_pool)}" # <-- USE THE FIXED STRING HERE
@@ -332,7 +331,7 @@ async def cmd_advance(character: 'Character', world: 'World', args_str: str) -> 
 
     hp_gain, essence_gain = character.apply_level_up_gains()
 
-    await character.check_and_learn_new_abilities(world)
+    await character.check_and_learn_new_abilities()
 
     log.info("Character %s advanced to level %d! Gains: HP+%.1f, Ess+%.1f, SP+%d, AP+%d",
              character.name, character.level, hp_gain, essence_gain, sp_gain, ap_gain)

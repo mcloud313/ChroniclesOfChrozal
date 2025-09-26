@@ -73,7 +73,7 @@ class ItemTemplates(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     loot_table = models.ForeignKey(
-        'MobTemplates',  # <-- This is the corrected model name
+        'LootTables',  # <-- This is the corrected model name
         models.DO_NOTHING,
         blank=True,
         null=True,

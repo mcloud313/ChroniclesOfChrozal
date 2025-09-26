@@ -40,7 +40,7 @@ def check_physical_hit(attacker: Union[Character, Mob], target: Union[Character,
     # FIX: Apply armor penalty to target's dodge value
     target_dv = target.dv
     if isinstance(target, Character):
-        target_dv -= target.total_av # Heavy armor makes you easier to hit
+        target_dv = max(0, target_dv - target.total_av)
 
 
     target_dv = target.dv

@@ -11,7 +11,7 @@ import logging
 import config
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple, Union, Set
 from .item import Item
-from .definitions import skills as skill_defs, abilities as ability_defs, classes as class_defs
+from .definitions import skills as skill_defs, abilities as ability_defs, classes as class_defs, item_defs
 from . import utils
 
 if TYPE_CHECKING:
@@ -144,16 +144,21 @@ class Character:
                 return effect.get('potency', 0.0)
         return 0.0
     
+    def base_av(self) -> int:
+        """Returns the raw, unmodified Armor Value from equipped items."""
+        return sum(item.armor for item in self._equipped_items.values() if item)
+    
     @property
     def total_av(self) -> int:
         """Calculates effective armor value based on skill."""
-        base_av = sum(item.armor for item in self._equipped_items.values() if item)
+        # Use the new helper property to get the base value
+        base_av = self.base_av 
         bonus_av = self.get_stat_bonus_from_effects("bonus_av")
         
         armor_training_rank = self.get_skill_rank("armor training")
         if armor_training_rank < 50:
-            # Penalty for untrained users
-            av_percentage = 0.5 + (armor_training_rank * 0.01) # 50% at rank 0, up to 100% at rank 50
+            # Penalty for untrained users (50% effectiveness at rank 0)
+            av_percentage = 0.5 + (armor_training_rank * 0.01)
             return int((base_av * av_percentage) + bonus_av)
         else:
             # Bonus for trained users
@@ -256,6 +261,10 @@ class Character:
                 if template_data:
                     item_obj = Item(dict(inst_record), template_data)
                     all_owned_items[item_obj.id] = item_obj
+
+        for item in all_owned_items.values():
+            if item.container_id and (container := all_owned_items.get(item.container_id)):
+                container.contents[item.id] = item
 
         # Populate equipped items from the new character_equipment table
         if equipment_record:

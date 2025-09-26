@@ -153,7 +153,7 @@ async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Ch
         )
 
 async def send_magical_attack_messages(caster: Union[Character, Mob], target: Union[Character, Mob],
-                                     hit_result: HitResult, damage_info: 'DamageInfo', final_damage: int):
+                                     hit_result: HitResult, damage_info: 'DamageInfo', final_damage: int, show_roll_details: bool = True):
     """Sends all relevant, detailed combat messages for a magical attack."""
     caster_name = caster.name.capitalize()
     target_name = target.name
@@ -161,30 +161,34 @@ async def send_magical_attack_messages(caster: Union[Character, Mob], target: Un
     
     hit_desc = "{rCRITICALLY HITS{x" if hit_result.is_crit else "hits"
     
-    # --- Build Verbose Details for Players ---
-    rating_name = "APR" if damage_info.damage_type in ["arcane", "fire", "cold"] else "DPR"
-    hit_details = f"{{i[Roll:{hit_result.roll} + {rating_name}:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]{{x"
-    mitigation = damage_info.pre_mitigation_damage - final_damage
-
-    # --- NEW: Show which defense was used (BV or AV) ---
-    effective_bv = target.barrier_value
-    effective_av = math.floor(target.total_av / 2)
-    defense_name = "BV" if effective_bv >= effective_av else "AV"
-    defense_value = max(effective_bv, effective_av)
+    # Initialize detail strings as empty.
+    details_str = ""
     
-    mit_details = f"{{i[Dmg:{damage_info.pre_mitigation_damage}(Base) - {mitigation}(SDS:{target.sds}, {defense_name}:{defense_value}) = {final_damage}]{{x"
+    # Only build the verbose detail strings if requested.
+    if show_roll_details:
+        rating_name = "APR" if damage_info.damage_type in ["arcane", "fire", "cold"] else "DPR"
+        hit_details = f"{{i[Roll:{hit_result.roll} + {rating_name}:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]{{x"
+        mitigation = damage_info.pre_mitigation_damage - final_damage
+
+        effective_bv = target.barrier_value
+        effective_av = math.floor(target.total_av / 2)
+        defense_name = "BV" if effective_bv >= effective_av else "AV"
+        defense_value = max(effective_bv, effective_av)
+        
+        mit_details = f"{{i[Dmg:{damage_info.pre_mitigation_damage}(Base) - {mitigation}(SDS:{target.sds}, {defense_name}:{defense_value}) = {final_damage}]{{x"
+        details_str = f" {hit_details} {mit_details}"
 
     # --- Message to Caster (if player) ---
     if isinstance(caster, Character):
         verb = "critically hit" if hit_result.is_crit else "hit"
         msg = (f"Your {spell_name} {verb} {target_name}!\n\r"
-               f"You deal {{y{final_damage}{{x damage. {hit_details} {mit_details}")
+               f"You deal {{y{final_damage}{{x damage.{details_str}")
         await caster.send(msg)
 
     # --- Message to Target (if player) ---
     if isinstance(target, Character):
         msg = (f"{{R{caster_name}'s {spell_name} {hit_desc.lower()} you!{{x\n\r"
-               f"{{RYou take {{y{final_damage}{{x damage. {hit_details} {mit_details} "
+               f"{{RYou take {{y{final_damage}{{x damage.{details_str} "
                f"({int(target.hp)}/{int(target.max_hp)} HP)")
         await target.send(msg)
     

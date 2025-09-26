@@ -425,12 +425,9 @@ async def _handle_consume(character: 'Character', world: 'World', args_str: str,
     template = world.get_item_template(item_to_consume.template_id)
     if not template: return True # should not happen
 
-    try:
-        stats = json.loads(template.get('stats', '{}') or '{}')
-        effect = stats.get("effect")
-        amount = stats.get("amount", 0)
-    except (json.JSONDecodeError, TypeError):
-        effect, amount = None, 0
+    stats = template.get('stats', {})
+    effect = stats.get("effect")
+    amount = stats.get("amount", 0)
 
     if not effect:
         await character.send(f"You {consume_type} the {item_to_consume.name}, but nothing seems to happen.")

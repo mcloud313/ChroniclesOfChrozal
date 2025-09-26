@@ -47,10 +47,8 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
         final_rt = max(move_rt, slowest_member_rt)
 
     # --- 3. Announce Departure & Immediately Update Room State ---
-    if exit_name.lower() in CARDINAL_DIRECTIONS:
-        departure_message = f"leaves {exit_name}"
-    else:
-        departure_message = f"leaves through the {exit_name}"
+    departure_message = utils.format_departure_message(character.name, exit_name)
+
 
     # Broadcast the departure message first.
     if is_group_move:
