@@ -573,80 +573,139 @@ async def apply_heal(caster: Character, target: Union[Character, Mob], effect_de
     if target.location:
         await target.location.broadcast(f"\r\n{msg_room}\r\n", exclude={caster, target})
 
-async def apply_effect(caster: Character, target: Union[Character, Mob], effect_details: Dict[str, Any], ability_data: Dict[str, Any], world: 'World'):
-    """Applies a temporary BUFF or DEBUFF effect to the target."""
-    effect_name = effect_details.get("name", "UnknownEffect")
-    duration = effect_details.get("duration", 0.0)
-    stat = effect_details.get("stat_affected")
-    amount = effect_details.get("amount")
+async def apply_effect(caster: Union[Character, Mob], target: Union[Character, Mob], ability_data: Dict[str, Any], effect_details: Dict[str, Any], world: 'World'):
+    """
+    Applies a temporary effect (BUFF/DEBUFF) to the target, handling special cases and messaging.
+    This is the single, consolidated function for all effects.
+    """
+    effect_name = effect_details.get("name")
+    if not effect_name:
+        log.warning("Attempted to apply an effect with no name.")
+        return
+
+    # Create a mutable copy to allow for dynamic modifications
+    final_effect_details = effect_details.copy()
+
+    # --- SPECIAL CASE: Mage Armor Spellcraft Bonus ---
+    if ability_data.get("name") == "Mage Armor" and isinstance(caster, Character):
+        spellcraft_skill = caster.get_skill_rank("spellcraft")
+        bonus_amount = spellcraft_skill // 25
+        final_effect_details["amount"] += bonus_amount
+        log.debug(f"Mage Armor bonus: {bonus_amount} from {spellcraft_skill} spellcraft.")
+    # --- END SPECIAL CASE ---
+
+    duration = final_effect_details.get("duration", 0.0)
+    stat = final_effect_details.get("stat_affected")
+    amount = final_effect_details.get("amount")
 
     if not all([duration > 0, stat, amount is not None]):
-        log.error("Invalid effect data for '%s': %s", effect_name, effect_details)
+        log.error("Invalid effect data for '%s': %s", effect_name, final_effect_details)
         await caster.send("The effect seems to dissipate harmlessly.")
         return
 
-    target.effects[effect_name] = {
-        "ends_at": time.monotonic() + duration,
-        "amount": amount,
-        "stat_affected": stat, # Changed from "stat" to "stat_affected" for consistency
-        "type": effect_details.get('type'),
-        "caster_id": caster.dbid,
-        "source_ability_key": ability_data.get("internal_name")
-    }
-    log.info("Applied effect '%s' to %s for %.1f seconds.", effect_name, target.name, duration)
-
-    if stat == "max_hp":
-        target.max_hp += amount
-        target.hp += amount # Also grant the current HP
-
-    # Check for and apply instant effects like stun
-    if effect_details.get('type') == 'stun':
-        stun_duration = effect_details.get('potency', 0.0)
-        target.roundtime += stun_duration
-        if isinstance(target, Character):
-            await target.send("{RYou are stunned!{x")
-        if target.location:
-            await target.location.broadcast(f"\r\n{target.name.capitalize()} is stunned!\r\n", exclude={target})
-
-    if new_stance := effect_details.get('set_stance'):
-        if isinstance(target, Character):
-            target.stance = new_stance
-
-    if effect_details.get("is_shapechange"):
-        # Iterate over a copy of the items, as we may modify the dictionary
+    # --- Shapechange Logic: Remove old shapechange effects ---
+    if final_effect_details.get("is_shapechange"):
         for effect_key, effect_data in list(target.effects.items()):
-            # Find the source ability for the existing effect
             source_key = effect_data.get("source_ability_key")
             if not source_key: continue
             
             source_ability = world.abilities.get(source_key)
-            if not source_ability: continue
+            if source_ability and source_ability.get("effect_details", {}).get("is_shapechange"):
+                # Use the resolver's own function to ensure messages are sent
+                await resolve_effect_expiration(target, effect_key, world)
 
-            # Check if the existing effect is also a shapechange
-            if source_ability.get("effect_details", {}).get("is_shapechange"):
-                # Remove the old shapechange effect
-                del target.effects[effect_key]
-                # Send the expiration message for the old form
-                old_messages = source_ability.get("messages", {})
-                if msg := old_messages.get("expire_msg_self"):
-                    if isinstance(target, Character):
-                        await target.send(msg)
+    # --- Store the final effect on the target ---
+    target.effects[effect_name] = {
+        "name": effect_name,
+        "type": final_effect_details.get('type', 'buff'),
+        "stat_affected": stat,
+        "amount": amount,
+        "applied_at": time.monotonic(),
+        "ends_at": time.monotonic() + duration,
+        "caster_id": caster.dbid if isinstance(caster, Character) else None,
+        "source_ability_key": ability_data.get("internal_name")
+    }
+    target.is_dirty = True
+    log.info("Applied effect '%s' to %s for %.1f seconds.", effect_name, target.name, duration)
 
-    # --- Messaging ---
+    # --- Handle Immediate Secondary Effects ---
+    if stat == "max_hp": # For effects that boost constitution
+        target.max_hp += amount
+        target.hp += amount
+
+    if final_effect_details.get('type') == 'stun':
+        stun_duration = final_effect_details.get('potency', 0.0)
+        target.roundtime += stun_duration
+        if isinstance(target, Character):
+            await target.send("{RYou are stunned!{x")
+        if target.location:
+            await target.location.broadcast(f"\\r\\n{target.name.capitalize()} is stunned!\\r\\n", exclude={target})
+
+    if new_stance := final_effect_details.get('set_stance'):
+        if isinstance(target, Character):
+            target.stance = new_stance
+
+    # --- Unified Messaging ---
+    messages = ability_data.get("messages", {})
     caster_name = caster.name.capitalize()
     target_name = target.name.capitalize()
-    msg_self = ability_data.get('apply_msg_self')
-    msg_target = ability_data.get('apply_msg_target')
-    msg_room = ability_data.get('apply_msg_room')
-    
-    if msg_self and caster == target:
-        await caster.send(msg_self.format(caster_name=caster_name, target_name=target_name))
-    elif msg_target and isinstance(target, Character):
-        await target.send(msg_target.format(caster_name=caster_name, target_name=target_name))
+
+    if target == caster:
+        if msg := messages.get("apply_msg_self"):
+            await caster.send(msg)
+    else:
+        if msg := messages.get("apply_msg_target"):
+            await target.send(msg.format(caster_name=caster_name))
         await caster.send(f"You apply {effect_name} to {target_name}.")
 
-    if msg_room and target.location:
-        await target.location.broadcast(f"\r\n{msg_room.format(caster_name=caster_name, target_name=target_name)}\r\n", exclude={caster, target})
+    if msg_room := messages.get("apply_msg_room"):
+        if target.location:
+            await target.location.broadcast(f"\\r\\n{msg_room.format(caster_name=caster_name, target_name=target_name)}\\r\\n", exclude={caster, target})
+
+async def resolve_effect_expiration(target: Union[Character, Mob], effect_key: str, world: 'World'):
+    """
+    Removes an expired effect from a target and sends expiration messages.
+    """
+    # Safely get the effect data before it's deleted
+    effect_data = target.effects.pop(effect_key, None)
+    if not effect_data:
+        return # Effect was already removed, do nothing.
+
+    log.info(f"Effect '{effect_key}' expired for {target.name}.")
+    target.is_dirty = True
+
+    # --- Revert Stat Changes ---
+    stat_affected = effect_data.get("stat_affected")
+    amount = effect_data.get("amount", 0)
+    if stat_affected == "max_hp":
+        target.max_hp -= amount
+        target.hp = min(target.hp, target.max_hp) # Prevent HP from exceeding the new max
+
+    # --- Send Expiration Messages ---
+    source_ability_key = effect_data.get("source_ability_key")
+    if not source_ability_key:
+        return # No source, no message
+
+    # Find the original ability to get its message block
+    ability_data = world.abilities.get(source_ability_key)
+    if not ability_data:
+        return
+
+    messages = ability_data.get("messages", {})
+    target_name = target.name.capitalize()
+
+    # Send the correct message to the right person
+    if isinstance(target, Character):
+        if msg := messages.get("expire_msg_self"):
+            await target.send(msg.format(target_name=target_name))
+        elif msg := messages.get("expire_msg_target"): # Fallback for debuffs cast by others
+             await target.send(msg.format(target_name=target_name))
+
+
+    if msg_room := messages.get("expire_msg_room"):
+        if target.location:
+            await target.location.broadcast(f"\\r\\n{msg_room.format(target_name=target_name)}\\r\\n", exclude={target})
+
 
 async def resolve_consumable_effect(character: Character, item_template: Dict[str, Any], world: 'World') -> bool:
     """Applies the effect of a consumable item (FOOD/DRINK)."""

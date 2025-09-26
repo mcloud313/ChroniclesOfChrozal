@@ -386,52 +386,38 @@ class World:
         await character.send(respawn_room.get_look_string(character, self))
 
     async def update_effects(self, dt: float):
-        """Ticker: Processes ongoing effects and removes expired ones."""
+        """Ticker: Processes ongoing effects and resolves expired ones."""
         current_time = time.monotonic()
-        all_mobs = [mob for room in self.rooms.values() for mob in room.mobs]
+        
+        # Consolidate all active characters and mobs into a single list to iterate over
+        all_mobs = [mob for room in self.rooms.values() for mob in room.mobs if mob.is_alive()]
         participants = self.get_active_characters_list() + all_mobs
 
-        for p in participants:
-            if not p.effects: continue
+        for participant in participants:
+            if not participant.effects:
+                continue
             
+            # We must iterate over a copy, as the resolver will modify the dictionary
+            active_effects = list(participant.effects.items())
             expired_keys = []
-            # Create a copy of items to avoid issues with modifying the dict while iterating
-            active_effects = list(p.effects.items())
 
             for key, data in active_effects:
-                # First, process ongoing effects for this tick
+                # 1. Process ongoing damage effects for this tick (DoTs, etc.)
                 effect_type = data.get('type')
                 if effect_type in ('poison', 'bleed'):
-                    await resolver.apply_dot_damage(p, data, self)
-                # We'll add other effect types like regen here later
+                    # This part remains the same, handling damage per tick
+                    await resolver.apply_dot_damage(participant, data, self)
 
-                # Then, check if the effect has expired
+                # 2. Check if the effect has expired
                 if data.get("ends_at", 0) <= current_time:
                     expired_keys.append(key)
             
-            # Remove all expired effects
-            for key in expired_keys:
-                if p.effects.get(key):
-                    expired_effect_data = p.effects[key] # Get data before deleting
-                    source_key = expired_effect_data.get("source_ability_key")
-                    ability_data = self.abilities.get(source_key) if source_key else None
-                    del p.effects[key]
+            # 3. Resolve all expired effects using the new centralized function
+            if expired_keys:
+                for key in expired_keys:
+                    # This single call now handles stat reversal, messaging, and removal.
+                    await resolver.resolve_effect_expiration(participant, key, self)
 
-                    # --- NEW: Handle expiring Max HP buffs ---
-                    if expired_effect_data.get("stat_affected") == "max_hp":
-                        amount = expired_effect_data.get("amount", 0)
-                        p.max_hp -= amount
-                        p.hp = min(p.hp, p.max_hp) # Ensure current HP isn't over the new max
-
-                    if ability_data and p.location:
-                        messages = ability_data.get('messages', {})
-                        target_name = p.name.capitalize()
-                        
-                        if isinstance(p, Character) and (msg := messages.get("expire_msg_self")):
-                            await p.send(msg.format(target_name=target_name))
-                        
-                        if msg_room := messages.get("expire_msg_room"):
-                            await p.location.broadcast(f"\r\n{msg_room.format(target_name=target_name)}\r\n", exclude={p})
                             
     async def update_room_effects(self, dt: float):
         """Ticker: Applies effects from room flags to characters within them."""
