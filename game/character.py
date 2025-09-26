@@ -11,7 +11,7 @@ import logging
 import config
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple, Union, Set
 from .item import Item
-from .definitions import skills as skill_defs, abilities as ability_defs, classes as class_defs, item_defs
+from .definitions import skills as skill_defs, abilities as ability_defs, classes as class_defs, item_defs, slots as slots_defs
 from . import utils
 
 if TYPE_CHECKING:
@@ -367,17 +367,18 @@ class Character:
 
 
     def get_equipment_for_saving(self) -> Dict[str, Optional[str]]:
-            """
-            Serializes all equipped items into a dictionary mapping slot_name -> item_instance_id
-            for saving to the database.
-            """
-            equipment_data = {}
-            # Use the canonical list of all slots to ensure nothing is missed.
-            for slot in item_defs.ALL_SLOTS:
-                item = self._equipped_items.get(slot)
-                # Store the item's unique instance ID, or None if the slot is empty.
-                equipment_data[slot] = item.id if item else None
-            return equipment_data    
+        """
+        Serializes all equipped items into a dictionary mapping slot_name -> item_instance_id
+        for saving to the database.
+        """
+        equipment_data = {}
+        # Use the canonical list of all slots to ensure nothing is missed.
+        # v-- FIX 2: Point to the correct module, 'slot_defs'
+        for slot in slot_defs.ALL_SLOTS: 
+            item = self._equipped_items.get(slot)
+            # Store the item's unique instance ID, or None if the slot is empty.
+            equipment_data[slot] = item.id if item else None
+        return equipment_data
 
     async def check_and_learn_new_abilities(self):
         """Checks for and learns new abilities upon leveling up."""
