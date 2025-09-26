@@ -325,8 +325,6 @@ class Character:
         Gathers the character's core attributes into a dictionary for saving.
         """
         return {
-            "name": self.name,
-            "sex": self.sex,
             "level": self.level,
             "hp": self.hp,
             "essence": self.essence,
