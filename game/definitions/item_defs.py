@@ -33,5 +33,5 @@ ITEM_TYPE_CHOICES = [
     (FOOD, "Food"),
     (DRINK, "Drink"),
     (KEY, "Key"),
-    (LIGHT, "Light Source"),
+    (LIGHT_SOURCE, "Light Source"),
 ]
