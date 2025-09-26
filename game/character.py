@@ -178,6 +178,17 @@ class Character:
             if item.item_type == item_defs.ARMOR or item.item_type == item_defs.SHIELD:
                 total += item.armor
         return total
+    
+    def get_bonus_from_effects(self, stat_name: str) -> int:
+        """
+        Calculates the total bonus or penalty for a given stat from all active effects.
+        """
+        total_modifier = 0
+        # Iterate through a copy of the values in case the dictionary changes
+        for effect in list(self.effects.values()):
+            if effect.get('stat_affected') == stat_name:
+                total_modifier += effect.get('amount', 0)
+        return total_modifier
 
     
     def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any], world: 'World', player_is_admin: bool = False):
