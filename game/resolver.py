@@ -319,7 +319,6 @@ async def resolve_ability_effect(
               effect_type, ability_key, caster.name, getattr(target, 'name', 'None'))
 
     if effect_type == ability_defs.EFFECT_DAMAGE:
-        # --- NEW: Handle Cone AoE spells like Burning Hands ---
         if effect_details.get("is_cone_aoe"):
             primary_target = target
             other_mobs = [m for m in caster.location.mobs if m.is_alive() and m != primary_target]
@@ -334,23 +333,23 @@ async def resolve_ability_effect(
             for t in all_targets:
                 await resolve_magical_attack(caster, t, ability_data, world)
         else:
-            # Original single-target damage logic
             await resolve_magical_attack(caster, target, ability_data, world)
     
     elif effect_type == ability_defs.EFFECT_HEAL:
         await apply_heal(caster, target, effect_details, world)
     
     elif effect_type in (ability_defs.EFFECT_BUFF, ability_defs.EFFECT_DEBUFF):
-        await apply_effect(caster, target, effect_details, ability_data, world)
+        # --- THIS IS THE CORRECTED LINE ---
+        await apply_effect(caster, target, ability_data, effect_details, world)
+        # ----------------------------------
     
     elif effect_type == ability_defs.EFFECT_MODIFIED_ATTACK:
         
         if effect_details.get("is_cleave"):
-            primary_target = target # The target resolved by the block above
+            primary_target = target
             
-            # Find other potential targets in the room
             other_mobs = [m for m in caster.location.mobs if m.is_alive() and m != primary_target]
-            random.shuffle(other_mobs) # Shuffle to hit random secondary targets
+            random.shuffle(other_mobs)
             
             max_targets = effect_details.get("max_cleave_targets", 1)
             secondary_targets = other_mobs[:max_targets - 1]
@@ -360,14 +359,12 @@ async def resolve_ability_effect(
             await caster.send(ability_data["messages"]["caster_self"])
             await caster.location.broadcast(f"\r\n{ability_data['messages']['room'].format(caster_name=caster.name)}\r\n", exclude={caster})
 
-            # Get the weapon once
             weapon = caster._equipped_items.get("WIELD_MAIN")
             damage_mult = effect_details.get("damage_multiplier", 1.0)
             
-            # Attack each target in the list
             for t in all_targets:
                 await resolve_physical_attack(caster, t, weapon, world, damage_multiplier=damage_mult)
-            return # End of Cleave logic
+            return
         
         if effect_details.get("requires_stealth_or_flank"):
             is_stealthed = caster.is_hidden
@@ -375,13 +372,11 @@ async def resolve_ability_effect(
 
             if not is_stealthed and not is_flanking:
                 await caster.send("You must be hidden or attacking an engaged target to backstab!")
-                return # Stop the ability
+                return
 
-        # Get the damage multiplier from the ability's data
         damage_mult = effect_details.get("damage_multiplier", 1.0)
         
         weapon = None
-        # Use .get() on _equipped_items for safety
         if (weapon_obj := caster._equipped_items.get("WIELD_MAIN")):
             weapon = weapon_obj
             
@@ -394,7 +389,6 @@ async def resolve_ability_effect(
             await caster.send("Your spell requires a dead target.")
             return
 
-        # Check for and consume the XP cost from the caster's pool
         xp_cost = effect_details.get("xp_cost", 5000)
         if caster.xp_total < xp_cost:
             await caster.send(f"{{RYou lack the spiritual energy ({xp_cost} XP) to perform the ritual.{{x")
@@ -403,11 +397,9 @@ async def resolve_ability_effect(
         caster.xp_total -= xp_cost
         await caster.send(f"{{yYou sacrifice {xp_cost} of your stored experience to fuel the ritual...{{x")
 
-        # Perform the resurrection
         target.status = "ALIVE"
         target.hp = 1
         
-        # Move the resurrected player to the caster's location
         if target.location != caster.location:
             if old_room := target.location:
                 old_room.remove_character(target)
@@ -420,7 +412,6 @@ async def resolve_ability_effect(
         cure_type = effect_details.get("cure_type")
         if not cure_type: return
 
-        # Find and remove all effects of the specified type
         effects_to_remove = [k for k, v in target.effects.items() if v.get('type') == cure_type]
         
         if not effects_to_remove:
@@ -452,7 +443,6 @@ async def resolve_ability_effect(
         contest_details = effect_details.get("contest")
         if not contest_details: return
 
-        # Perform a skill vs skill contest
         attacker_mod = caster.get_skill_modifier(contest_details["attacker_skill"])
         defender_mod = target.get_skill_modifier(contest_details["defender_skill"])
 
@@ -460,13 +450,11 @@ async def resolve_ability_effect(
         defender_roll = random.randint(1, 20) + defender_mod
 
         if attacker_roll > defender_roll:
-            # Attacker wins, apply the 'on_success' effects
             await caster.send(f"{{gYou successfully trip {target.name}!{{x")
             success_effects = effect_details.get("on_success")
             if success_effects:
-                await apply_effect(caster, target, success_effects, ability_data, world)
+                await apply_effect(caster, target, ability_data, success_effects, world)
         else:
-            # Defender wins
             await caster.send(f"{{rYou fail to trip {target.name}.{{x")
 
 async def apply_dot_damage(target: Union[Character, Mob], effect_data: Dict[str, Any], world: 'World'):

@@ -283,7 +283,7 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
         attributes_display.append(f" {stat_name.capitalize():<10}: {value:>2} [{modifier:+}]")
 
     effective_av = character.total_av
-    base_av_for_display = character.base_av
+    base_av_for_display = character.base_av()
 
     output = (
         f"\r\n=================================================="
