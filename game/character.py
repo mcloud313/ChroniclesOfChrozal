@@ -179,6 +179,8 @@ class Character:
         self.race_id: Optional[int] = db_data['race_id']
         self.class_id: Optional[int] = db_data['class_id']
         self.level: int = db_data['level']
+        self.hunger: int = 100
+        self.thirst: int = 100
         self.description: str = db_data['description']
         self.hp: float = float(db_data['hp'])
         self.max_hp: float = float(db_data['max_hp'])
@@ -186,6 +188,7 @@ class Character:
         self.max_essence: float = float(db_data['max_essence'])
         self.xp_pool: float = db_data['xp_pool']
         self.xp_total: float = db_data['xp_total']
+        self.can_advance_notified: bool = False
         self.unspent_skill_points: int = db_data['unspent_skill_points']
         self.unspent_attribute_points: int = db_data['unspent_attribute_points']
         self.spiritual_tether: int = db_data.get('spiritual_tether', 10) # Default if not in db
@@ -335,71 +338,6 @@ class Character:
         except Exception:
             log.exception("Unexpected error saving character %s (ID: %s):", self.name, self.dbid)
 
-    # async def save_character_full(self, char_id: int, core_data: dict, stats: dict, skills: dict, equipment: dict, abilities: Set[str]) -> bool:
-    #     """
-    #     Saves all components of a character's state in a single, atomic transaction.
-    #     Returns True on success, False on failure.
-    #     """
-    #     async with self.pool.acquire() as conn:
-    #         async with conn.transaction():
-    #             try:
-    #                 # 1. Save Core Data
-    #                 if core_data:
-    #                     set_clauses = [f"{key} = ${i+1}" for i, key in enumerate(core_data.keys())]
-    #                     params = list(core_data.values())
-    #                     params.append(char_id)
-    #                     query = f"UPDATE characters SET {', '.join(set_clauses)}, last_saved = NOW() WHERE id = ${len(params)}"
-    #                     await conn.execute(query, *params)
-
-    #                 # 2. Save Stats (Upsert)
-    #                 if stats:
-    #                     stats_query = """
-    #                         INSERT INTO character_stats (character_id, might, vitality, agility, intellect, aura, persona)
-    #                         VALUES ($1, $2, $3, $4, $5, $6, $7)
-    #                         ON CONFLICT (character_id) DO UPDATE SET
-    #                             might = EXCLUDED.might, vitality = EXCLUDED.vitality, agility = EXCLUDED.agility,
-    #                             intellect = EXCLUDED.intellect, aura = EXCLUDED.aura, persona = EXCLUDED.persona;
-    #                     """
-    #                     await conn.execute(stats_query, char_id, stats.get('might', 10), stats.get('vitality', 10),
-    #                                     stats.get('agility', 10), stats.get('intellect', 10), stats.get('aura', 10),
-    #                                     stats.get('persona', 10))
-
-    #                 # 3. Save Skills (Delete-then-Insert)
-    #                 if skills is not None: # Allow saving an empty skill set
-    #                     await conn.execute("DELETE FROM character_skills WHERE character_id = $1", char_id)
-    #                     if skills:
-    #                         skill_records = [(char_id, name, rank) for name, rank in skills.items()]
-    #                         await conn.copy_records_to_table('character_skills',
-    #                                                         columns=['character_id', 'skill_name', 'rank'],
-    #                                                         records=skill_records)
-
-    #                 # 4. Save Equipment (Upsert)
-    #                 if equipment:
-    #                     equip_query = """
-    #                         INSERT INTO character_equipment (character_id, head, torso, legs, feet, hands, main_hand, off_hand)
-    #                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    #                         ON CONFLICT (character_id) DO UPDATE SET
-    #                             head = EXCLUDED.head, torso = EXCLUDED.torso, legs = EXCLUDED.legs, feet = EXCLUDED.feet,
-    #                             hands = EXCLUDED.hands, main_hand = EXCLUDED.main_hand, off_hand = EXCLUDED.off_hand;
-    #                     """
-    #                     await conn.execute(equip_query, char_id, equipment.get('head'), equipment.get('torso'),
-    #                                     equipment.get('legs'), equipment.get('feet'), equipment.get('hands'),
-    #                                     equipment.get('main_hand'), equipment.get('off_hand'))
-                    
-    #                 # 5. Save Abilities (Delete-then-Insert)
-    #                 if abilities is not None:
-    #                     await conn.execute("DELETE FROM character_abilities WHERE character_id = $1", char_id)
-    #                     if abilities:
-    #                         ability_records = [(char_id, name) for name in abilities]
-    #                         await conn.copy_records_to_table('character_abilities',
-    #                                                         columns=['character_id', 'ability_internal_name'],
-    #                                                         records=ability_records)
-    #                 return True
-    #             except Exception:
-    #                 log.exception(f"Transaction failed for saving character {char_id}. Rolling back.")
-    #                 # The transaction will automatically roll back on exception
-    #                 return False
-
     async def check_and_learn_new_abilities(self):
         """Checks for and learns new abilities upon leveling up."""
         char_class_name = self.world.get_class_name(self.class_id).lower()
@@ -419,7 +357,6 @@ class Character:
         if new_abilities_learned:
             self.is_dirty = True
 
-
     def respawn(self):
         """Resets character state after death."""
         log.info("RESPAWN: Character %s (ID %s) is respawning.", self.name, self.dbid)
@@ -430,7 +367,6 @@ class Character:
         self.is_fighting = False
         self.death_timer_ends_at = None
         self.roundtime = 0.0
-
 
     def can_see(self) -> bool:
         """
@@ -452,23 +388,18 @@ class Character:
         if self.status not in ["ALIVE", "MEDITATING"]:
             return
 
-        # HP Regeneration
-        if self.hp < self.max_hp:
-            base_hp_regen = self.vit_mod * config.HP_REGEN_VIT_MULTIPLIER
-            hp_regen_rate = config.HP_REGEN_BASE_PER_SEC + base_hp_regen
-            if is_in_node:
-                hp_regen_rate *= config.NODE_REGEN_MULTIPLIER
-            self.hp = min(self.max_hp, self.hp + (hp_regen_rate * dt))
+        if self.hp < self.max_hp and self.status == "ALIVE":
+        # Only regenerate health if not starving
+            if self.hunger > 0:
+                regen_rate = 1 + (self.vit_mod * 2) * .10
+                self.hp = min(self.max_hp, self.hp + (regen_rate * dt))
 
-        # Essence Regeneration
-        if self.essence < self.max_essence:
-            base_ess_regen = self.aura_mod * config.ESSENCE_REGEN_AURA_MULTIPLIER
-            ess_regen_rate = config.ESSENCE_REGEN_BASE_PER_SEC + base_ess_regen
-            if self.status == "MEDITATING":
-                ess_regen_rate *= config.MEDITATE_REGEN_MULTIPLIER
-            if is_in_node:
-                ess_regen_rate *= config.NODE_REGEN_MULTIPLIER
-            self.essence = min(self.max_essence, self.essence + (ess_regen_rate * dt))
+    # --- Essence Regeneration ---
+        if self.essence < self.max_essence and self.status == "ALIVE":
+            # Only regenerate essence if not parched
+            if self.thirst > 0:
+                regen_rate = 1 + (self.aura_mod * 2) * .05
+                self.essence = min(self.max_essence, self.essence + (regen_rate * dt))
 
     def update_location(self, new_location: Optional['Room']):
         """Updates the character's current location reference."""
@@ -532,7 +463,7 @@ class Character:
         return base_carry + might_bonus
 
     def get_shield(self) -> Optional[Item]:
-        shield_item = self._equipped_items.get("WIELD_OFF")
+        shield_item = self._equipped_items.get("off_hand")
         if shield_item and shield_item.item_type == "SHIELD":
             return shield_item
         return None

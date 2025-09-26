@@ -78,6 +78,9 @@ class Room:
             f"[Exits: {', '.join(sorted(self.exits.keys())) if self.exits else 'none'}]"
         ]
 
+        if not looker.can_see():
+            return "It is pitch black..."
+
         other_chars = sorted([c.name for c in self.characters if c != looker])
         if other_chars:
             output_lines.append("Also Here: " + ", ".join(other_chars) + ".")

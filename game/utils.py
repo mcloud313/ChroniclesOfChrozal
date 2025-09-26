@@ -430,3 +430,21 @@ def format_departure_message(character_name: str, direction: str) -> str:
     
     # Default for complex exits like "portal", "door", "fissure"
     return f"\r\n{character_name} leaves through the {direction.lower()}.\r\n"
+
+def format_hunger_status(character: 'Character') -> str:
+    """Returns a descriptive string for the character's hunger level."""
+    percent = (character.hunger / 100) * 100
+    if percent >= 95: return "{gSatiated{x"
+    if percent >= 70: return "{gContent{x"
+    if percent >= 40: return "{YPeckish{x"
+    if percent >= 15: return "{YHungry{x"
+    return "{RStarving{x"
+
+def format_thirst_status(character: 'Character') -> str:
+    """Returns a descriptive string for the character's thirst level."""
+    percent = (character.thirst / 100) * 100
+    if percent >= 95: return "{cSated{x"
+    if percent >= 70: return "{cQuenched{x"
+    if percent >= 40: return "{yThirsty{x"
+    if percent >= 15: return "{yParched{x"
+    return "{rDehydrated{x"

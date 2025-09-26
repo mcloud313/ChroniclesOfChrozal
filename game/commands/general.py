@@ -272,6 +272,9 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
     # FIX: Handle the case where XP needed is infinite (max level)
     xp_needed_str = "Max" if xp_needed_val == float('inf') else str(int(xp_needed_val))
 
+    hunger_status = utils.format_hunger_status(character)
+    thirst_status = utils.format_thirst_status(character)
+
     attributes_display = []
     stat_order = ["might", "vitality", "agility", "intellect", "aura", "persona"]
     for stat_name in stat_order:
@@ -287,6 +290,7 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
         f"\r\n Name : {character.name:<28} Sex: {character.sex}"
         f"\r\n Race : {world.get_race_name(character.race_id):<28} Class: {world.get_class_name(character.class_id)}"
         f"\r\n Level: {character.level:<31}"
+        f"\r\n Hunger: {hunger_status}   Thirst: {thirst_status}"
         f"\r\n=================================================="
         f"\r\n HP   : {int(character.hp):>4}/{int(character.max_hp):<28} Carry: {character.get_current_weight():>2}/{character.get_max_weight():<3} stones"
         f"\r\n Armor: {effective_av:>4}/{base_av_for_display:<28} (Effective/Total)"

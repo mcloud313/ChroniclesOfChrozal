@@ -659,18 +659,40 @@ async def resolve_consumable_effect(character: Character, item_template: Dict[st
     amount = stats.get("amount")
     item_name = item_template.get('name', 'the item')
 
-    if not effect_name:
+    if not effect_name or not isinstance(amount, int):
         await character.send(f"The {item_name} doesn't seem to do anything.")
+        return True # Return true to consume the item
+
+    # --- NEW LOGIC START ---
+    if effect_name == "restore_hunger":
+        if character.hunger >= 100:
+            await character.send("You are too full to eat anything else.")
+            return False # Do not consume the item
+        
+        character.hunger = min(100, character.hunger + amount)
+        await character.send(f"You eat the {item_name} and feel less hungry.")
         return True
 
-    if effect_name == "heal_hp" and isinstance(amount, (int, float)):
+    elif effect_name == "restore_thirst":
+        if character.thirst >= 100:
+            await character.send("You are too full to drink anything else.")
+            return False # Do not consume the item
+            
+        character.thirst = min(100, character.thirst + amount)
+        await character.send(f"You drink the {item_name} and feel refreshed.")
+        return True
+    # --- NEW LOGIC END ---
+
+    # Keep heal_hp for potions, but food/drink should now use the logic above
+    elif effect_name == "heal_hp":
         if character.hp >= character.max_hp:
             await character.send("You are already at full health.")
             return False
         actual_healed = min(amount, character.max_hp - character.hp)
         character.hp += actual_healed
-        await character.send(f"You consume {item_name}, healing {int(actual_healed)} hit points.")
+        await character.send(f"You consume the {item_name}, healing for {actual_healed} HP.")
         return True
-    
-    await character.send(f"You consume {item_name}, but nothing seems to happen.")
-    return True
+
+    else:
+        await character.send(f"The {item_name} doesn't seem to do anything.")
+        return True

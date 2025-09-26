@@ -277,6 +277,7 @@ class World:
         ticker.subscribe(self.update_room_effects)
         ticker.subscribe(self.update_item_decay)
         ticker.subscribe(self.update_ambient_scripts)
+        ticker.subscribe(self.update_hunger_thirst)
 
     # --- Ticker Callback Functions ---
     async def update_roundtimes(self, dt: float):
@@ -342,7 +343,6 @@ class World:
     async def update_respawns(self, dt: float):
         tasks = [room.check_respawn(self) for room in self.rooms.values()]
         if tasks: await asyncio.gather(*tasks, return_exceptions=True)
-
     # In game/world.py
     async def update_death_timers(self, dt: float):
         current_time = time.monotonic()
@@ -448,7 +448,7 @@ class World:
                     await resolver.apply_effect(char, char, poison_effect, {"name": "a poisonous miasma"}, self)
 
     async def update_xp_absorption(self, dt: float):
-        """Ticker: Processes XP pool absorption for characters in node rooms."""
+        """Ticker: Processes XP pool absorption and checks for level advancement."""
         absorb_this_tick = config.XP_ABSORB_RATE_PER_SEC * dt
         for char in self.get_active_characters_list():
             if char.location and "NODE" in char.location.flags and char.xp_pool > 0:
@@ -456,9 +456,17 @@ class World:
                 char.xp_pool -= absorb_amount
                 char.xp_total += absorb_amount
                 char.is_dirty = True
+                
                 if char.xp_pool <= 0:
                     char.xp_pool = 0
                     await char.send("You feel you have absorbed all you can for now.")
+
+                # After absorbing, check if the character can level up.
+                xp_for_next_level = utils.xp_needed_for_level(char.level)
+                if char.xp_total >= xp_for_next_level and not char.can_advance_notified:
+                    await char.send("{gYou have gained enough experience to advance to the next level!{x")
+                    await char.send("{gType {c<advance>{g to proceed.{x")
+                    char.can_advance_notified = True
     
     async def update_stealth_checks(self, dt: float):
         """Ticker: Periodically allows observers to detect hidden characters."""
@@ -489,6 +497,39 @@ class World:
                         await observer.send(f"You spot {hidden_char.name} hiding in the shadows!")
                     # Once spotted, break the inner loop and move to the next hidden character
                     break 
+
+    async def update_hunger_thirst(self, dt: float):
+        """Ticker: Decreases hunger and thirst and notifies characters on status changes."""
+        for char in self.get_active_characters_list():
+            # Store current status before changing values
+            old_hunger_status = utils.format_hunger_status(char)
+            old_thirst_status = utils.format_thirst_status(char)
+
+            # Decrease thirst and hunger
+            char.thirst = max(0, char.thirst - (dt / 100.0))
+            char.hunger = max(0, char.hunger - (dt / 200.0))
+
+            # Get new status
+            new_hunger_status = utils.format_hunger_status(char)
+            new_thirst_status = utils.format_thirst_status(char)
+
+            # Check if hunger status has changed to a worse state and notify
+            if new_hunger_status != old_hunger_status:
+                if "Peckish" in new_hunger_status:
+                    await char.send("{YYou are starting to feel peckish.{x")
+                elif "Hungry" in new_hunger_status:
+                    await char.send("{YYour stomach rumbles loudly.{x")
+                elif "Starving" in new_hunger_status:
+                    await char.send("{RYou are starving! Your health regeneration has stopped!{x")
+
+            # Check if thirst status has changed to a worse state and notify
+            if new_thirst_status != old_thirst_status:
+                if "Thirsty" in new_thirst_status:
+                    await char.send("{yYou feel thirsty.{x")
+                elif "Parched" in new_thirst_status:
+                    await char.send("{yYour mouth feels dry and parched.{x")
+                elif "Dehydrated" in new_thirst_status:
+                    await char.send("{rYou are dehydrated! Your essence regeneration has stopped!{x")
 
     async def update_regen(self, dt: float):
         """Ticker: Calls the regeneration logic for all active characters."""
@@ -638,4 +679,17 @@ class World:
                 # Pick one script at random and send it
                 chosen_script = random.choice(possible_scripts)
                 # The {i} code is a common MUD convention for gray/italic text
-                await char.send(f"{{i{chosen_script['script_text']}{{x")    
+                await char.send(f"{{i{chosen_script['script_text']}{{x")
+
+    async def broadcast_to_all(self, message: str, exclude: set = None):
+        """Sends a message to all active characters."""
+        if exclude is None:
+            exclude = set()
+        
+        tasks = []
+        for char in self.get_active_characters_list():
+            if char not in exclude:
+                tasks.append(char.send(message))
+        
+        if tasks:
+            await asyncio.gather(*tasks)

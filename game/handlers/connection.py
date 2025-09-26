@@ -34,7 +34,7 @@ MOTD = """
 | |   | |_| | |_) | | | |/ /  / _ \ | |                    
 | |___|  _  |  _ <| |_| / /_ / ___ \| |___                 
  \____|_| |_|_| \_\\___/____/_/   \_\_____|
-                    Version 0.70
+                    Version 0.71
 """
 
 class ConnectionState(Enum):
@@ -218,8 +218,9 @@ class ConnectionHandler:
         self.active_character.login_timestamp = time.monotonic()
         
         await self._send(MOTD)
+        await self.send(f"Welcome back, {self.active_character.name}.")
         await command_handler.process_command(self.active_character, self.world, "look")
-        await room.broadcast(f"\r\n{self.active_character.name} has entered the realm.\r\n", {self.active_character})
+        await self.world.broadcast_to_all(f"{{Y** {self.active_character.name} has entered the realm. **{{x", exclude={self.active_character})
         self.state = ConnectionState.PLAYING
 
     async def _handle_playing(self):
@@ -279,7 +280,7 @@ class ConnectionHandler:
             await self.active_character.save()
             if self.active_character.location:
                 self.active_character.location.remove_character(self.active_character)
-                await self.active_character.location.broadcast(f"\r\n{self.active_character.name} has left the realm.\r\n", {self.active_character})
+                await self.world.broadcast_to_all(f"{{Y** {self.active_character.name} has left the realm. **{{x", exclude={self.active_character})
             self.world.remove_active_character(self.active_character.dbid)
         if self.writer and not self.writer.is_closing():
             self.writer.close()

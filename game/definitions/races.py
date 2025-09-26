@@ -25,7 +25,7 @@ RACIAL_STAT_MODIFIERS: Dict[str, Dict[str, int]] = {
         "might": 6,
         "intellect": -3
     },
-    "kytynn": {
+    "kaiteen": {
         "agility": 6,       # +6 Agility
         "might": -3         # -3 Might
     }
