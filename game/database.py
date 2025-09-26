@@ -15,7 +15,7 @@ from . import utils
 from .definitions import skills as skill_defs
 from .definitions import abilities as ability_defs
 from .definitions import classes as class_defs
-from .definitions import items as item_defs
+from .definitions import item_defs
 
 log = logging.getLogger(__name__)
 
