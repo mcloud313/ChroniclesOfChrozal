@@ -262,6 +262,36 @@ class MobLootTable(models.Model):
         managed = False
         db_table = 'mob_loot_table'
 
+class LootTables(models.Model):
+    name = models.CharField(unique=True, max_length=100)
+    description = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.name} (ID: {self.id})"
+
+    class Meta:
+        managed = False
+        db_table = 'loot_tables'
+        verbose_name_plural = "Loot Tables"
+
+class LootTableEntries(models.Model):
+    loot_table = models.ForeignKey(LootTables, on_delete=models.CASCADE, related_name='entries')
+    item_template = models.ForeignKey(ItemTemplates, on_delete=models.SET_NULL, blank=True, null=True)
+    min_coinage = models.IntegerField(default=0)
+    max_coinage = models.IntegerField(default=0)
+    drop_chance = models.FloatField(default=1.0)
+    min_quantity = models.IntegerField(default=1)
+    max_quantity = models.IntegerField(default=1)
+
+    def __str__(self):
+        target = self.item_template.name if self.item_template else "Coinage"
+        return f"{target} in {self.loot_table.name}"
+
+    class Meta:
+        managed = False
+        db_table = 'loot_table_entries'
+        verbose_name_plural = "Loot Table Entries"
+
 # --- Player and Character Models ---
 
 class Players(models.Model):
