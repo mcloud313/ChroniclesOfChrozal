@@ -82,6 +82,23 @@ class ConnectionHandler:
         except (ConnectionResetError, asyncio.IncompleteReadError, BrokenPipeError):
             self.state = ConnectionState.DISCONNECTED
             return None
+        
+    async def send(self, message: str):
+        """Encodes and sends a message to the client."""
+        if self.writer.is_closing():
+            log.warning("Attempted to send to a closing writer for %s.", self.addr)
+            return
+
+        # MUDs traditionally add a newline. The client handles color codes.
+        full_message = f"{message}\r\n"
+        
+        try:
+            self.writer.write(full_message.encode('utf-8'))
+            await self.writer.drain()
+        except (ConnectionResetError, BrokenPipeError):
+            # This handles cases where the player abruptly disconnected.
+            log.warning("Connection closed for %s while sending.", self.addr)
+            self.state = ConnectionState.DISCONNECTED
 
     async def _send(self, message: str, add_newline: bool = True):
         if self.writer.is_closing(): return
