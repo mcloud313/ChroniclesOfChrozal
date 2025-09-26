@@ -7,7 +7,7 @@ from .models import (
     Rooms, Exits, RoomObjects, MobAttacks, MobLootTable,
     Players, Characters, CharacterStats, CharacterSkills, CharacterEquipment,
     ItemInstances, ShopInventories, BankAccounts, AbilityTemplates,
-    LootTables, LootTableEntries # ✅ ADD THESE TWO MODELS
+    LootTables, LootTableEntries, AmbientScripts # ✅ ADD AmbientScripts HERE
 )
 from .forms import RoomAdminForm, ItemTemplateAdminForm, MobTemplateAdminForm, AbilityTemplateAdminForm, ExitAdminForm # Add new form
 
