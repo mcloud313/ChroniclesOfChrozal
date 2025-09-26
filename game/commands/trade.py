@@ -31,13 +31,9 @@ async def cmd_list(character: 'Character', world: 'World', args_str: str) -> boo
         if not template:
             continue
 
-        # Calculate the price
-        try:
-            stats = json.loads(template.get('stats', '{}') or '{}')
-            base_value = stats.get('value', 0)
-        except (json.JSONDecodeError, TypeError):
-            base_value = 0
-
+        stats = template.get('stats', {})
+        base_value = stats.get('value', 0)
+        
         price = int(base_value * shop_item['buy_price_modifier'])
 
         #Determine stock display
@@ -88,11 +84,8 @@ async def cmd_buy(character: 'Character', world: 'World', args_str: str) -> bool
         return True
     
     # 4. Calculate price and check if the player can afford it.
-    try:
-        stats = json.loads(item_template.get('stats', '{}') or '{}')
-        base_value = stats.get('value', 0)
-    except (json.JSONDecodeError, TypeError):
-        base_value = 0
+    stats = item_template.get('stats', {})
+    base_value = stats.get('value', 0)
 
     price = int(base_value * item_to_buy['buy_price_modifier'])
 
