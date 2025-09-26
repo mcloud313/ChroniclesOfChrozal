@@ -43,7 +43,8 @@ async def resolve_physical_attack(
     target: Union[Character, Mob],
     attack_source: Optional[Union[Item, Dict[str, Any]]],
     world: 'World',
-    damage_multiplier: float = 1.0
+    damage_multiplier: float = 1.0,
+    ability_mods: Optional[Dict[str, Any]] = None # <-- FIX 1: Add the missing argument here
 ):
     """Resolves a physical attack by coordinating hit, damage, and outcome modules."""
     # ---Initial Checks ---
@@ -65,13 +66,12 @@ async def resolve_physical_attack(
 
     hit_modifier = 0
     if not attacker.can_see():
-        hit_modifier -= 4 # A -4 penalty on a d20 roll (20% reduced chance)
+        hit_modifier -= 4
     if not target.can_see() and attacker.can_see():
-        hit_modifier += 4 # A +4 bonus if you can see a blind target
+        hit_modifier += 4
 
     use_rar = False
     if isinstance(attacker, Mob) and isinstance(attack_source, dict):
-        # We'll use the attack_type 'ranged' to signify a RAR attack for mobs.
         if attack_source.get("attack_type") == "ranged":
             use_rar = True
 
@@ -91,7 +91,7 @@ async def resolve_physical_attack(
     # --- Resolve Parry ---
     if isinstance(target, Character) and (weapon := target._equipped_items.get("main_hand")):
         parry_skill_rank = target.get_skill_rank("parrying")
-        parry_chance = parry_skill_rank * 0.005 # 0.5% chance per rank
+        parry_chance = parry_skill_rank * 0.005
         if random.random() < parry_chance:
             await attacker.send(f"{{y{target.name} parries your attack with their {weapon.name}!{{x")
             await target.send(f"{{gYou parry {attacker.name}'s attack with your {weapon.name}!{{x")
@@ -105,13 +105,14 @@ async def resolve_physical_attack(
         if random.random() < block_chance:
             await attacker.send(f"{{y{target.name} blocks your attack with their shield!{{x")
             await target.send(f"{{gYou block {attacker.name}'s attack with your shield!{{x")
-            # Apply correct roundtime on a block
             attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
             return
         
     # ---Calculate and Mitigate Damage ---
-    damage_info = damage_calculator.calculate_physical_damage(attacker, attack_source, hit_result.is_crit)
-    damage_info.attack_name = attack_name # Add attack_name to the info object
+    # <-- FIX 2: Pass the new 'ability_mods' argument to the calculator
+    damage_info = damage_calculator.calculate_physical_damage(attacker, attack_source, hit_result.is_crit, ability_mods=ability_mods)
+    
+    damage_info.attack_name = attack_name
     if damage_multiplier != 1.0:
         damage_info.pre_mitigation_damage = int(damage_info.pre_mitigation_damage * damage_multiplier)
     final_damage = damage_calculator.mitigate_damage(target, damage_info)
@@ -693,7 +694,6 @@ async def resolve_effect_expiration(target: Union[Character, Mob], effect_key: s
     if msg_room := messages.get("expire_msg_room"):
         if target.location:
             await target.location.broadcast(f"\\r\\n{msg_room.format(target_name=target_name)}\\r\\n", exclude={target})
-
 
 async def resolve_consumable_effect(character: Character, item_template: Dict[str, Any], world: 'World') -> bool:
     """Applies the effect of a consumable item (FOOD/DRINK)."""

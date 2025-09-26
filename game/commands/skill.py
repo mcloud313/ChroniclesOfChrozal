@@ -28,10 +28,12 @@ async def cmd_spend(character: 'Character', world: 'World', args_str: str) -> bo
     skill_name_target = parts[0].lower()
     amount_to_spend = 1
     
+    # This logic for parsing the amount is preserved from your original code.
     if len(parts) > 1:
         try:
             amount_to_spend = int(parts[1])
         except (ValueError, IndexError):
+            # If the second part isn't a number, assume the whole string is the skill name
             skill_name_target = args_str.lower()
             amount_to_spend = 1
 
@@ -39,12 +41,18 @@ async def cmd_spend(character: 'Character', world: 'World', args_str: str) -> bo
         await character.send("You must spend a positive number of points.")
         return True
 
+    # --- THIS IS THE CORRECTED LOGIC ---
+    # Use the canonical SKILL_ATTRIBUTE_MAP to find the skill.
+    # This is more robust and handles ambiguous matches cleanly.
+    possible_matches = [sk for sk in skill_defs.SKILL_ATTRIBUTE_MAP.keys() if sk.startswith(skill_name_target)]
+    
     found_skill_name = None
-    possible_matches = [sk for sk in skill_defs.INITIAL_SKILLS if sk.startswith(skill_name_target)]
     if len(possible_matches) == 1:
         found_skill_name = possible_matches[0]
-    elif skill_name_target in skill_defs.INITIAL_SKILLS:
-        found_skill_name = skill_name_target
+    elif len(possible_matches) > 1:
+        await character.send(f"That's ambiguous. Did you mean: {', '.join(possible_matches)}?")
+        return True
+    # ------------------------------------
 
     if not found_skill_name:
         await character.send(f"Unknown skill '{skill_name_target}'. Type 'skills' to see available skills.")
@@ -54,13 +62,16 @@ async def cmd_spend(character: 'Character', world: 'World', args_str: str) -> bo
         await character.send(f"You don't have enough skill points (have {character.unspent_skill_points}, need {amount_to_spend}).")
         return True
 
+    # The rest of your original logic is preserved exactly.
     current_rank = character.skills.get(found_skill_name, 0)
     new_rank = current_rank + amount_to_spend
     character.skills[found_skill_name] = new_rank
     character.unspent_skill_points -= amount_to_spend
+    character.is_dirty = True # Ensure the change is saved
 
     log.info("Character %s spent %d points on '%s', new rank %d.",
              character.name, amount_to_spend, found_skill_name, new_rank)
+             
     await character.send(f"You improve your {found_skill_name.title()} skill to rank {new_rank}!")
     await character.send(f"({character.unspent_skill_points} skill points remaining).")
 

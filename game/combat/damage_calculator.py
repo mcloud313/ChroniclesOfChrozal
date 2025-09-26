@@ -10,6 +10,7 @@ from typing import Union, Dict, Any, Optional
 from ..character import Character
 from ..mob import Mob
 from ..item import Item
+from ..definitions import item_defs
 
 @dataclass
 class DamageInfo:
@@ -31,26 +32,46 @@ def _roll_exploding_dice(max_roll: int) -> int:
         rolls += 1
     return total
 
-def calculate_physical_damage(attacker: Union[Character, Mob], attack_source: Optional[Union[Item, Dict[str, Any]]], is_crit: bool) -> DamageInfo:
+def calculate_physical_damage(
+    attacker: Union[Character, Mob],
+    attack_source: Optional[Union[Item, Dict[str, Any]]],
+    is_crit: bool,
+    ability_mods: Optional[Dict[str, Any]] = None # <-- FIX 1: Add the new argument
+) -> DamageInfo:
     """Calculates the pre-mitigation damage for a physical attack."""
     base_dmg, rng_dmg, dmg_type = 1, 0, "bludgeon"
     stat_modifier = attacker.might_mod
+    ability_mods = ability_mods or {} # Ensure ability_mods is a dict, not None
 
     if isinstance(attacker, Character):
-        if isinstance(attack_source, Item) and attack_source.item_type == "WEAPON":
-            base_dmg, rng_dmg, dmg_type = attack_source.damage_base, attack_source.damage_rng, attack_source.damage_type or "bludgeon"
+        # Corrected to include both weapon types
+        if isinstance(attack_source, Item) and attack_source.item_type in (item_defs.WEAPON, item_defs.TWO_HANDED_WEAPON):
+            base_dmg = attack_source.damage_base
+            rng_dmg = attack_source.damage_rng
+            dmg_type = attack_source.damage_type or "bludgeon"
         else: # Unarmed
             base_dmg, rng_dmg = 1, 2
     elif isinstance(attacker, Mob) and isinstance(attack_source, dict):
-        base_dmg, rng_dmg = attack_source.get("damage_base", 1), attack_source.get("damage_rng", 0)
+        base_dmg = attack_source.get("damage_base", 1)
+        rng_dmg = attack_source.get("damage_rng", 0)
+
+    # --- FIX 2: Get bonus damage from the ability ---
+    bonus_damage = ability_mods.get("bonus_damage", 0)
+    # -------------------------------------------------
 
     rng_roll_result = random.randint(1, rng_dmg) if rng_dmg > 0 else 0
     if is_crit:
         rng_roll_result += _roll_exploding_dice(rng_dmg)
 
-    pre_mitigation_damage = max(0, base_dmg + rng_roll_result + stat_modifier)
+    # --- FIX 3: Add the bonus damage to the final calculation ---
+    pre_mitigation_damage = max(0, base_dmg + rng_roll_result + stat_modifier + bonus_damage)
     
-    return DamageInfo(pre_mitigation_damage=pre_mitigation_damage, damage_type=dmg_type, is_crit=is_crit)
+    return DamageInfo(
+        pre_mitigation_damage=pre_mitigation_damage,
+        damage_type=dmg_type,
+        is_crit=is_crit,
+        attack_name=ability_mods.get("name", "an attack") # Pass ability name for better logs
+    )
 
 def mitigate_damage(target: Union[Character, Mob], damage_info: DamageInfo) -> int:
     """Applies mitigation to pre-calculated damage and returns the final amount."""
