@@ -74,7 +74,12 @@ class ConnectionHandler:
     async def _read_line(self) -> Optional[str]:
         try:
             data = await self.reader.readuntil(b'\n')
-            decoded_data = data.decode(config.ENCODING).strip()
+            
+            # --- THIS IS THE FIX ---
+            # Add 'errors="ignore"' to discard invalid MUD client command bytes
+            decoded_data = data.decode(config.ENCODING, errors='ignore').strip()
+            # -----------------------
+
             if decoded_data.lower() == 'quit':
                 self.state = ConnectionState.DISCONNECTED
                 return None
@@ -292,15 +297,40 @@ class ConnectionHandler:
             await self.cleanup()
 
     async def cleanup(self):
+        """
+        Cleans up the connection and ensures the character is removed from the world,
+        even if the save operation fails.
+        """
         log.info("Cleaning up connection for %s.", self.addr)
-        if self.active_character:
-            self.world.pending_invites.pop(self.active_character.dbid, None)
-            await self.active_character.save()
-            if self.active_character.location:
-                self.active_character.location.remove_character(self.active_character)
-                await self.world.broadcast_to_all(f"{{Y** {self.active_character.name} has left the realm. **{{x", exclude={self.active_character})
-            self.world.remove_active_character(self.active_character.dbid)
-        if self.writer and not self.writer.is_closing():
-            self.writer.close()
-            await self.writer.wait_closed()
+        
+        # Store a reference to the character before starting the process
+        character_to_remove = self.active_character
+        
+        try:
+            # First, attempt to save the character. This might fail.
+            if character_to_remove:
+                await character_to_remove.save()
+        except Exception:
+            # If saving fails, log the error but do not stop the cleanup process.
+            char_name = getattr(character_to_remove, 'name', 'Unknown')
+            log.exception(f"Failed to save character {char_name} during cleanup. Progress may be lost.")
+        finally:
+            # This block is GUARANTEED to run, even if save() crashes.
+            if character_to_remove:
+                # Clean up group invites and remove character from the world.
+                self.world.pending_invites.pop(character_to_remove.dbid, None)
+                if character_to_remove.location:
+                    character_to_remove.location.remove_character(character_to_remove)
+                    # Announce departure after removal to prevent the ghost from being seen.
+                    await self.world.broadcast_to_all(
+                        f"{{Y** {character_to_remove.name} has left the realm. **{{x",
+                        exclude={character_to_remove}
+                    )
+                self.world.remove_active_character(character_to_remove.dbid)
+                
+            # Close the network connection.
+            if self.writer and not self.writer.is_closing():
+                self.writer.close()
+                await self.writer.wait_closed()
+                
         log.info("Connection handler finished for %s.", self.addr)

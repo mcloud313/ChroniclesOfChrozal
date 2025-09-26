@@ -11,7 +11,8 @@ import logging
 import config
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple, Union, Set
 from .item import Item
-from .definitions import skills as skill_defs, abilities as ability_defs, classes as class_defs, item_defs, slots as slots_defs
+from .definitions import skills as skill_defs, abilities as ability_defs, classes as class_defs, item_defs
+from .definitions import slots as slot_defs
 from . import utils
 
 if TYPE_CHECKING:
