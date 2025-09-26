@@ -319,64 +319,65 @@ class Character:
         except (ConnectionResetError, BrokenPipeError):
             log.warning("Connection lost for %s during write.", self.name)
 
+    def get_core_data_for_saving(self) -> Dict[str, Any]:
+        """
+        Gathers the character's core attributes into a dictionary for saving.
+        """
+        return {
+            "name": self.name,
+            "sex": self.sex,
+            "level": self.level,
+            "hp": self.hp,
+            "essence": self.essence,
+            "xp_total": self.xp_total,
+            "xp_pool": self.xp_pool,
+            "coinage": self.coinage,
+            "spiritual_tether": self.spiritual_tether,
+            "total_playtime_seconds": self.total_playtime_seconds,
+            "unspent_skill_points": self.unspent_skill_points,
+            "unspent_attribute_points": self.unspent_attribute_points,
+            # --- FIX: Add hunger and thirst to the save data ---
+            "hunger": self.hunger,
+            "thirst": self.thirst
+        }
+
     async def save(self):
-        """Gathers all character data and saves it to the database if changes were made."""
+        """Prepares and saves the character's full state."""
         if not self.is_dirty:
             return
 
-        if self.login_timestamp:
-            session_duration = int(time.monotonic() - self.login_timestamp)
-            if session_duration > 0:
-                self.total_playtime_seconds += session_duration
-            self.login_timestamp = time.monotonic()
-
-        
-
-        core_data = {
-            "location_id": self.location_id, "hp": self.hp, "max_hp": self.max_hp,
-            "essence": self.essence, "max_essence": self.max_essence, "xp_pool": self.xp_pool,
-            "xp_total": self.xp_total, "level": self.level,
-            "unspent_skill_points": self.unspent_skill_points,
-            "unspent_attribute_points": self.unspent_attribute_points,
-            "status": self.status, "stance": self.stance, "coinage": self.coinage,
-            "total_playtime_seconds": self.total_playtime_seconds
-        }
+        # Prepare all the data components for saving
+        core_data = self.get_core_data_for_saving()
         equipment_data = self.get_equipment_for_saving()
 
-        try:
-            log.info(f"Saving character state for {self.name} (ID: {self.dbid})")
-            
-            # This calls the new, single atomic save function in your database manager.
-            success = await self.world.db_manager.save_character_full(
-                char_id=self.dbid,
-                core_data=core_data,
-                stats=self.stats,
-                skills=self.skills,
-                equipment=equipment_data,
-                abilities=self.known_abilities
-            )
+        # --- THIS IS THE CORRECTED CALL ---
+        # Access the db_manager through the character's world reference.
+        await self.world.db_manager.save_character_full(
+            self.dbid,
+            core_data,
+            self.stats,
+            self.skills,
+            equipment_data,
+            self.known_abilities # Use the correct attribute for known abilities
+        )
+        # ------------------------------------
 
-            if success:
-                self.is_dirty = False # Only reset the flag on a successful save
-                log.info("Successfully saved character %s (ID: %s).", self.name, self.dbid)
-            else:
-                log.error("Failed to save character %s (ID: %s). State remains dirty.", self.name, self.dbid)
+        self.is_dirty = False
+        log.info(f"Successfully saved character: {self.name} (ID: {self.dbid})")
 
-        except Exception:
-            log.exception("Unexpected error saving character %s (ID: %s):", self.name, self.dbid)
 
     def get_equipment_for_saving(self) -> Dict[str, Optional[str]]:
-        """
-        Serializes all equipped items into a dictionary mapping slot_name -> item_instance_id
-        for saving to the database.
-        """
-        equipment_data = {}
-        # Use the canonical list of all slots to ensure nothing is missed.
-        for slot in item_defs.ALL_SLOTS:
-            item = self._equipped_items.get(slot)
-            # Store the item's unique instance ID, or None if the slot is empty.
-            equipment_data[slot] = item.id if item else None
-        return equipment_data
+            """
+            Serializes all equipped items into a dictionary mapping slot_name -> item_instance_id
+            for saving to the database.
+            """
+            equipment_data = {}
+            # Use the canonical list of all slots to ensure nothing is missed.
+            for slot in item_defs.ALL_SLOTS:
+                item = self._equipped_items.get(slot)
+                # Store the item's unique instance ID, or None if the slot is empty.
+                equipment_data[slot] = item.id if item else None
+            return equipment_data    
 
     async def check_and_learn_new_abilities(self):
         """Checks for and learns new abilities upon leveling up."""
