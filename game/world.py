@@ -17,6 +17,7 @@ from .character import Character
 from .mob import Mob
 from .item import Item
 from .definitions import abilities as ability_defs
+from .definitions import calendar as calendar_defs
 from . import resolver
 from . import utils
 from . import ticker
@@ -52,6 +53,13 @@ class World:
         self.loot_tables: Dict [int, Dict] = {}
         self.loot_table_entries: Dict[int, List[Dict]] = {}
         self.ambient_scripts: List[Dict] = []
+        self.game_time_accumulator: float = 0.0
+        self.game_minutes: int = 0
+        self.game_hour: int = calendar_defs.STARTING_HOUR
+        self.game_day: int = calendar_defs.STARTING_DAY
+        self.game_month: int = calendar_defs.STARTING_MONTH
+        self.game_year: int = calendar_defs.STARTING_YEAR
+
 
     async def build(self):
         """
@@ -278,6 +286,7 @@ class World:
         ticker.subscribe(self.update_item_decay)
         ticker.subscribe(self.update_ambient_scripts)
         ticker.subscribe(self.update_hunger_thirst)
+        ticker.subscribe(self.update_game_time)
 
     # --- Ticker Callback Functions ---
     async def update_roundtimes(self, dt: float):
@@ -605,6 +614,35 @@ class World:
             await self.db_manager.delete_item_instance(item.id)
         
         log.info(f"Cleaned up {len(items_to_delete)} decayed items from the world.")
+
+    async def update_game_time(self, dt: float):
+        """Ticker: Advances the in-game calendar and clock."""
+        self.game_time_accumulator += dt
+
+        # Check if enough real time has passed to advance the game time
+        if self.game_time_accumulator < calendar_defs.SECONDS_PER_GAME_MINUTE:
+            return
+        
+        #Calculate how many game minutes have passed
+        minutes_passed = int(self.game_time_accumulator / calendar_defs.SECONDS_PER_GAME_MINUTE)
+        self.game_time_accumulator %= calendar_defs.SECONDS_PER_GAME_MINUTE
+
+        if not minutes_passed:
+            return
+        
+        self.game_minute += minutes_passed
+        while self.game_minute >= calendar_defs.MINUTES_PER_HOUR:
+            self.game_minute -= calendar_defs.MINUTES_PER_HOUR
+            self.game_hour += 1
+            if self.game_hour >= calendar_defs.HOURS_PER_DAY:
+                self.game_hour = 0
+                self.game_day += 1
+                if self.game_day > calendar_defs.DAYS_PER_MONTH:
+                    self.game_day = 1
+                    self.game_month += 1
+                    if self.game_month > calendar_defs.MONTHS_PER_YEAR:
+                        self.game_month = 1
+                        self.game_year += 1
 
     async def generate_loot_for_container(self, container: Item, loot_table_id: int, character: Character):
         """

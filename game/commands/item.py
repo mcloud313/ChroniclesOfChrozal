@@ -206,48 +206,99 @@ async def cmd_wear(character: 'Character', world: 'World', args_str: str) -> boo
     return True
 
 async def cmd_sheathe(character: 'Character', world: 'World', args_str: str) -> bool:
-    """Sheathes a wielded weapon, moving it to a passive equipment slot."""
-    if not args_str:
-        await character.send("Sheathe what?")
-        return True
+    """Sheathes all wielded weapons, freeing the character's hands."""
     
-    # Find the weapon in the main or off hand
-    weapon_to_sheathe = None
-    hand = None
-    main_hand_wep = character._equipped_items.get("main_hand")
-    off_hand_wep = character._equipped_items.get("off_hand")
+    main_hand_item = character._equipped_items.get("main_hand")
+    off_hand_item = character._equipped_items.get("off_hand")
 
-    if main_hand_wep and args_str.lower() in main_hand_wep.name.lower():
-        weapon_to_sheathe = main_hand_wep
-        hand = "main_hand"
-    elif off_hand_wep and args_str.lower() in off_hand_wep.name.lower():
-        weapon_to_sheathe = off_hand_wep
-        hand = "off_hand"
-
-    if not weapon_to_sheathe:
-        await character.send("You aren't wielding that.")
+    if not main_hand_item and not off_hand_item:
+        await character.send("You are not wielding anything to sheathe.")
         return True
 
-    # Determine target slot and check if it's free
-    is_two_handed = weapon_to_sheathe.item_type == item_defs.TWO_HANDED_WEAPON
-    target_slot = "back" if is_two_handed else "waist"
-
-    if character._equipped_items.get(target_slot):
-        await character.send(f"You are already wearing something on your {target_slot}.")
-        return True
-
-    # Perform the move
-    if is_two_handed:
+    # Use special, non-conflicting slots for sheathed items
+    sheathed_something = False
+    if main_hand_item:
+        # Move main hand item to the sheathed slot
+        character._equipped_items["sheathed_main_hand"] = main_hand_item
         del character._equipped_items["main_hand"]
-        del character._equipped_items["off_hand"]
-    else:
-        del character._equipped_items[hand]
         
-    character._equipped_items[target_slot] = weapon_to_sheathe
-    character.is_dirty = True
+        # If it's a two-handed weapon, it also frees the off-hand
+        if main_hand_item.item_type == item_defs.TWO_HANDED_WEAPON:
+            if "off_hand" in character._equipped_items:
+                del character._equipped_items["off_hand"]
+        
+        await character.send(f"You sheathe your {main_hand_item.name}.")
+        await character.location.broadcast(f"\\r\\n{character.name} sheathes their {main_hand_item.name}.\\r\\n", exclude={character})
+        sheathed_something = True
 
-    await character.send(f"You sheathe your {weapon_to_sheathe.name}.")
-    await character.location.broadcast(f"\r\n{character.name} sheathes their {weapon_to_sheathe.name}.\r\n", exclude={character})
+    if off_hand_item:
+        character._equipped_items["sheathed_off_hand"] = off_hand_item
+        del character._equipped_items["off_hand"]
+        await character.send(f"You sheathe your {off_hand_item.name}.")
+        # Broadcast is handled by the main_hand check to avoid spam
+        if not main_hand_item:
+             await character.location.broadcast(f"\\r\\n{character.name} sheathes their {off_hand_item.name}.\\r\\n", exclude={character})
+        sheathed_something = True
+
+    if sheathed_something:
+        character.is_dirty = True
+        
+    return True
+
+async def cmd_unsheathe(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Draws sheathed weapons, readying them for combat."""
+
+    sheathed_main = character._equipped_items.get("sheathed_main_hand")
+    sheathed_off = character._equipped_items.get("sheathed_off_hand")
+
+    if not sheathed_main and not sheathed_off:
+        await character.send("You do not have any weapons sheathed.")
+        return True
+
+    # Check if hands are free *before* doing anything
+    main_hand_free = "main_hand" not in character._equipped_items
+    off_hand_free = "off_hand" not in character._equipped_items
+
+    # Handle the main hand (or two-handed) weapon first
+    if sheathed_main:
+        is_two_handed = sheathed_main.item_type == item_defs.TWO_HANDED_WEAPON
+        
+        if is_two_handed:
+            if not main_hand_free or not off_hand_free:
+                await character.send("You need both hands free to draw your {sheathed_main.name}.")
+                return True
+            # Wield in both hands
+            character._equipped_items["main_hand"] = sheathed_main
+            character._equipped_items["off_hand"] = sheathed_main
+        else: # It's a one-handed weapon
+            if not main_hand_free:
+                await character.send(f"Your main hand is not free to draw your {sheathed_main.name}.")
+                return True
+            # Wield in main hand
+            character._equipped_items["main_hand"] = sheathed_main
+
+        # Move is successful, remove from sheathed slot
+        del character._equipped_items["sheathed_main_hand"]
+        await character.send(f"You draw your {sheathed_main.name}.")
+        await character.location.broadcast(f"\\r\\n{character.name} draws their {sheathed_main.name}.\\r\\n", exclude={character})
+        character.is_dirty = True
+        
+        # Update hand status for the off-hand check
+        main_hand_free = False
+        if is_two_handed:
+            off_hand_free = False
+
+    # Handle the off-hand weapon second
+    if sheathed_off:
+        if not off_hand_free:
+            await character.send(f"Your off-hand is not free to draw your {sheathed_off.name}.")
+            # If the main-hand draw succeeded, we don't return here, just skip the off-hand
+        else:
+            character._equipped_items["off_hand"] = sheathed_off
+            del character._equipped_items["sheathed_off_hand"]
+            await character.send(f"You draw your {sheathed_off.name}.")
+            character.is_dirty = True
+
     return True
 
 async def cmd_remove(character: 'Character', world: 'World', args_str: str) -> bool:

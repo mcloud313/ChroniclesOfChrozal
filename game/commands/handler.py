@@ -48,6 +48,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "stand": general_cmds.cmd_stand,
     "lie": general_cmds.cmd_lie,
     "release": general_cmds.cmd_release,
+    "time": general_cmds.cmd_time,
 
     # Social Commands
     "group": social_cmds.cmd_group,
@@ -63,6 +64,8 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "lockpick": rogue_cmds.cmd_lockpick,
     "disarm": rogue_cmds.cmd_disarm,
     "hide": rogue_cmds.cmd_hide,
+    "sheathe": item_cmds.cmd_sheathe,
+    "unsheathe": item_cmds.cmd_unsheathe,
     
 
     # Item Commands
