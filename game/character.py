@@ -594,6 +594,22 @@ class Character:
                 total_weight += self._get_item_weight_recursively(content_item)
         return total_weight
 
+    def hands_are_full(self) -> bool:
+        """Checks if the character can pick up or receive another item."""
+        hand_slots_used = len(self._inventory_items)
+        main_hand_item = self._equipped_items.get("main_hand")
+        
+        if main_hand_item:
+            # A two-handed weapon instantly fills both "hand" slots.
+            if main_hand_item.item_type == item_defs.TWO_HANDED_WEAPON:
+                return True
+            hand_slots_used += 1
+
+        if self._equipped_items.get("off_hand"):
+            hand_slots_used += 1
+        
+        return hand_slots_used >= 2
+
     def get_current_weight(self) -> float:
         """Calculates the total weight of all carried and equipped items."""
         total_weight = 0.0

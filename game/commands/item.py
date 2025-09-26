@@ -47,6 +47,10 @@ async def cmd_get(character: 'Character', world: 'World', args_str: str) -> bool
         await character.send("Get what?")
         return True
     
+    if character.hands_are_full():
+            await character.send("Your hands are full.")
+            return True
+    
     if args_str.lower() in COINAGE_KEYWORDS:
         if character.location.coinage > 0:
             amount = character.location.coinage
@@ -64,7 +68,6 @@ async def cmd_get(character: 'Character', world: 'World', args_str: str) -> bool
         else:
             await character.send("There is no money here to pick up.")
             return True
-     
     # Case 1: Get item from a container (e.g., "get sword from bag")
     if " from " in args_str:
         item_name, container_name = [s.strip() for s in args_str.split(" from ", 1)]
@@ -185,6 +188,8 @@ async def cmd_wear(character: 'Character', world: 'World', args_str: str) -> boo
         del character._inventory_items[item_to_equip.id]
         character._equipped_items["main_hand"] = item_to_equip
         character._equipped_items["off_hand"] = item_to_equip # Use same item as a placeholder
+
+        character.is_dirty = True
         
         await character.send(f"You heft {item_to_equip.name} with both hands.")
         await character.location.broadcast(f"\r\n{character.name} hefts {item_to_equip.name} with both hands.\r\n", exclude={character})
@@ -198,6 +203,51 @@ async def cmd_wear(character: 'Character', world: 'World', args_str: str) -> boo
     verb = "wield" if item_to_equip.item_type == "WEAPON" else "wear"
     await character.send(f"You {verb} {item_to_equip.name}.")
     await character.location.broadcast(f"\r\n{character.name} {verb}s {item_to_equip.name}.\r\n", exclude={character})
+    return True
+
+async def cmd_sheathe(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Sheathes a wielded weapon, moving it to a passive equipment slot."""
+    if not args_str:
+        await character.send("Sheathe what?")
+        return True
+    
+    # Find the weapon in the main or off hand
+    weapon_to_sheathe = None
+    hand = None
+    main_hand_wep = character._equipped_items.get("main_hand")
+    off_hand_wep = character._equipped_items.get("off_hand")
+
+    if main_hand_wep and args_str.lower() in main_hand_wep.name.lower():
+        weapon_to_sheathe = main_hand_wep
+        hand = "main_hand"
+    elif off_hand_wep and args_str.lower() in off_hand_wep.name.lower():
+        weapon_to_sheathe = off_hand_wep
+        hand = "off_hand"
+
+    if not weapon_to_sheathe:
+        await character.send("You aren't wielding that.")
+        return True
+
+    # Determine target slot and check if it's free
+    is_two_handed = weapon_to_sheathe.item_type == item_defs.TWO_HANDED_WEAPON
+    target_slot = "back" if is_two_handed else "waist"
+
+    if character._equipped_items.get(target_slot):
+        await character.send(f"You are already wearing something on your {target_slot}.")
+        return True
+
+    # Perform the move
+    if is_two_handed:
+        del character._equipped_items["main_hand"]
+        del character._equipped_items["off_hand"]
+    else:
+        del character._equipped_items[hand]
+        
+    character._equipped_items[target_slot] = weapon_to_sheathe
+    character.is_dirty = True
+
+    await character.send(f"You sheathe your {weapon_to_sheathe.name}.")
+    await character.location.broadcast(f"\r\n{character.name} sheathes their {weapon_to_sheathe.name}.\r\n", exclude={character})
     return True
 
 async def cmd_remove(character: 'Character', world: 'World', args_str: str) -> bool:
@@ -235,6 +285,8 @@ async def cmd_remove(character: 'Character', world: 'World', args_str: str) -> b
     
     # Place the item back in inventory
     character._inventory_items[item_to_remove.id] = item_to_remove
+
+    character.is_dirty = True
 
     await character.send(f"You remove {item_to_remove.name}.")
     await character.location.broadcast(f"\r\n{character.name} removes {item_to_remove.name}.\r\n", exclude={character})
@@ -294,8 +346,8 @@ async def cmd_examine(character: ' Character', world: 'World', args_str: str) ->
     
     # This logic correctly finds an item in hands, equippped or on the ground.
     item_to_examine = (character.find_item_in_inventory_by_name(args_str) or 
-                       next((item for item in character._equipped_items.values() if args_str.lower() in item.name.lower()), None) or 
-                       character.location.get_item_instance_by_name(args_str, world))
+                    next((item for item in character._equipped_items.values() if args_str.lower() in item.name.lower()), None) or 
+                    character.location.get_item_instance_by_name(args_str, world))
     if not item_to_examine:
         await character.send("You don't see that here.")
         return True
@@ -418,8 +470,8 @@ async def cmd_open(character: 'Character', world: 'World', args_str: str) -> boo
         return True
 
     container = (character.find_item_in_inventory_by_name(args_str) or
-                 character.find_item_in_equipment_by_name(args_str) or
-                 character.location.get_item_instance_by_name(args_str, world))
+                character.find_item_in_equipment_by_name(args_str) or
+                character.location.get_item_instance_by_name(args_str, world))
     
     if not container or container.capacity <= 0:
         await character.send("You can't open that.")
@@ -483,8 +535,8 @@ async def cmd_close(character: 'Character', world: 'World', args_str: str) -> bo
     
     # Search for the container in inventory, then equipped, then the room.
     target_item = (character.find_item_in_inventory_by_name(args_str) or
-                   character.find_item_in_equipment_by_name(args_str) or
-                   character.location.get_item_instance_by_name(args_str, world))
+                character.find_item_in_equipment_by_name(args_str) or
+                character.location.get_item_instance_by_name(args_str, world))
     
     if not target_item or target_item.capacity <= 0:
         await character.send("You don't see that here.")
@@ -640,7 +692,7 @@ async def cmd_snuff(character: 'Character', world: 'World', args_str: str) -> bo
 
     # A light source could be in hands or equipped (e.g., a lantern on a belt)
     item_to_snuff = (character.find_item_in_inventory_by_name(args_str) or
-                     character.find_item_in_equipment_by_name(args_str))
+                    character.find_item_in_equipment_by_name(args_str))
 
     if not item_to_snuff:
         await character.send("You don't have that.")

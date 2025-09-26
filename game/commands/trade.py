@@ -101,7 +101,7 @@ async def cmd_buy(character: 'Character', world: 'World', args_str: str) -> bool
         return True
     
     # 5. Check the two hand inventory limit
-    if len(character._inventory_items) >= 2:
+    if character.hands_are_full():
         await character.send("Your hands are full. You must put something away to buy that.")
         return True
 
