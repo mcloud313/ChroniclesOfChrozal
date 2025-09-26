@@ -73,12 +73,14 @@ async def cmd_group(character: 'Character', world: 'World', args_str: str) -> bo
         await character.send("You can't group with yourself.")
         return True
     if target_char.group:
-        await character.send(f"{target_char} is already in a group.")
+        await character.send(f"{target_char.name} is already in a group.")
         return True
-    if target_char.pending_group_invite:
-        await character.send(f"{target_char} already has a pending group invitation.")
+    
+    # --- MODIFIED: Check for invites in the new world dictionary ---
+    if target_char.dbid in world.pending_invites:
+        await character.send(f"{target_char.name} already has a pending group invitation.")
+        return True
 
-    # --- FIX: Grouping is now an invitation ---
     if character.group and character.group.leader != character:
         await character.send("Only the group leader can invite new members.")
         return True
@@ -86,7 +88,8 @@ async def cmd_group(character: 'Character', world: 'World', args_str: str) -> bo
         await character.send("Your group is full.")
         return True
 
-    target_char.pending_group_invite = character
+    # --- MODIFIED: Store the invitation in the world state ---
+    world.pending_invites[target_char.dbid] = character.dbid
     
     await character.send(f"You have invited {target_char.name} to join your group.")
     await target_char.send(f"\r\n{character.name} has invited you to join their group.\r\nType <accept group> or <decline group>.")
@@ -95,19 +98,23 @@ async def cmd_group(character: 'Character', world: 'World', args_str: str) -> bo
 async def cmd_accept(character: 'Character', world: 'World', args_str: str) -> bool:
     """Accepts a pending group invitation."""
     if not args_str or "group" not in args_str.lower():
-        await character.send("Accept what? (Try 'accept group)'")
+        await character.send("Accept what? (Try 'accept group')")
         return True
     
-    inviter = character.pending_group_invite
-    if not inviter:
+    # --- MODIFIED: Retrieve invite from the world state ---
+    inviter_id = world.pending_invites.get(character.dbid)
+    if not inviter_id:
         await character.send("You don't have a pending group invitation.")
         return True
     
-    #Clear the invite immediately
-    character.pending_group_invite = None
+    # Fetch the inviter's full character object
+    inviter = world.get_active_character(inviter_id)
+    
+    # Clear the invite immediately
+    del world.pending_invites[character.dbid]
 
-    if not inviter._is_alive() or inviter.location != character.location:
-        await character.send(f"{inviter.name} is no longer available to group with.")
+    if not inviter or not inviter.is_alive() or inviter.location != character.location:
+        await character.send("The person who invited you is no longer available.")
         return True
     
     # Case 1: Inviter is not in a group, so a new one is formed.
@@ -116,7 +123,7 @@ async def cmd_accept(character: 'Character', world: 'World', args_str: str) -> b
         new_group.add_member(character)
         world.add_active_group(new_group)
         await new_group.broadcast(f"{character.name} has joined the group, which is now led by {inviter.name}.")
-    else:
+    else: # Case 2: Join the inviter's existing group
         if len(inviter.group.members) >= 4:
             await character.send("The group is now full.")
             await inviter.send(f"{character.name} tried to join, but your group is full.")
@@ -133,17 +140,20 @@ async def cmd_decline(character: 'Character', world: 'World', args_str: str) -> 
         await character.send("Decline what? (Try 'decline group')")
         return True
 
-    inviter = character.pending_group_invite
-    if not inviter:
+    # --- MODIFIED: Check and retrieve from the world state ---
+    inviter_id = world.pending_invites.get(character.dbid)
+    if not inviter_id:
         await character.send("You don't have a pending group invitation.")
         return True
 
     # Clear the invite
-    character.pending_group_invite = None
+    del world.pending_invites[character.dbid]
     
     await character.send("You have declined the group invitation.")
-    # Silently notify the inviter if they are still around
-    if inviter.is_alive():
+    
+    # Notify the inviter if they are still around
+    inviter = world.get_active_character(inviter_id)
+    if inviter and inviter.is_alive():
         await inviter.send(f"{character.name} has declined your group invitation.")
         
     return True

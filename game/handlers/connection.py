@@ -277,6 +277,7 @@ class ConnectionHandler:
     async def cleanup(self):
         log.info("Cleaning up connection for %s.", self.addr)
         if self.active_character:
+            self.world.pending_invites.pop(self.active_character.dbid, None)
             await self.active_character.save()
             if self.active_character.location:
                 self.active_character.location.remove_character(self.active_character)

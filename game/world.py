@@ -45,6 +45,7 @@ class World:
         self.active_characters: Dict[int, Character] = {}
         self._all_item_instances: Dict[str, Item] = {}
         self.shop_inventories: Dict[int, List[Dict]] = {}
+        self.pending_invites: Dict[int, int] = {}
         self.active_groups: Dict[int, 'Group'] = {}
         self.dirty_rooms: set[int] = set()
         self.abilities: Dict[str, Dict] = {}
@@ -54,7 +55,7 @@ class World:
         self.loot_table_entries: Dict[int, List[Dict]] = {}
         self.ambient_scripts: List[Dict] = []
         self.game_time_accumulator: float = 0.0
-        self.game_minutes: int = 0
+        self.game_minute: int = 0
         self.game_hour: int = calendar_defs.STARTING_HOUR
         self.game_day: int = calendar_defs.STARTING_DAY
         self.game_month: int = calendar_defs.STARTING_MONTH

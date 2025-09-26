@@ -215,7 +215,6 @@ class Character:
         self.is_hidden: bool = False
         self.detected_traps: set = set()
         self.known_abilities: Set[str] = set()
-        self.pending_group_invite: Optional['Character'] = None
 
         # --- Data Structures to be populated by load_related_data() ---
         self.stats: Dict[str, int] = {}
