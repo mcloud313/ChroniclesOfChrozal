@@ -22,6 +22,7 @@ from . import abilities as ability_cmds
 from . import trade as trade_cmds
 from . import social as social_cmds
 from . import rogue as rogue_cmds
+from . import time as time_cmds
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "stand": general_cmds.cmd_stand,
     "lie": general_cmds.cmd_lie,
     "release": general_cmds.cmd_release,
-    "time": general_cmds.cmd_time,
+    "time": time_cmds.cmd_time,
 
     # Social Commands
     "group": social_cmds.cmd_group,
