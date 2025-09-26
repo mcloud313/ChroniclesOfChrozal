@@ -406,8 +406,8 @@ async def cmd_skills(character: 'Character', world: 'World', args_str: str) -> b
         "{c------------------------------------------{x"
     ]
     
-    # FIX: Iterate through the canonical list of all skills
-    for skill_name in sorted(skill_defs.INITIAL_SKILLS):
+    # --- FIX: Iterate through the complete list of skills from the attribute map ---
+    for skill_name in sorted(skill_defs.SKILL_ATTRIBUTE_MAP.keys()):
         rank = character.get_skill_rank(skill_name)
         output.append(f" {skill_name.title():<25}: {rank}")
         
