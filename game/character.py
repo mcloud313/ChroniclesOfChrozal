@@ -150,20 +150,35 @@ class Character:
     
     @property
     def total_av(self) -> int:
-        """Calculates effective armor value based on skill."""
-        # Use the new helper property to get the base value
-        base_av = self.base_av 
-        bonus_av = self.get_stat_bonus_from_effects("bonus_av")
+        """Calculates the character's total Armor Value from all sources."""
         
+        # --- LIKELY CAUSE OF THE BUG ---
+        # The original code might be missing the () on the method call below.
+        base_av = self.get_base_av_from_armor() # <-- FIX: Ensure parentheses are here
+        # -------------------------------
+
+        bonus_av = self.get_bonus_from_effects("bonus_av")
+        
+        # Calculate the percentage of AV the character benefits from
         armor_training_rank = self.get_skill_rank("armor training")
         if armor_training_rank < 50:
-            # Penalty for untrained users (50% effectiveness at rank 0)
-            av_percentage = 0.5 + (armor_training_rank * 0.01)
-            return int((base_av * av_percentage) + bonus_av)
+            av_percentage = 0.5 + (armor_training_rank / 100.0) # Scales from 50% to 99%
         else:
-            # Bonus for trained users
-            skill_bonus = (armor_training_rank - 50) // 10
-            return base_av + bonus_av + skill_bonus
+            av_percentage = 1.0 # 100% effectiveness at 50 ranks and above
+            # Add a flat bonus for ranks beyond 50
+            bonus_av += (armor_training_rank - 50) // 10
+
+        # The final calculation from the traceback
+        return int((base_av * av_percentage) + bonus_av)
+    
+    def get_base_av_from_armor(self) -> int:
+        """Sums the armor value from all equipped armor items."""
+        total = 0
+        for item in self._equipped_items.values():
+            if item.item_type == item_defs.ARMOR or item.item_type == item_defs.SHIELD:
+                total += item.armor
+        return total
+
     
     def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any], world: 'World', player_is_admin: bool = False):
         self.writer: asyncio.StreamWriter = writer
