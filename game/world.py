@@ -417,7 +417,6 @@ class World:
                 for key in expired_keys:
                     # This single call now handles stat reversal, messaging, and removal.
                     await resolver.resolve_effect_expiration(participant, key, self)
-
                             
     async def update_room_effects(self, dt: float):
         """Ticker: Applies effects from room flags to characters within them."""

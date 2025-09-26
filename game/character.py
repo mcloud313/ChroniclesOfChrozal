@@ -330,6 +330,8 @@ class Character:
                 self.total_playtime_seconds += session_duration
             self.login_timestamp = time.monotonic()
 
+        
+
         core_data = {
             "location_id": self.location_id, "hp": self.hp, "max_hp": self.max_hp,
             "essence": self.essence, "max_essence": self.max_essence, "xp_pool": self.xp_pool,
@@ -339,7 +341,7 @@ class Character:
             "status": self.status, "stance": self.stance, "coinage": self.coinage,
             "total_playtime_seconds": self.total_playtime_seconds
         }
-        equipment_data = {slot.lower(): (item.id if item else None) for slot, item in self._equipped_items.items()}
+        equipment_data = self.get_equipment_for_saving()
 
         try:
             log.info(f"Saving character state for {self.name} (ID: {self.dbid})")
@@ -362,6 +364,19 @@ class Character:
 
         except Exception:
             log.exception("Unexpected error saving character %s (ID: %s):", self.name, self.dbid)
+
+    def get_equipment_for_saving(self) -> Dict[str, Optional[str]]:
+        """
+        Serializes all equipped items into a dictionary mapping slot_name -> item_instance_id
+        for saving to the database.
+        """
+        equipment_data = {}
+        # Use the canonical list of all slots to ensure nothing is missed.
+        for slot in item_defs.ALL_SLOTS:
+            item = self._equipped_items.get(slot)
+            # Store the item's unique instance ID, or None if the slot is empty.
+            equipment_data[slot] = item.id if item else None
+        return equipment_data
 
     async def check_and_learn_new_abilities(self):
         """Checks for and learns new abilities upon leveling up."""
@@ -409,22 +424,31 @@ class Character:
         return self.is_holding_light_source()
 
     def update_regen(self, dt: float, is_in_node: bool):
-        """Applies HP and essence regeneration."""
+        """Applies HP and essence regeneration using config-driven values."""
         if self.status not in ["ALIVE", "MEDITATING"]:
             return
 
-        if self.hp < self.max_hp and self.status == "ALIVE":
-        # Only regenerate health if not starving
-            if self.hunger > 0:
-                regen_rate = 1 + (self.vit_mod * 2) * .10
-                self.hp = min(self.max_hp, self.hp + (regen_rate * dt))
+        # --- Base Regeneration Rates ---
+        hp_regen_rate = (config.HP_REGEN_BASE_PER_SEC + (self.vit_mod * config.HP_REGEN_VIT_MULTIPLIER))
+        essence_regen_rate = (config.ESSENCE_REGEN_BASE_PER_SEC + (self.aura_mod * config.ESSENCE_REGEN_AURA_MULTIPLIER))
 
-    # --- Essence Regeneration ---
-        if self.essence < self.max_essence and self.status == "ALIVE":
-            # Only regenerate essence if not parched
+        # --- Apply Multipliers ---
+        if is_in_node:
+            hp_regen_rate *= config.NODE_REGEN_MULTIPLIER
+            essence_regen_rate *= config.NODE_REGEN_MULTIPLIER
+        
+        if self.status == "MEDITATING":
+            # Meditating only boosts essence regen
+            essence_regen_rate *= config.MEDITATE_REGEN_MULTIPLIER
+
+        # --- Apply Regeneration, Gated by Hunger/Thirst ---
+        if self.hp < self.max_hp and self.status != "MEDITATING": # Can't regen HP while meditating
+            if self.hunger > 0:
+                self.hp = min(self.max_hp, self.hp + (hp_regen_rate * dt))
+
+        if self.essence < self.max_essence:
             if self.thirst > 0:
-                regen_rate = 1 + (self.aura_mod * 2) * .05
-                self.essence = min(self.max_essence, self.essence + (regen_rate * dt))
+                self.essence = min(self.max_essence, self.essence + (essence_regen_rate * dt))
 
     def update_location(self, new_location: Optional['Room']):
         """Updates the character's current location reference."""
