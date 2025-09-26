@@ -374,11 +374,12 @@ class Character:
         for slot in slot_defs.ALL_SLOTS:
             item = self._equipped_items.get(slot)
             
-            # --- THIS IS THE FIX ---
-            # Explicitly convert the UUID object to a string for the database.
-            equipment_data[slot] = str(item.id) if item else None
-            # -----------------------
-            
+            # --- THE FINAL FIX ---
+            # Pass the raw UUID object. The database driver will now handle it correctly
+            # because the column data type is correct.
+            equipment_data[slot] = item.id if item else None
+            # ---------------------
+        
         return equipment_data
 
     async def check_and_learn_new_abilities(self):
