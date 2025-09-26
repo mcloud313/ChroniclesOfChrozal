@@ -116,9 +116,12 @@ class ConnectionHandler:
     async def _handle_get_username(self):
         await self._prompt("Enter your account name")
         username_raw = await self._read_line()
+
+        if not username_raw:
+            return
         username = "".join(char for char in username_raw if char.isprintable())
+
         if not username:
-        # If the sanitized string is empty, the input was pure garbage.
             await self.send("Invalid username.")
             self.state = ConnectionState.GET_USERNAME # Prompt again
             return

@@ -371,12 +371,14 @@ class Character:
         for saving to the database.
         """
         equipment_data = {}
-        # Use the canonical list of all slots to ensure nothing is missed.
-        # v-- FIX 2: Point to the correct module, 'slot_defs'
-        for slot in slot_defs.ALL_SLOTS: 
+        for slot in slot_defs.ALL_SLOTS:
             item = self._equipped_items.get(slot)
-            # Store the item's unique instance ID, or None if the slot is empty.
-            equipment_data[slot] = item.id if item else None
+            
+            # --- THIS IS THE FIX ---
+            # Explicitly convert the UUID object to a string for the database.
+            equipment_data[slot] = str(item.id) if item else None
+            # -----------------------
+            
         return equipment_data
 
     async def check_and_learn_new_abilities(self):
