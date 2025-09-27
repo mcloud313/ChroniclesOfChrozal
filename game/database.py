@@ -322,8 +322,19 @@ class DatabaseManager:
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS game_economy (
                         key TEXT PRIMARY KEY,
-                        value BIGINT NOT NULL DEFAULT 0
+                        value BIGINT NOT NULL DEFAULT 0,
+                        -- ADD THESE NEW COLUMNS --
+                        game_year INTEGER,
+                        game_month INTEGER,
+                        game_day INTEGER,
+                        game_hour INTEGER,
+                        game_minute INTEGER
                     )
+                """)
+                await conn.execute("""
+                    INSERT INTO game_economy (key, game_year, game_month, game_day, game_hour, game_minute)
+                    VALUES ('time', 218, 7, 1, 6, 0)
+                    ON CONFLICT (key) DO NOTHING;
                 """)
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS shop_inventories (
@@ -903,5 +914,19 @@ class DatabaseManager:
         """Updates the instance_stats JSONB field for a specific item instance."""
         query = "UPDATE item_instances SET instance_stats = $1 WHERE id = $2"
         return await self.execute_query(query, json.dumps(new_stats), instance_id)
+    
+    async def get_game_time(self) -> Optional[asyncpg.Record]:
+        """Fetches the current game time from the database."""
+        return await self.fetch_one_query("SELECT * FROM game_economy WHERE key = 'time'")
+
+    # Add this function at the end of the file
+    async def save_game_time(self, year: int, month: int, day: int, hour: int, minute: int) -> str:
+        """Saves the current game time to the database."""
+        query = """
+            UPDATE game_economy
+            SET game_year = $1, game_month = $2, game_day = $3, game_hour = $4, game_minute = $5
+            WHERE key = 'time'
+        """
+        return await self.execute_query(query, year, month, day, hour, minute)
     
 db_manager = DatabaseManager()

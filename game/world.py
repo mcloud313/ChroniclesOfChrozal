@@ -84,15 +84,23 @@ class World:
                 self.db_manager.fetch_all_query("SELECT * FROM damage_types"),
                 self.db_manager.fetch_all_query("SELECT * FROM loot_tables ORDER BY id"),
                 self.db_manager.fetch_all_query("SELECT * FROM loot_table_entries ORDER BY loot_table_id"),
-                self.db_manager.fetch_all_query("SELECT * FROM ambient_scripts")
+                self.db_manager.fetch_all_query("SELECT * FROM ambient_scripts"),
+                self.db_manager.get_game_time()
             )
             (area_rows, race_rows, class_rows, item_template_records, mob_rows, attack_rows,
              loot_rows, room_rows, exit_rows, shop_rows, ability_rows, damage_type_rows,
-             loot_table_rows, loot_entry_rows, scripts_rows) = results
+             loot_table_rows, loot_entry_rows, scripts_rows, time_data) = results
 
             self.areas = {row['id']: dict(row) for row in area_rows or []}
             self.races = {row['id']: dict(row) for row in race_rows or []}
             self.classes = {row['id']: dict(row) for row in class_rows or []}
+
+            if time_data:
+                    self.game_year = time_data.get('game_year', calendar_defs.STARTING_YEAR)
+                    self.game_month = time_data.get('game_month', calendar_defs.STARTING_MONTH)
+                    self.game_day = time_data.get('game_day', calendar_defs.STARTING_DAY)
+                    self.game_hour = time_data.get('game_hour', calendar_defs.STARTING_HOUR)
+                    self.game_minute = time_data.get('game_minute', 0)
 
             for record in item_template_records:
                 stats_data = record.get('stats')
