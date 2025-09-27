@@ -593,7 +593,7 @@ class DatabaseManager:
                 bonuses = class_defs.get_starting_skill_bonuses(class_name)
                 initial_skill_data = [
                     (new_char_id, skill_name, bonuses.get(skill_name, 0))
-                    for skill_name in skill_defs.INITIAL_SKILLS
+                    for skill_name in skill_defs.SKILL_ATTRIBUTE_MAP
                 ]
                 
                 if initial_skill_data:
