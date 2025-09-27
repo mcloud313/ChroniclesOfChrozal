@@ -330,7 +330,9 @@ class Character:
         return {
             "level": self.level,
             "hp": self.hp,
+            "max_hp": self.max_hp,
             "essence": self.essence,
+            "max_essence": self.max_essence,
             "xp_total": self.xp_total,
             "xp_pool": self.xp_pool,
             "coinage": self.coinage,
