@@ -9,7 +9,7 @@ import json
 import asyncio
 import asyncpg
 import config
-from typing import Optional, Dict, Any, List, Set
+from typing import Optional, Dict, Any, List, Set, Tuple
 
 from . import utils
 from .definitions import skills as skill_defs
@@ -653,7 +653,16 @@ class DatabaseManager:
         )
         return await self.execute_query(query, *params)
 
-    async def save_character_full(self, char_id: int, core_data: dict, stats: dict, skills: dict, equipment: dict, abilities: Set[str]) -> bool:
+    async def save_character_full(
+    self, 
+    char_id: int, 
+    core_data: dict, 
+    stats: dict, 
+    skills: dict, 
+    equipment: dict, 
+    abilities: Set[str],
+    items: List[Tuple[str, Optional[str]]] # <-- Add the new items parameter
+) -> bool:
         """
         Saves all components of a character's state in a single, atomic transaction.
         This version dynamically handles all equipment slots.
@@ -717,6 +726,27 @@ class DatabaseManager:
                             await conn.copy_records_to_table('character_abilities',
                                                             columns=['character_id', 'ability_internal_name'],
                                                             records=ability_records)
+                            
+                    # --- 6. FIX: Save Item Container State (New Step) ---
+                    if items is not None:
+                        # This query updates the container_id for every item the character owns.
+                        # It sets the owner to NULL first to avoid foreign key loops.
+                        await conn.execute(
+                            """
+                            UPDATE item_instances
+                            SET owner_char_id = NULL
+                            WHERE owner_char_id = $1
+                            """,
+                            char_id
+                        )
+                        await conn.executemany(
+                            """
+                            UPDATE item_instances
+                            SET owner_char_id = $1, container_id = $2
+                            WHERE id = $3
+                            """,
+                            [(char_id, container_id, item_id) for item_id, container_id in items]
+                        )
                     
                     return True
                 except Exception:

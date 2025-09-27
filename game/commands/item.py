@@ -494,6 +494,24 @@ async def _handle_consume(character: 'Character', world: 'World', args_str: str,
         character.essence += healed_amount
         await character.send(f"You {consume_type} the {item_to_consume.name} and restore {int(healed_amount)} essence.")
 
+    if effect == "restore_hunger":
+        if character.hunger >= 100:
+            await character.send("You are too full to eat anything else.")
+            return False # Do not consume the item
+        
+        character.hunger = min(100, character.hunger + amount)
+        await character.send(f"You eat the {item_to_consume.name} and feel less hungry.")
+        return True
+
+    elif effect == "restore_thirst":
+        if character.thirst >= 100:
+            await character.send("You are too full to drink anything else.")
+            return False
+            
+        character.thirst = min(100, character.thirst + amount)
+        await character.send(f"You drink the {item_to_consume.name} and feel refreshed.")
+        return True
+
     # Destroy the item instance
     await world.db_manager.delete_item_instance(item_to_consume.id)
     del character._inventory_items[item_to_consume.id]

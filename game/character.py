@@ -337,29 +337,47 @@ class Character:
             "unspent_attribute_points": self.unspent_attribute_points,
             # --- FIX: Add hunger and thirst to the save data ---
             "hunger": self.hunger,
-            "thirst": self.thirst
+            "thirst": self.thirst,
+            "location_id": self.location_id
         }
+    
+    def get_all_owned_item_instances(self) -> List[Item]:
+        """Recursively finds and returns a flat list of all items owned by the character."""
+        all_items = []
+        
+        def recurse_items(item_list):
+            for item in item_list:
+                all_items.append(item)
+                if item.contents:
+                    recurse_items(item.contents.values())
+
+        # Start with top-level inventory and equipped items
+        recurse_items(self._inventory_items.values())
+        recurse_items(self._equipped_items.values())
+        return all_items
 
     async def save(self):
         """Prepares and saves the character's full state."""
         if not self.is_dirty:
             return
 
-        # Prepare all the data components for saving
+        # Prepare all data components for the save function
         core_data = self.get_core_data_for_saving()
         equipment_data = self.get_equipment_for_saving()
+        # --- FIX: Prepare data for saving container contents ---
+        all_items_data = [
+            (item.id, item.container_id) for item in self.get_all_owned_item_instances()
+        ]
 
-        # --- THIS IS THE CORRECTED CALL ---
-        # Access the db_manager through the character's world reference.
         await self.world.db_manager.save_character_full(
             self.dbid,
             core_data,
             self.stats,
             self.skills,
             equipment_data,
-            self.known_abilities # Use the correct attribute for known abilities
+            self.known_abilities,
+            all_items_data  # Pass the new item data
         )
-        # ------------------------------------
 
         self.is_dirty = False
         log.info(f"Successfully saved character: {self.name} (ID: {self.dbid})")
