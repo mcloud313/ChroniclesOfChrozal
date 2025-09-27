@@ -87,7 +87,7 @@ class Room:
 
         mob_counts = {}
         for mob in self.mobs:
-            if mob.is_alive():
+            if mob.is_alive() and not mob.is_hidden: # Add "and not mob.is_hidden"
                 mob_counts[mob.name] = mob_counts.get(mob.name, 0) + 1
         if mob_counts:
             formatted_mob_list = [f"{name.capitalize()}" + (f" (x{count})" if count > 1 else "") for name, count in sorted(mob_counts.items())]
@@ -99,8 +99,8 @@ class Room:
                 item = world.get_item_object(instance_id)
                 if item:
                     item_names.append(item.name)
-            if item_names:
-                output_lines.append("On the ground: " + ", ".join(sorted(item_names)) + ".")
+            # if item_names:
+            #     output_lines.append("On the ground: " + ", ".join(sorted(item_names)) + ".")
 
         if self.objects:
             object_names = sorted([obj.get('name', 'an object') for obj in self.objects])

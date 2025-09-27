@@ -102,6 +102,7 @@ class Mob:
         self.location: 'Room' = current_room
         self.mob_type: Optional[str] = template_data.get('mob_type')
         self.effects: Dict[str, Dict[str, Any]] = {}
+        self.is_hidden: bool = False
 
         # --- FIX: Properly parse all JSONB fields from the template ---
         def _parse_json(data, default_type=dict):
@@ -181,6 +182,14 @@ class Mob:
             if char.is_holding_light_source():
                 return True
         return False
+    
+    def get_stealth_value(self) -> int:
+        """
+        Calculates the mob's stealthiness for hiding and being detected.
+        Acts as the Difficulty Class (DC) for a player's perception check.
+        """
+        # A simple formula: level provides a base, agility provides a bonus.
+        return (self.level * 2) + self.agi_mod
 
     def die(self):
         """Handles mob death."""
@@ -262,6 +271,30 @@ class Mob:
                         self.flags.add("FLYING")
                         await self.location.broadcast(f"\r\n{self.name.capitalize()} takes to the air!\r\n")
 
+
+        # If hidden and a player is present, initiate an ambush.
+        if self.is_hidden:
+            potential_targets = [char for char in self.location.characters if char.is_alive()]
+            if potential_targets:
+                self.is_hidden = False # Reveal to attack
+                target = random.choice(potential_targets)
+                self.target = target
+                self.is_fighting = True
+
+                await self.location.broadcast(
+                    f"\r\n{{R{self.name.capitalize()} leaps from the shadows to ambush {target.name}!{{x\r\n",
+                    exclude={target}
+                )
+                await target.send(f"\r\n{{R{self.name.capitalize()} leaps from the shadows to ambush you!{{x\r\n")
+
+                # Find a special "ambush" attack, or fall back to a normal one.
+                ambush_attack = next((atk for atk in self.attacks if atk.get("name") == "ambush"), self.choose_attack())
+                if ambush_attack:
+                    # An ambush is a modified attack with bonus damage.
+                    ability_mods = {"bonus_damage": self.level * 2}
+                    await resolver.resolve_physical_attack(self, target, ambush_attack, world, ability_mods=ability_mods)
+                return # Ambush action is complete for this tick.
+
         # --- Combat Logic ---
         if self.is_fighting and self.target:
             target_is_valid = (
@@ -287,6 +320,14 @@ class Mob:
                         self.roundtime = 1.0
                 else:
                     self.roundtime = 2.0
+                return
+            
+        # If not fighting, has the CAN_HIDE flag, and isn't already hidden, try to hide.
+        if not self.is_fighting and self.has_flag("CAN_HIDE") and not self.is_hidden:
+            if random.random() < 0.25: # 25% chance per tick to attempt to hide
+                self.is_hidden = True
+                self.roundtime = 2.0 # Hiding takes a moment
+                await self.location.broadcast(f"\r\n{self.name.capitalize()} skitters into the shadows, disappearing from sight.\r\n")
                 return
 
         # --- Movement Logic ---

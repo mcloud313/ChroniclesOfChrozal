@@ -576,32 +576,42 @@ class World:
             char.update_regen(dt, is_in_node)
             
     async def update_stealth_checks(self, dt: float):
-        """Ticker: Periodically allows observers to detect hidden characters."""
-        # Only run this check occasionally to reduce spam and processing
-        if random.random() > 0.25: # Roughly 25% chance per second
+        """Ticker: Periodically allows observers to detect hidden characters and mobs."""
+        if random.random() > 0.10: # 10% chance per second
             return
-
+        
+        # Find all hidden entities (characters and mobs)
         hidden_chars = [c for c in self.get_active_characters_list() if c.is_hidden]
-        if not hidden_chars:
+        all_mobs = [m for r in self.rooms.values() for m in r.mobs]
+        hidden_mobs = [m for m in all_mobs if m.is_hidden and m.is_alive()]
+        
+        hidden_entities = hidden_chars + hidden_mobs
+        if not hidden_entities:
             return
 
-        for hidden_char in hidden_chars:
-            # FIX: Get the hidden character's stealth modifier here
-            stealth_mod = hidden_char.get_skill_modifier("stealth")
+        for hidden_entity in hidden_entities:
+            # Determine the stealth value (DC) of the hidden entity
+            if isinstance(hidden_entity, Character):
+                stealth_dc = hidden_entity.get_skill_modifier("stealth")
+            else: # It's a Mob
+                stealth_dc = hidden_entity.get_stealth_value()
 
-            observers = [c for c in hidden_char.location.characters if c != hidden_char] + \
-                        [m for m in hidden_char.location.mobs if m.is_alive()]
+            # Find observers in the same room
+            observers = [c for c in hidden_entity.location.characters if c.is_alive()]
 
             for observer in observers:
-                perception_mod = observer.get_skill_modifier("perception") if isinstance(observer, Character) \
-                    else observer.level * 3
-
-                # The hidden character's stealth is the DC for the observer's perception check
-                if utils.skill_check(observer, "perception", dc=stealth_mod)['success']:
-                    hidden_char.is_hidden = False
-                    await hidden_char.send(f"{{RYou have been spotted by {observer.name}!{{x")
-                    if isinstance(observer, Character):
-                        await observer.send(f"You spot {hidden_char.name} hiding in the shadows!")
+                # Mobs can't detect hidden players in this implementation yet, but players can detect mobs
+                if utils.skill_check(observer, "perception", dc=stealth_dc)['success']:
+                    hidden_entity.is_hidden = False
+                    
+                    if isinstance(hidden_entity, Character):
+                        await hidden_entity.send(f"{{RYou have been spotted by {observer.name}!{{x")
+                    
+                    await observer.send(f"{{YYou spot {hidden_entity.name} hiding in the shadows!{{x")
+                    await observer.location.broadcast(
+                        f"\r\n{observer.name} spots {hidden_entity.name} hiding in the shadows!\r\n",
+                        exclude={observer, hidden_entity}
+                    )
                     break # Stop checking once spotted
 
     async def update_item_decay(self, dt: float):
