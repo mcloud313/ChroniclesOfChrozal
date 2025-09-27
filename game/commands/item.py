@@ -466,25 +466,39 @@ async def _handle_consume(character: 'Character', world: 'World', args_str: str,
         await character.send("You aren't carrying that.")
         return True
     
-    # Check if the item is of the correct type (FOOD for eat, DRINK/POTION for drink)
     valid_types = {"FOOD"} if consume_type == "eat" else {"DRINK", "POTION"}
     if item_to_consume.item_type not in valid_types:
         await character.send(f"You can't {consume_type} that.")
         return True
     
-    # Get the effect from the item's template stats
     template = world.get_item_template(item_to_consume.template_id)
-    if not template: return True # should not happen
+    if not template: return True
 
     stats = template.get('stats', {})
     effect = stats.get("effect")
     amount = stats.get("amount", 0)
 
-    if not effect:
-        await character.send(f"You {consume_type} the {item_to_consume.name}, but nothing seems to happen.")
+    # --- THIS SECTION IS NOW FIXED ---
 
-    # apply the effect
-    if effect == "heal_hp":
+    if effect == "restore_hunger":
+        if character.hunger >= 100:
+            await character.send("You are too full to eat anything else.")
+            return False # Do not consume the item
+        
+        character.hunger = min(100, character.hunger + amount)
+        await character.send(f"You eat the {item_to_consume.name} and feel less hungry.")
+        # The "return True" that was here has been removed.
+
+    elif effect == "restore_thirst":
+        if character.thirst >= 100:
+            await character.send("You are too full to drink anything else.")
+            return False
+            
+        character.thirst = min(100, character.thirst + amount)
+        await character.send(f"You drink the {item_to_consume.name} and feel refreshed.")
+        # The "return True" that was here has been removed.
+
+    elif effect == "heal_hp":
         healed_amount = min(amount, character.max_hp - character.hp)
         character.hp += healed_amount
         await character.send(f"You {consume_type} the {item_to_consume.name} and heal {int(healed_amount)} hit points.")
@@ -494,30 +508,14 @@ async def _handle_consume(character: 'Character', world: 'World', args_str: str,
         character.essence += healed_amount
         await character.send(f"You {consume_type} the {item_to_consume.name} and restore {int(healed_amount)} essence.")
 
-    if effect == "restore_hunger":
-        if character.hunger >= 100:
-            await character.send("You are too full to eat anything else.")
-            return False # Do not consume the item
-        
-        character.hunger = min(100, character.hunger + amount)
-        await character.send(f"You eat the {item_to_consume.name} and feel less hungry.")
-        return True
-
-    elif effect == "restore_thirst":
-        if character.thirst >= 100:
-            await character.send("You are too full to drink anything else.")
-            return False
-            
-        character.thirst = min(100, character.thirst + amount)
-        await character.send(f"You drink the {item_to_consume.name} and feel refreshed.")
-        return True
-
-    # Destroy the item instance
+    else:
+        await character.send(f"You {consume_type} the {item_to_consume.name}, but nothing seems to happen.")
+    
+    # --- The code now correctly reaches the item destruction logic ---
     await world.db_manager.delete_item_instance(item_to_consume.id)
     del character._inventory_items[item_to_consume.id]
     del world._all_item_instances[item_to_consume.id]
 
-    # Broadcast to the room
     await character.location.broadcast(f"\r\n{character.name} {consume_type}s a {item_to_consume.name}.\r\n", exclude={character})
     return True
 
