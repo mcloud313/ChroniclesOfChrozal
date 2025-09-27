@@ -699,7 +699,7 @@ class DatabaseManager:
                                                             columns=['character_id', 'skill_name', 'rank'],
                                                             records=skill_records)
 
-                    # --- 4. Save Equipment (Upsert) - DYNAMICALLY CORRECTED ---
+                    # 4. Save Equipment (No changes needed)
                     if equipment:
                         # Dynamically build the query from the canonical list of all slots
                         all_slots = slots.ALL_SLOTS 
@@ -727,10 +727,8 @@ class DatabaseManager:
                                                             columns=['character_id', 'ability_internal_name'],
                                                             records=ability_records)
                             
-                    # --- 6. FIX: Save Item Container State (New Step) ---
+                    # --- 6. CORRECTED Save Item Container State ---
                     if items is not None:
-                        # This query updates the container_id for every item the character owns.
-                        # It sets the owner to NULL first to avoid foreign key loops.
                         await conn.execute(
                             """
                             UPDATE item_instances
@@ -739,14 +737,21 @@ class DatabaseManager:
                             """,
                             char_id
                         )
-                        await conn.executemany(
-                            """
-                            UPDATE item_instances
-                            SET owner_char_id = $1, container_id = $2
-                            WHERE id = $3
-                            """,
-                            [(char_id, container_id, item_id) for item_id, container_id in items]
-                        )
+                        
+                        update_params = [
+                            (char_id if container_id is None else None, container_id, item_id)
+                            for item_id, container_id in items
+                        ]
+
+                        if update_params:
+                            await conn.executemany(
+                                """
+                                UPDATE item_instances
+                                SET owner_char_id = $1, container_id = $2
+                                WHERE id = $3
+                                """,
+                                update_params
+                            )
                     
                     return True
                 except Exception:
