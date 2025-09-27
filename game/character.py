@@ -206,8 +206,8 @@ class Character:
         self.race_id: Optional[int] = db_data['race_id']
         self.class_id: Optional[int] = db_data['class_id']
         self.level: int = db_data['level']
-        self.hunger: int = 100
-        self.thirst: int = 100
+        self.hunger: int = db_data.get('hunger', 100)
+        self.thirst: int = db_data.get('thirst', 100)
         self.description: str = db_data['description']
         self.hp: float = float(db_data['hp'])
         self.max_hp: float = float(db_data['max_hp'])
