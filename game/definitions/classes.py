@@ -16,6 +16,7 @@ CLASS_HP_DIE = {
     5: 8,   # Ranger
     6: 12,  # Barbarian: d12
     7: 8,   # Druid: d8
+    8: 6,   # Bard d6
 }
 DEFAULT_HP_DIE = 6 # Default if class not found
 
@@ -26,7 +27,8 @@ CLASS_ESSENCE_DIE = {
     4: 4,   # Rogue: d6 (Assuming standard progression)
     5: 4,   # Ranger
     6: 2,   # Barbarian: d4
-    7: 6,   # Druid: d6
+    7: 6,   # Druid: d6,
+    8: 8,   # Bard: d8
 }
 DEFAULT_ESSENCE_DIE = 4 # Default if class not found
 
@@ -91,7 +93,15 @@ CLASS_STARTING_SKILL_BONUSES: Dict[str, Dict[str, int]] = {
         "first aid": 3,
         "climbing": 5,
         "swimming": 5,
-    }
+    },
+    "bard": {
+        "performance": 5,
+        "perception": 5,
+        "bladed weapons": 3,
+        "projectile weapons": 3,
+        "concentration": 3,
+        "acrobatics": 3,
+    },
 
 }
 

@@ -353,6 +353,49 @@ class World:
     async def update_respawns(self, dt: float):
         tasks = [room.check_respawn(self) for room in self.rooms.values()]
         if tasks: await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def update_bard_songs(self, dt: float):
+        """Ticker: Manages upkeep and applies effects for active bard songs."""
+        bards = [c for c in self.get_active_characters_list() if c.active_song]
+        if not bards:
+            return
+
+        for bard in bards:
+            song_data = self.abilities.get(bard.active_song)
+            if not song_data:
+                bard.active_song = None
+                continue
+
+            details = song_data.get("effect_details", {})
+            upkeep = details.get("essence_upkeep", 0)
+
+            # Pay upkeep cost
+            if bard.essence < upkeep:
+                await bard.send(f"You run out of essence and your '{bard.active_song_name}' fades.")
+                bard.active_song = None
+                bard.active_song_name = None
+                continue
+            bard.essence -= upkeep
+
+            # Determine who the song should affect
+            is_debuff = details.get("is_debuff", False)
+            if is_debuff:
+                targets = [m for m in bard.location.mobs if m.is_alive()]
+            else: # It's a buff for allies
+                if bard.group:
+                    targets = [p for p in bard.group.members if p.location == bard.location and p.is_alive()]
+                else:
+                    targets = [bard]
+
+            # Apply the song's effect as a very short-duration buff/debuff
+            effect_name = details.get("name")
+            for target in targets:
+                target.effects[f"Song_{effect_name}"] = {
+                    "name": f"Song_{effect_name}",
+                    "stat_affected": details.get("stat_affected"),
+                    "amount": details.get("amount"),
+                    "ends_at": time.monotonic() + 2.0 # Lasts just until the next tick
+                }
     # In game/world.py
     async def update_death_timers(self, dt: float):
         current_time = time.monotonic()

@@ -243,6 +243,9 @@ class Character:
         self.detected_traps: set = set()
         self.known_abilities: Set[str] = set()
 
+        self.active_song: Optional[str] = None
+        self.active_song_name: Optional[str] = None
+
         # --- Data Structures to be populated by load_related_data() ---
         self.stats: Dict[str, int] = {}
         self.skills: Dict[str, int] = {}

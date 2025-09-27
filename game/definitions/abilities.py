@@ -42,6 +42,8 @@ EFFECT_MODIFIED_ATTACK = "MODIFIED_ATTACK" # For abilities like power strike
 EFFECT_STUN_ATTEMPT = "STUN_ATTEMPT"
 # Add more later: SUMMON, TELEPORT, UTILITY etc.
 
+EFFECT_PASSIVE_AURA = "PASSIVE_AURA"
+
 # --- Constants for Stats Affected by Buff/Debuff ---
 STAT_ARMOR_VALUE = "armor_value"
 STAT_BARRIER_VALUE = "barrier_value" # NEW: For Mage Armor / Magic defense
@@ -559,7 +561,74 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
             "apply_msg_target": "{RYour armor has been sundered, leaving you vulnerable!{x",
             "expire_msg_target": "{RYour sundered armor feels slightly more secure.{x"
         }
-}
+    },
+    "song of valor": {
+        "name": "Song of Valor",
+        "type": "SONG",
+        "class_req": ["bard"],
+        "level_req": 1,
+        "cost": 5, # Initial essence cost to start singing
+        "target_type": TARGET_NONE,
+        "effect_type": EFFECT_PASSIVE_AURA,
+        "effect_details": {
+            "name": "Valor",
+            "stat_affected": "bonus_mar",
+            "amount": 2,
+            "essence_upkeep": 1 # Essence cost per tick to maintain
+        },
+        "description": "An inspiring melody that bolsters the martial prowess of nearby allies.",
+        "messages": {
+            "start_sing_self": "{MYou begin to sing the inspiring 'Song of Valor'.{x",
+            "start_sing_room": "{MThe air fills with an inspiring melody as {caster_name} begins to sing.{x",
+            "stop_sing_self": "{MYou bring the 'Song of Valor' to a close.{x",
+            "stop_sing_room": "{M{caster_name}'s inspiring song fades from the air.{x"
+        }
+    },
+    "song of swiftness": {
+        "name": "Song of Swiftness",
+        "type": "SONG",
+        "class_req": ["bard"],
+        "level_req": 4,
+        "cost": 10,
+        "target_type": TARGET_NONE,
+        "effect_type": EFFECT_PASSIVE_AURA,
+        "effect_details": {
+            "name": "Swiftness",
+            "stat_affected": "bonus_dv",
+            "amount": 3,
+            "essence_upkeep": 2
+        },
+        "description": "A lively tune that quickens the reflexes of allies.",
+        "messages": {
+            "start_sing_self": "{MYou begin to sing the lively 'Song of Swiftness'.{x",
+            "start_sing_room": "{MThe air fills with a lively tune as {caster_name} begins to sing.{x",
+            "stop_sing_self": "{MYou bring the 'Song of Swiftness' to a close.{x",
+            "stop_sing_room": "{M{caster_name}'s lively song fades from the air.{x"
+        }
+    },
+    "song of sorrows": {
+        "name": "Song of Sorrows",
+        "type": "SONG",
+        "class_req": ["bard"],
+        "level_req": 8,
+        "cost": 15,
+        "target_type": TARGET_NONE,
+        "effect_type": EFFECT_PASSIVE_AURA,
+        "effect_details": {
+            "name": "Sorrow",
+            "is_debuff": True, # This song affects enemies
+            "stat_affected": "bonus_mar",
+            "amount": -3,
+            "essence_upkeep": 3
+        },
+        "description": "A sorrowful dirge that demoralizes nearby enemies, making their attacks less accurate.",
+        "messages": {
+            "start_sing_self": "{MYou begin to sing the sorrowful dirge, 'Song of Sorrows'.{x",
+            "start_sing_room": "{MA sorrowful dirge sung by {caster_name} fills the air, casting a pall over the area.{x",
+            "stop_sing_self": "{MYou bring the 'Song of Sorrows' to a close.{x",
+            "stop_sing_room": "{MThe sorrowful dirge sung by {caster_name} fades.{x"
+        }
+    }
 }
 }
 
