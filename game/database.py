@@ -661,11 +661,10 @@ class DatabaseManager:
     skills: dict, 
     equipment: dict, 
     abilities: Set[str],
-    items: List[Tuple[str, Optional[str]]] # <-- Add the new items parameter
+    items: List[Tuple[str, Optional[str]]]
 ) -> bool:
         """
         Saves all components of a character's state in a single, atomic transaction.
-        This version dynamically handles all equipment slots.
         """
         async with self.pool.acquire() as conn:
             async with conn.transaction():
@@ -701,20 +700,15 @@ class DatabaseManager:
 
                     # 4. Save Equipment (No changes needed)
                     if equipment:
-                        # Dynamically build the query from the canonical list of all slots
                         all_slots = slots.ALL_SLOTS 
-                        
                         columns = ", ".join(all_slots)
                         value_placeholders = ", ".join([f"${i+2}" for i in range(len(all_slots))])
                         update_setters = ", ".join([f"{slot} = EXCLUDED.{slot}" for slot in all_slots])
-
                         equip_query = f"""
                             INSERT INTO character_equipment (character_id, {columns})
                             VALUES ($1, {value_placeholders})
-                            ON CONFLICT (character_id) DO UPDATE SET
-                                {update_setters};
+                            ON CONFLICT (character_id) DO UPDATE SET {update_setters};
                         """
-                        
                         params = [char_id] + [equipment.get(slot) for slot in all_slots]
                         await conn.execute(equip_query, *params)
                     
@@ -727,17 +721,10 @@ class DatabaseManager:
                                                             columns=['character_id', 'ability_internal_name'],
                                                             records=ability_records)
                             
-                    # --- 6. CORRECTED Save Item Container State ---
+                    # --- 6. FINAL FIX: Save Item Container State ---
                     if items is not None:
-                        await conn.execute(
-                            """
-                            UPDATE item_instances
-                            SET owner_char_id = NULL
-                            WHERE owner_char_id = $1
-                            """,
-                            char_id
-                        )
-                        
+                        # This single operation updates all items to their final, valid state.
+                        # It avoids the invalid "limbo" state that caused the previous error.
                         update_params = [
                             (char_id if container_id is None else None, container_id, item_id)
                             for item_id, container_id in items
