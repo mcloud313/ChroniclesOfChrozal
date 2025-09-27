@@ -478,8 +478,26 @@ class DatabaseManager:
         return await self.fetch_all_query(query, room_id)
     
     async def get_instances_for_character(self, character_id: int) -> List[asyncpg.Record]:
-        """Fetches all item instances owned by a character (inventory/equipment)."""
-        query = "SELECT * FROM item_instances WHERE owner_char_id = $1"
+        """
+        Fetches all item instances for a character, including those in containers.
+        This uses a recursive query to traverse the container hierarchy.
+        """
+        query = """
+            WITH RECURSIVE owned_items AS (
+                -- 1. Anchor: Select all items directly owned by the character
+                SELECT *
+                FROM item_instances
+                WHERE owner_char_id = $1
+
+                UNION ALL
+
+                -- 2. Recursive Step: Find all items inside containers we've already found
+                SELECT i.*
+                FROM item_instances i
+                JOIN owned_items oi ON i.container_id = oi.id
+            )
+            SELECT * FROM owned_items;
+        """
         return await self.fetch_all_query(query, character_id)
     
     async def update_item_location(self, instance_id: str, room_id: Optional[int] = None,
