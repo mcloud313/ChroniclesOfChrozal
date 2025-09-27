@@ -74,6 +74,10 @@ class Item:
     def capacity(self) -> int:
         """The maximum weight this item can hold if it's a container."""
         return self._template_stats.get("capacity", 0)
+    
+    @property
+    def uses_ammo_type(self) -> Optional[str]:
+        return self._template_stats.get("uses_ammo_type")
 
     @property
     def name(self) -> str:

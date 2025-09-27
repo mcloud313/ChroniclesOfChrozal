@@ -99,7 +99,7 @@ async def cmd_shoot(character: Character, world: World, args: str) -> bool:
         return True
 
     # 2. Find a suitable quiver
-    required_ammo_type = weapon.stats.get("uses_ammo_type")
+    required_ammo_type = weapon.uses_ammo_type
     if not required_ammo_type:
         await character.send(f"Your {weapon.name} doesn't seem to use any ammunition.")
         return True
