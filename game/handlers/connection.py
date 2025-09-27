@@ -320,6 +320,15 @@ class ConnectionHandler:
         finally:
             # This block is GUARANTEED to run, even if save() crashes.
             if character_to_remove:
+
+                if character_to_remove.login_timestamp:
+                    session_seconds = int(time.monotonic() - character_to_remove.login_timestamp)
+                    if session_seconds > 0:
+                        await self.db_manager.update_character_playtime(
+                            character_to_remove.dbid,
+                            session_seconds
+                        )
+
                 # Clean up group invites and remove character from the world.
                 self.world.pending_invites.pop(character_to_remove.dbid, None)
                 if character_to_remove.location:
