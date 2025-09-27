@@ -652,7 +652,7 @@ class DatabaseManager:
             equipment.get('off_hand')
         )
         return await self.execute_query(query, *params)
-
+    # fix the method
     async def save_character_full(
     self, 
     char_id: int, 
