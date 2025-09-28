@@ -165,7 +165,8 @@ class World:
 
             is_currently_night = self.is_night()
             for room in self.rooms.values():
-                if "OUTDOORS" in room.flags:
+                # FIX: Add 'and "LIT" not in room.flags' to the condition
+                if "OUTDOORS" in room.flags and "LIT" not in room.flags:
                     if is_currently_night:
                         room.flags.add("DARK")
                     else:
@@ -655,74 +656,79 @@ class World:
         log.info(f"Cleaned up {len(items_to_delete)} decayed items from the world.")
 
     async def update_game_time(self, dt: float):
-        """Ticker: Advances the in-game calendar and clock, and manages day/night cycle."""
-        self.game_time_accumulator += dt
+    """Ticker: Advances the in-game calendar and clock, and manages day/night cycle."""
+    self.game_time_accumulator += dt
 
-        if self.game_time_accumulator < calendar_defs.SECONDS_PER_GAME_MINUTE:
-            return
+    if self.game_time_accumulator < calendar_defs.SECONDS_PER_GAME_MINUTE:
+        return
+    
+    minutes_passed = int(self.game_time_accumulator / calendar_defs.SECONDS_PER_GAME_MINUTE)
+    self.game_time_accumulator %= calendar_defs.SECONDS_PER_GAME_MINUTE
+
+    if not minutes_passed:
+        return
+
+    # --- Day/Night Cycle Logic ---
+    hour_before_update = self.game_hour
+    
+    self.game_minute += minutes_passed
+    while self.game_minute >= calendar_defs.MINUTES_PER_HOUR:
+        self.game_minute -= calendar_defs.MINUTES_PER_HOUR
+        self.game_hour += 1
+        if self.game_hour >= calendar_defs.HOURS_PER_DAY:
+            self.game_hour = 0
+            self.game_day += 1
+
+            # NEW: Call the weather update when a new day starts
+            await self._update_world_weather()
+
+            if self.game_day > calendar_defs.DAYS_PER_MONTH:
+                self.game_day = 1
+                self.game_month += 1
+                if self.game_month > calendar_defs.MONTHS_PER_YEAR:
+                    self.game_month = 1
+                    self.game_year += 1
+
+    # Check if the hour has changed
+    if self.game_hour == hour_before_update:
+        return
+
+    message = None
+    apply_dark = False
+    remove_dark = False
+
+    if self.game_hour == calendar_defs.DAWN_HOUR:
+        message = "{YThe sun crests the horizon, chasing away the shadows of the night.{x"
+        remove_dark = True
+    elif self.game_hour == calendar_defs.DUSK_HOUR:
+        message = "{yThe sun dips below the horizon, and darkness begins to fall.{x"
+        apply_dark = True
+    elif self.game_hour == 0: # Midnight
+        message = "{BThe moons hang high in the sky, marking the deepest point of the night.{x"
+    elif self.game_hour == 12: # Noon
+        message = "{CThe sun reaches its zenith in the sky.{x"
+
+    if message or apply_dark or remove_dark:
+        # Find all characters in outdoor rooms
+        outdoor_chars = [
+            char for char in self.get_active_characters_list()
+            if char.location and "OUTDOORS" in char.location.flags
+        ]
         
-        minutes_passed = int(self.game_time_accumulator / calendar_defs.SECONDS_PER_GAME_MINUTE)
-        self.game_time_accumulator %= calendar_defs.SECONDS_PER_GAME_MINUTE
+        # Send message to outdoor characters
+        if message:
+            tasks = [char.send(message) for char in outdoor_chars]
+            if tasks:
+                await asyncio.gather(*tasks)
 
-        if not minutes_passed:
-            return
-
-        # --- Day/Night Cycle Logic ---
-        hour_before_update = self.game_hour
-        
-        self.game_minute += minutes_passed
-        while self.game_minute >= calendar_defs.MINUTES_PER_HOUR:
-            self.game_minute -= calendar_defs.MINUTES_PER_HOUR
-            self.game_hour += 1
-            if self.game_hour >= calendar_defs.HOURS_PER_DAY:
-                self.game_hour = 0
-                self.game_day += 1
-                if self.game_day > calendar_defs.DAYS_PER_MONTH:
-                    self.game_day = 1
-                    self.game_month += 1
-                    if self.game_month > calendar_defs.MONTHS_PER_YEAR:
-                        self.game_month = 1
-                        self.game_year += 1
-
-        # Check if the hour has changed
-        if self.game_hour == hour_before_update:
-            return
-
-        message = None
-        apply_dark = False
-        remove_dark = False
-
-        if self.game_hour == calendar_defs.DAWN_HOUR:
-            message = "{YThe sun crests the horizon, chasing away the shadows of the night.{x"
-            remove_dark = True
-        elif self.game_hour == calendar_defs.DUSK_HOUR:
-            message = "{yThe sun dips below the horizon, and darkness begins to fall.{x"
-            apply_dark = True
-        elif self.game_hour == 0: # Midnight
-            message = "{BThe moons hang high in the sky, marking the deepest point of the night.{x"
-        elif self.game_hour == 12: # Noon
-            message = "{CThe sun reaches its zenith in the sky.{x"
-
-        if message or apply_dark or remove_dark:
-            # Find all characters in outdoor rooms
-            outdoor_chars = [
-                char for char in self.get_active_characters_list()
-                if char.location and "OUTDOORS" in char.location.flags
-            ]
-            
-            # Send message to outdoor characters
-            if message:
-                tasks = [char.send(message) for char in outdoor_chars]
-                if tasks:
-                    await asyncio.gather(*tasks)
-
-            # Update room flags
-            for room in self.rooms.values():
-                if "OUTDOORS" in room.flags:
-                    if apply_dark:
-                        room.flags.add("DARK")
-                    elif remove_dark:
-                        room.flags.discard("DARK")
+        # Update room flags
+        for room in self.rooms.values():
+            if "OUTDOORS" in room.flags:
+                # NEW: Add 'and "LIT" not in room.flags' to prevent lit rooms from getting dark
+                if apply_dark and "LIT" not in room.flags:
+                    room.flags.add("DARK")
+                elif remove_dark:
+                    room.flags.discard("DARK")
 
 
     async def generate_loot_for_container(self, container: Item, loot_table_id: int, character: Character):
