@@ -100,6 +100,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     # Skill/Progression Commands
     "spend": skill_cmds.cmd_spend, "invest": skill_cmds.cmd_spend,
     "improve": skill_cmds.cmd_improve,
+    "pickpocket": rogue_cmds.cmd_pickpocket,
 
     # Movement Command
     "go": movement_cmds.cmd_go,

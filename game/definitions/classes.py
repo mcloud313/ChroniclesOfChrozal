@@ -17,6 +17,8 @@ CLASS_HP_DIE = {
     6: 12,  # Barbarian: d12
     7: 8,   # Druid: d8
     8: 6,   # Bard d6
+    9: 10,  # Paladin d10
+    10: 8,  # Monk  d8
 }
 DEFAULT_HP_DIE = 6 # Default if class not found
 
@@ -29,6 +31,8 @@ CLASS_ESSENCE_DIE = {
     6: 2,   # Barbarian: d4
     7: 6,   # Druid: d6,
     8: 8,   # Bard: d8
+    9: 6,   # Paladin d6
+    10: 6,  # Monk d6
 }
 DEFAULT_ESSENCE_DIE = 4 # Default if class not found
 
@@ -102,6 +106,23 @@ CLASS_STARTING_SKILL_BONUSES: Dict[str, Dict[str, int]] = {
         "concentration": 3,
         "acrobatics": 3,
     },
+    "paladin": {
+        "name": "Paladin",
+        "skill_bonuses": {
+            "piety": 5,
+            "bludgeon_weapons": 5,
+            "shield_usage": 5,
+            "restoration": 5,
+        },
+    },
+    "monk": {
+        "name": "Monk",
+        "skill_bonuses": {
+            "martial_arts": 5,
+            "dodge": 5,
+            "concentration": 5,
+        },
+    }
 
 }
 

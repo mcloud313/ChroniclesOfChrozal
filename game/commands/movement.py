@@ -40,6 +40,18 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
 
     if "ROUGH_TERRAIN" in current_room.flags:
         move_rt *= 2
+
+    traps = character.world.db.query_all("SELECT * FROM room_traps WHERE room_id = %s", (new_room.id,))
+    for trap in traps:
+        if not utils.skill_check(character.get_skill("perception"), trap['difficulty']):
+            character.send_message("You triggered a trap!")
+            # Apply trap effect here
+            # For now, just deal some damage
+            character.take_damage(20) 
+            # Remove the trap after it's been triggered
+            character.world.db.execute("DELETE FROM room_traps WHERE id = %s", (trap['id'],))
+            return # Stop movement
+    
     
     final_rt = move_rt
     if is_group_move:

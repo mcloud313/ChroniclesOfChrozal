@@ -360,6 +360,15 @@ class DatabaseManager:
                     )
                 """)
                 await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS room_traps (
+                        id SERIAL PRIMARY KEY,
+                        room_id INTEGER REFERENCES rooms(id),
+                        trap_type TEXT NOT NULL,
+                        difficulty INTEGER NOT NULL,
+                        creator_id INTEGER REFERENCES characters(id)
+                    );
+                """)
+                await conn.execute("""
                     CREATE TABLE IF NOT EXISTS loot_tables (
                                    id SERIAL PRIMARY KEY,
                                    name TEXT UNIQUE NOT NULL,
@@ -389,7 +398,11 @@ class DatabaseManager:
                 await conn.executemany("INSERT INTO classes (id, name, description) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING",
                                      [(1, "Warrior", "..."), (2, "Mage", "..."), (3, "Cleric", "..."), (4, "Rogue", "..."),
                                       (5, "Ranger", "A master of ranged combat and survival."),
-                                      (6, "Barbarian", "A ferocious warrior who channels primal fury.")])
+                                      (6, "Barbarian", "A ferocious warrior who channels primal fury."),
+                                      (7, "Druid", "A shapeshifting force of nature."),
+                                      (8, "Bard", "A utilitarian, singing class.")
+                                      (9, "Paladin", "A holy knight."),
+                                      (10, "Monk", "A fist wielding martial artist.")])
                 # Areas & Rooms
                 await conn.execute("INSERT INTO areas (id, name, description) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING", 1, "The Void", "...")
                 await conn.execute("INSERT INTO rooms (id, area_id, name, description, flags) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING", 1, 1, "The Void", "...", json.dumps(["NODE", "RESPAWN"]))

@@ -628,9 +628,56 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
             "stop_sing_self": "{MYou bring the 'Song of Sorrows' to a close.{x",
             "stop_sing_room": "{MThe sorrowful dirge sung by {caster_name} fades.{x"
         }
-    }
+    },
+    "stunning_palm": {
+        "name": "Stunning Palm",
+        "description": "A powerful unarmed attack that has a chance to stun the target.",
+        "type": "active",
+        "effect": "damage",
+        "effect_details": {
+            "damage_base": 10,
+            "damage_rng": 5,
+            "damage_type": "bludgeoning",
+            "special_effect": "stun",
+            "special_effect_chance": 0.25,
+            "special_effect_duration": 2, # in rounds
+        },
+        "mana_cost": 15,
+        "cooldown": 3, # in rounds
+        "requirements": {"class": "monk", "level": 1},
+    },
+    "inner_peace": {
+        "name": "Inner Peace",
+        "description": "A self-buff that increases the Monk's dodge value for a short duration.",
+        "type": "active",
+        "effect": "buff",
+        "effect_details": {
+            "stat": "dodge",
+            "modifier": 20,
+            "duration": 5, # in rounds
+        },
+        "mana_cost": 10,
+        "cooldown": 5,
+        "requirements": {"class": "monk", "level": 3},
+    },
+    "chi_blast": {
+        "name": "Chi Blast",
+        "description": "A ranged attack that uses the Monk's inner energy to strike a foe from a distance.",
+        "type": "active",
+        "effect": "damage",
+        "effect_details": {
+            "damage_base": 12,
+            "damage_rng": 6,
+            "damage_type": "force",
+            "range": "ranged",
+        },
+        "mana_cost": 20,
+        "cooldown": 4,
+        "requirements": {"class": "monk", "level": 5},
+    },
 }
 }
+
 
 # Helper function to get data safely
 def get_ability_data(world: 'World', name: str) -> Optional[Dict[str, Any]]:

@@ -281,27 +281,22 @@ EFFECT_TYPE_CHOICES = [
 ]
 
 class AbilityTemplateAdminForm(forms.ModelForm):
-    ability_type = forms.ChoiceField(choices=ABILITY_TYPE_CHOICES)
-    target_type = forms.ChoiceField(choices=TARGET_TYPE_CHOICES)
-    effect_type = forms.ChoiceField(choices=EFFECT_TYPE_CHOICES)
-
-    # Define field with temporary empty choices to avoid DB access on import
-    class_req = forms.MultipleChoiceField(choices=[], widget=forms.CheckboxSelectMultiple, required=False)
+    EFFECT_TYPE_CHOICES = [
+        ('damage', 'Damage'),
+        ('heal', 'Heal'),
+        ('buff', 'Buff'),
+        ('debuff', 'Debuff'),
+    ]
     
-    effect_details_help = """
-    Examples:<br>
-    <b>Damage:</b> {"damage_base": 10, "damage_rng": 5, "damage_type": "fire", "school": "Arcane"}<br>
-    <b>Buff:</b> {"name": "Rage", "type": "buff", "stat_affected": "might", "amount": 5, "duration": 30.0}<br>
-    <b>Modified Attack:</b> {"damage_multiplier": 1.5, "bonus_mar": 10}<br>
-    <b>AoE Heal:</b> {"aoe_target_scope": "allies", "heal_base": 15, "heal_rng": 10}
-    """
-    effect_details = forms.CharField(widget=forms.Textarea(attrs={'rows': 10, 'cols': 80}), required=False, help_text=effect_details_help)
-    
-    messages_help = """
-    Example:<br>
-    {"caster_self_complete": "A bolt of fire erupts!", "room_complete": "{caster_name} hurls a bolt of fire!"}
-    """
-    messages = forms.CharField(widget=forms.Textarea(attrs={'rows': 5, 'cols': 80}), required=False, help_text=messages_help)
+    effect_type = forms.ChoiceField(choices=EFFECT_TYPE_CHOICES, required=True)
+    damage_base = forms.IntegerField(required=False)
+    damage_rng = forms.IntegerField(required=False)
+    damage_type = forms.CharField(required=False)
+    heal_base = forms.IntegerField(required=False)
+    heal_rng = forms.IntegerField(required=False)
+    stat = forms.CharField(required=False)
+    modifier = forms.IntegerField(required=False)
+    duration = forms.IntegerField(required=False)
 
     class Meta:
         model = AbilityTemplates
@@ -309,88 +304,49 @@ class AbilityTemplateAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # --- FIX: Set the real choices here, inside the __init__ method ---
-        self.fields['class_req'].choices = [(c.name.lower(), c.name) for c in Classes.objects.all()]
-        # --- END FIX ---
-
-        if self.instance:
-            if self.instance.class_req:
-                self.fields['class_req'].initial = self.instance.class_req
-            if self.instance.effect_details:
-                self.fields['effect_details'].initial = json.dumps(self.instance.effect_details, indent=2)
-            if self.instance.messages:
-                self.fields['messages'].initial = json.dumps(self.instance.messages, indent=2)
+        if self.instance and self.instance.effect_details:
+            try:
+                effect_details = json.loads(self.instance.effect_details)
+                self.fields['effect_type'].initial = self.instance.effect
+                if self.instance.effect == 'damage':
+                    self.fields['damage_base'].initial = effect_details.get('damage_base')
+                    self.fields['damage_rng'].initial = effect_details.get('damage_rng')
+                    self.fields['damage_type'].initial = effect_details.get('damage_type')
+                elif self.instance.effect == 'heal':
+                    self.fields['heal_base'].initial = effect_details.get('heal_base')
+                    self.fields['heal_rng'].initial = effect_details.get('heal_rng')
+                elif self.instance.effect in ['buff', 'debuff']:
+                    self.fields['stat'].initial = effect_details.get('stat')
+                    self.fields['modifier'].initial = effect_details.get('modifier')
+                    self.fields['duration'].initial = effect_details.get('duration')
+            except json.JSONDecodeError:
+                pass
 
     def save(self, commit=True):
-        self.instance.class_req = self.cleaned_data.get('class_req')
-        try:
-            self.instance.effect_details = json.loads(self.cleaned_data.get('effect_details') or '{}')
-        except json.JSONDecodeError:
-            self.add_error('effect_details', 'Invalid JSON format.')
-            return super().save(commit=False)
-        try:
-            self.instance.messages = json.loads(self.cleaned_data.get('messages') or '{}')
-        except json.JSONDecodeError:
-            self.add_error('messages', 'Invalid JSON format.')
-            return super().save(commit=False)
-            
-        return super().save(commit)
-    
-    def clean(self):
-        """
-        Custom validation for the effect_details JSON field based on the
-        selected effect_type.
-        """
-        cleaned_data = super().clean()
-        effect_type = cleaned_data.get("effect_type")
-        effect_details = cleaned_data.get("effect_details", {})
-        damage_type = cleaned_data.get("damage_type")
-
-        if not isinstance(effect_details, dict):
-            raise ValidationError("Effect Details must be a valid JSON object (e.g., {\"key\": \"value\"}).")
-
-        # Validation for DAMAGE or HEAL effects
-        if effect_type in [ability_defs.EFFECT_DAMAGE, ability_defs.EFFECT_HEAL]:
-            if "damage_type" not in effect_details:
-                raise ValidationError("For DAMAGE/HEAL, 'effect_details' must contain 'damage_type'.")
-            if "damage_base" not in effect_details:
-                raise ValidationError("For DAMAGE/HEAL, 'effect_details' must contain 'damage_base'.")
-            if "damage_rng" not in effect_details:
-                raise ValidationError("For DAMAGE/HEAL, 'effect_details' must contain 'damage_rng'.")
-
-            # If the damage spell also applies a secondary effect, validate it.
-            if secondary_effect := effect_details.get("applies_effect"):
-                if not isinstance(secondary_effect, dict):
-                    raise ValidationError("'applies_effect' must be a dictionary.")
-                if "name" not in secondary_effect:
-                    raise ValidationError("The 'applies_effect' dictionary must have a 'name'.")
-                if "duration" not in secondary_effect:
-                    raise ValidationError("The 'applies_effect' dictionary must have a 'duration'.")
-                if "stat_affected" not in secondary_effect:
-                    raise ValidationError("The 'applies_effect' dictionary must have a 'stat_affected'.")
-                
-                # Check for 'amount' OR 'potency' to support different effect types.
-                if "amount" not in secondary_effect and "potency" not in secondary_effect:
-                    raise ValidationError("The 'applies_effect' dictionary must have an 'amount' or 'potency'.")
-
-        # Validation for BUFF or DEBUFF effects
-        elif effect_type in [ability_defs.EFFECT_BUFF, ability_defs.EFFECT_DEBUFF]:
-            if "name" not in effect_details:
-                raise ValidationError("For BUFF/DEBUFF, 'effect_details' must have 'name'.")
-            if "duration" not in effect_details:
-                raise ValidationError("For BUFF/DEBUFF, 'effect_details' must have 'duration'.")
-            if "stat_affected" not in effect_details:
-                raise ValidationError("For BUFF/DEBUFF, 'effect_details' must have 'stat_affected'.")
-            if "amount" not in effect_details:
-                raise ValidationError("For BUFF/DEBUFF, 'effect_details' must have 'amount'.")
-
-        # Data consistency check
-        if damage_type and effect_details.get("damage_type") and damage_type != effect_details.get("damage_type"):
-            raise ValidationError(
-                "The top-level 'Damage Type' and the 'damage_type' in Effect Details must match."
-            )
-
-        if not damage_type and effect_details.get("damage_type"):
-            cleaned_data["damage_type"] = effect_details.get("damage_type")
-
-        return cleaned_data
+        instance = super().save(commit=False)
+        effect_type = self.cleaned_data.get('effect_type')
+        effect_details = {}
+        if effect_type == 'damage':
+            effect_details = {
+                'damage_base': self.cleaned_data.get('damage_base'),
+                'damage_rng': self.cleaned_data.get('damage_rng'),
+                'damage_type': self.cleaned_data.get('damage_type'),
+            }
+        elif effect_type == 'heal':
+            effect_details = {
+                'heal_base': self.cleaned_data.get('heal_base'),
+                'heal_rng': self.cleaned_data.get('heal_rng'),
+            }
+        elif effect_type in ['buff', 'debuff']:
+            effect_details = {
+                'stat': self.cleaned_data.get('stat'),
+                'modifier': self.cleaned_data.get('modifier'),
+                'duration': self.cleaned_data.get('duration'),
+            }
+        
+        instance.effect = effect_type
+        instance.effect_details = json.dumps(effect_details)
+        
+        if commit:
+            instance.save()
+        return instance

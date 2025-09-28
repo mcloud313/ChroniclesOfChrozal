@@ -151,3 +151,25 @@ async def cmd_disarm(character: 'Character', world: 'World', args_str: str) -> b
             trap_data['is_active'] = False # Trap is used up
 
     return True
+
+def pickpocket(character, target_name):
+    target = character.room.get_character(target_name)
+    if not target:
+        character.send_message("You don't see them here.")
+        return
+
+    if target == character:
+        character.send_message("You can't pickpocket yourself.")
+        return
+
+    # Contested skill check
+    if utils.skill_check(character.get_skill("pickpocket"), target.get_skill("perception")):
+        # For now, let's just steal some gold
+        gold_amount = 10 # This should be randomized
+        target.gold -= gold_amount
+        character.gold += gold_amount
+        character.send_message(f"You successfully pickpocket {target.name} and steal {gold_amount} gold.")
+        target.send_message(f"You feel a slight tug at your purse.")
+    else:
+        character.send_message(f"You fail to pickpocket {target.name} and are noticed!")
+        target.send_message(f"{character.name} just tried to pickpocket you!")

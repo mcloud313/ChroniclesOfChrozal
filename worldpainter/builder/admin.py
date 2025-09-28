@@ -199,7 +199,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
 @admin.register(AbilityTemplates)
 class AbilityTemplateAdmin(admin.ModelAdmin):
     form = AbilityTemplateAdminForm
-    list_display = ('name', 'ability_type', 'get_classes', 'level_req')
+    list_display = ('name', 'effect', 'essence_cost' 'cooldown')
     search_fields = ('name', 'internal_name', 'description')
     list_filter = ('ability_type', 'level_req')
 
