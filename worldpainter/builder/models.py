@@ -83,10 +83,10 @@ class ItemTemplates(models.Model):
     lock_details = models.JSONField(blank=True, null=True, help_text="JSON defining lock properties, e.g., {\"is_locked\": true, \"lockpick_dc\": 25, \"key_name\": \"a rusty key\"}")
     trap_details = models.JSONField(blank=True, null=True, help_text="JSON defining trap properties, e.g., {\"is_active\": true, \"disarm_dc\": 20, \"perception_dc\": 18}")
 
-    random_properties = models.JSONField(
-        blank=True, null=True,
-        help_text="Define chances for random locks/traps, e.g., {\"lock_chance\": 0.5, \"trap_chance\": 0.3}"
-    )
+    # random_properties = models.JSONField(
+    #     blank=True, null=True,
+    #     help_text="Define chances for random locks/traps, e.g., {\"lock_chance\": 0.5, \"trap_chance\": 0.3}"
+    # )
 
     def __str__(self):
         return f"{self.name} (ID: {self.id})"

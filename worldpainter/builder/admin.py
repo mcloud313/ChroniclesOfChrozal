@@ -54,10 +54,30 @@ class CharacterSkillsInline(admin.TabularInline):
     can_delete = True # Allow deleting skills if necessary
     readonly_fields = ('skill_name',)
 
+
+
 class CharacterEquipmentInline(admin.StackedInline):
     model = CharacterEquipment
     can_delete = False
-    readonly_fields = [f.name for f in CharacterEquipment._meta.get_fields() if f.name != 'character']
+    
+    # --- FIX: Replaced readonly_fields with a more useful configuration ---
+    # Define all the fields from the synchronized model
+    fields = (
+        ('head', 'neck', 'shoulders'),
+        ('torso', 'back', 'accessory_cloak'),
+        ('arms', 'hands'),
+        ('waist', 'legs', 'feet'),
+        ('main_hand', 'off_hand'),
+        ('finger_l', 'finger_r'),
+        ('accessory_wrist_l', 'accessory_wrist_r'),
+    )
+    # Use autocomplete for easy item searching and equipping
+    autocomplete_fields = [
+        'head', 'neck', 'shoulders', 'torso', 'back', 'accessory_cloak',
+        'arms', 'hands', 'waist', 'legs', 'feet', 'main_hand', 'off_hand',
+        'finger_l', 'finger_r', 'accessory_wrist_l', 'accessory_wrist_r'
+    ]
+    # ---------------------------------------------------------------------
 
 class LootTableEntriesInline(admin.TabularInline):
     model = LootTableEntries
@@ -121,7 +141,7 @@ class RoomAdmin(admin.ModelAdmin):
 @admin.register(AmbientScripts)
 class AmbientScriptsAdmin(admin.ModelAdmin):
     list_display = ('get_short_script', 'area', 'room')
-    list_filter = ('area')
+    list_filter = ('area',)
     search_fields = ('script_text',)
 
     @admin.display(description='Script Text')
@@ -129,6 +149,13 @@ class AmbientScriptsAdmin(admin.ModelAdmin):
         if len(obj.script_text) > 80:
             return f"{obj.script_text[:80]}..."
         return obj.script_text
+    
+@admin.register(ItemInstances)
+class ItemInstancesAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'template', 'owner_char', 'room', 'container')
+    list_filter = ('template__item_type',)
+    # --- ADD THIS: Enable search for the autocomplete widget ---
+    search_fields = ('template__name', 'id')
 
 @admin.register(MobTemplates)
 class MobTemplateAdmin(admin.ModelAdmin):
@@ -153,6 +180,17 @@ class CharacterAdmin(admin.ModelAdmin):
     # This prevents new characters from being created here
     def has_add_permission(self, request):
         return False
+    
+    def delete_queryset(self, request, queryset):
+        for character in queryset:
+            # Find all items directly owned by this character
+            items_to_move = ItemInstances.objects.filter(owner_char=character)
+            
+            # Update them to be in the character's last known room
+            items_to_move.update(owner_char=None, room_id=character.location_id)
+            
+        # Now, proceed with the original deletion
+        super().delete_queryset(request, queryset)
 
 @admin.register(ItemTemplates)
 class ItemTemplateAdmin(admin.ModelAdmin):
