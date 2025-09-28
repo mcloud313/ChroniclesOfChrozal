@@ -606,7 +606,8 @@ class Character:
 
     def knows_spell(self, spell_key: str) -> bool:
         """Checks if the character knows a specific spell by its internal key."""
-        return spell_key.lower() in self.known_spells
+        # FIX: All learned powers, including spells, are stored in self.known_abilities.
+        return spell_key.lower() in self.known_abilities
 
     def knows_ability(self, ability_key: str) -> bool:
         """Checks if the character knows a specific ability by its internal key."""

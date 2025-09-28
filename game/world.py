@@ -775,30 +775,38 @@ class World:
 
     async def update_ambient_scripts(self, dt: float):
         """Ticker: Periodically shows immersive messages to players."""
-        # Run this check infrequently (10% chance per second)
-        if random.random() > 0.1:
-            return
+        # --- FIX: Use a configurable setting and more intuitive logic ---
+        # This will run if a random number is LESS than your setting.
+        # e.g., if the setting is 0.01, this block runs on a 1% chance.
+        if random.random() < config.AMBIENT_SCRIPT_CHANCE_PER_TICK:
+            active_chars = self.get_active_characters_list()
+            if not active_chars:
+                return
 
-        active_chars = self.get_active_characters_list()
-        if not active_chars:
-            return
+            # Group players by location to avoid spam
+            active_chars.sort(key=lambda c: c.location.dbid if c.location else -1)
 
-        for char in active_chars:
-            if not char.location:
-                continue
+            for room_id, chars_in_room_iter in groupby(active_chars, key=lambda c: c.location.dbid if c.location else -1):
+                if room_id == -1:
+                    continue
 
-            # Find all scripts relevant to the character's current location
-            possible_scripts = [
-                script for script in self.ambient_scripts
-                if (script['room_id'] == char.location.dbid or
-                    script['area_id'] == char.location.area_id)
-            ]
+                chars_in_room = list(chars_in_room_iter)
+                first_char = chars_in_room[0]
+                room = first_char.location
 
-            if possible_scripts:
-                # Pick one script at random and send it
-                chosen_script = random.choice(possible_scripts)
-                # The {i} code is a common MUD convention for gray/italic text
-                await char.send(f"{{i{chosen_script['script_text']}{{x")
+                possible_scripts = [
+                    script for script in self.ambient_scripts
+                    if (script['room_id'] == room.dbid or
+                        script['area_id'] == room.area_id)
+                ]
+
+                if possible_scripts:
+                    chosen_script = random.choice(possible_scripts)
+                    message = f"{{i{chosen_script['script_text']}{{x"
+
+                    tasks = [char.send(message) for char in chars_in_room]
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def broadcast_to_all(self, message: str, exclude: set = None):
         """Sends a message to all active characters."""
