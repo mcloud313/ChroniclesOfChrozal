@@ -97,7 +97,6 @@ class DatabaseManager:
                     area_id INTEGER NOT NULL REFERENCES areas(id) ON DELETE RESTRICT,
                     name TEXT NOT NULL,
                     description TEXT DEFAULT 'You see nothing special.',
-                    -- spawners and flags are still JSONB for now, can be normalized later
                     spawners JSONB DEFAULT '{}'::jsonb,
                     flags JSONB DEFAULT '[]'::jsonb,
                     coinage INTEGER NOT NULL DEFAULT 0,
@@ -119,7 +118,11 @@ class DatabaseManager:
                         flags JSONB DEFAULT '[]'::jsonb,
                         damage_type TEXT,
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        -- FIX: Added missing columns to match live DB
+                        loot_table_id INTEGER,
+                        lock_details JSONB,
+                        trap_details JSONB
                     )
                 """)
                 await conn.execute("""
@@ -132,7 +135,7 @@ class DatabaseManager:
                     stats JSONB DEFAULT '{}'::jsonb,
                     resistances JSONB DEFAULT '{}'::jsonb,
                     max_hp INTEGER NOT NULL DEFAULT 10,
-                    max_coinage INTEGER NOT NULL DEFAULT 0, -- Replaces coinage in loot
+                    max_coinage INTEGER NOT NULL DEFAULT 0,
                     flags JSONB DEFAULT '[]'::jsonb,
                     respawn_delay_seconds INTEGER DEFAULT 300,
                     variance JSONB DEFAULT '{}'::jsonb,
@@ -149,7 +152,9 @@ class DatabaseManager:
                         damage_base INTEGER DEFAULT 1,
                         damage_rng INTEGER DEFAULT 0,
                         speed REAL DEFAULT 2.0,
-                        attack_type TEXT DEFAULT 'physical'
+                        attack_type TEXT DEFAULT 'physical',
+                        -- FIX: Added missing column to match live DB
+                        effect_details JSONB
                     )
                 """)
                 await conn.execute("""
@@ -219,6 +224,9 @@ class DatabaseManager:
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         last_saved TIMESTAMPTZ,
                         total_playtime_seconds INTEGER NOT NULL DEFAULT 0,
+                        -- FIX: Added missing columns to match live DB
+                        hunger INTEGER NOT NULL DEFAULT 100,
+                        thirst INTEGER NOT NULL DEFAULT 100,
                         UNIQUE (player_id, first_name, last_name)
                     )
                 """)
@@ -238,7 +246,7 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS character_skills (
                     id SERIAL PRIMARY KEY,
                     character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
-                    skill_name TEXT NOT NULL, -- e.g., 'bladed weapons'
+                    skill_name TEXT NOT NULL,
                     rank INTEGER NOT NULL DEFAULT 0,
                     UNIQUE (character_id, skill_name)
                 )
@@ -255,9 +263,9 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS exits (
                     id SERIAL PRIMARY KEY,
                     source_room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-                    direction TEXT NOT NULL, -- e.g., 'north', 'south'
+                    direction TEXT NOT NULL,
                     destination_room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-                    details JSONB DEFAULT '{}'::jsonb, -- For locks, skill checks etc.
+                    details JSONB DEFAULT '{}'::jsonb,
                     is_hidden BOOLEAN NOT NULL DEFAULT FALSE,
                     UNIQUE (source_room_id, direction)
                 )
@@ -274,9 +282,9 @@ class DatabaseManager:
                         last_moved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         
                         CONSTRAINT single_location_check CHECK (
-                             (owner_char_id IS NOT NULL AND room_id IS NULL AND container_id IS NULL) OR -- In top-level inventory/equipped
-                             (owner_char_id IS NULL AND room_id IS NOT NULL AND container_id IS NULL) OR -- On the ground
-                             (owner_char_id IS NULL AND room_id IS NULL AND container_id IS NOT NULL)    -- Inside another container
+                             (owner_char_id IS NOT NULL AND room_id IS NULL AND container_id IS NULL) OR
+                             (owner_char_id IS NULL AND room_id IS NOT NULL AND container_id IS NULL) OR
+                             (owner_char_id IS NULL AND room_id IS NULL AND container_id IS NOT NULL)
                         )
                     )
                 """)
@@ -285,22 +293,32 @@ class DatabaseManager:
                     id SERIAL PRIMARY KEY,
                     mob_template_id INTEGER NOT NULL REFERENCES mob_templates(id) ON DELETE CASCADE,
                     item_template_id INTEGER NOT NULL REFERENCES item_templates(id) ON DELETE CASCADE,
-                    drop_chance REAL NOT NULL DEFAULT 1.0, -- e.g., 0.1 for 10%
+                    drop_chance REAL NOT NULL DEFAULT 1.0,
                     min_quantity INTEGER NOT NULL DEFAULT 1,
                     max_quantity INTEGER NOT NULL DEFAULT 1
                 )
                 """)
                 await conn.execute("""
+                -- FIX: Replaced with the full definition from the live DB
                 CREATE TABLE IF NOT EXISTS character_equipment (
-                    character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE PRIMARY KEY,
-                    head UUID REFERENCES item_instances(id) ON DELETE SET NULL,
-                    torso UUID REFERENCES item_instances(id) ON DELETE SET NULL,
-                    legs UUID REFERENCES item_instances(id) ON DELETE SET NULL,
-                    feet UUID REFERENCES item_instances(id) ON DELETE SET NULL,
-                    hands UUID REFERENCES item_instances(id) ON DELETE SET NULL,
-                    main_hand UUID REFERENCES item_instances(id) ON DELETE SET NULL,
-                    off_hand UUID REFERENCES item_instances(id) ON DELETE SET NULL
-                    -- Add other slots as needed
+                    character_id integer NOT NULL PRIMARY KEY REFERENCES characters(id) ON DELETE CASCADE,
+                    head uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    torso uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    legs uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    feet uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    hands uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    main_hand uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    off_hand uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    neck uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    shoulders uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    arms uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    waist uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    finger_l uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    finger_r uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    accessory_wrist_l uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    accessory_wrist_r uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    accessory_cloak uuid REFERENCES item_instances(id) ON DELETE SET NULL,
+                    back uuid REFERENCES item_instances(id) ON DELETE SET NULL
                 )
                 """)
                 await conn.execute("""
@@ -341,14 +359,13 @@ class DatabaseManager:
                         id SERIAL PRIMARY KEY,
                         room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
                         item_template_id INTEGER NOT NULL REFERENCES item_templates(id) ON DELETE CASCADE,
-                        stock_quantity INTEGER NOT NULL DEFAULT -1, -- -1 for infinite stock
-                        buy_price_modifier REAL NOT NULL DEFAULT 1.25, -- Default 25% markup
-                        sell_price_modifier REAL NOT NULL DEFAULT 0.75, -- Default 25% markdown
+                        stock_quantity INTEGER NOT NULL DEFAULT -1,
+                        buy_price_modifier REAL NOT NULL DEFAULT 1.25,
+                        sell_price_modifier REAL NOT NULL DEFAULT 0.75,
                         
                         UNIQUE (room_id, item_template_id)
                     )
                 """)
-                # --- Junction/Instance Tables ---
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS room_objects (
                         id SERIAL PRIMARY KEY,
@@ -366,6 +383,8 @@ class DatabaseManager:
                         room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
                         area_id INTEGER REFERENCES areas(id) ON DELETE CASCADE,
                         script_text TEXT NOT NULL,
+                        -- FIX: Added missing column to match live DB
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         CONSTRAINT single_location_check_ambient CHECK (
                             (room_id IS NOT NULL AND area_id IS NULL) OR
                             (room_id IS NULL AND area_id IS NOT NULL)
