@@ -87,8 +87,7 @@ class World:
                 self.db_manager.fetch_all_query("SELECT * FROM loot_tables ORDER BY id"),
                 self.db_manager.fetch_all_query("SELECT * FROM loot_table_entries ORDER BY loot_table_id"),
                 self.db_manager.fetch_all_query("SELECT * FROM ambient_scripts"),
-                self.db_manager.get_game_time(),
-                self._update_world_weather(is_initial_build=True)
+                self.db_manager.get_game_time()
             )
             (area_rows, race_rows, class_rows, item_template_records, mob_rows, attack_rows,
              loot_rows, room_rows, exit_rows, shop_rows, ability_rows, damage_type_rows,
@@ -104,6 +103,7 @@ class World:
                     self.game_day = time_data.get('game_day', calendar_defs.STARTING_DAY)
                     self.game_hour = time_data.get('game_hour', calendar_defs.STARTING_HOUR)
                     self.game_minute = time_data.get('game_minute', 0)
+                    self._update_world_weather(is_initial_build=True)
 
             for record in item_template_records:
                 stats_data = record.get('stats')
