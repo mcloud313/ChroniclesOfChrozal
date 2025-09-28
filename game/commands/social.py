@@ -38,7 +38,7 @@ async def cmd_drag(character: 'Character', world: 'World', args_str: str) -> boo
     if not isinstance(exit_data, int):
         await character.send("You can't drag a body that way.")
         return True
-    
+
     target_room = world.get_room(exit_data)
     if not target_room:
         await character.send("The path seems to vanish into nothingness.")
@@ -65,7 +65,7 @@ async def cmd_group(character: 'Character', world: 'World', args_str: str) -> bo
     
     target_char = character.location.get_character_by_name(args_str)
 
-    # --- Pre-condition Checks ---
+   # --- Pre-condition Checks ---
     if not target_char:
         await character.send("You don't see them here.")
         return True
@@ -116,7 +116,7 @@ async def cmd_accept(character: 'Character', world: 'World', args_str: str) -> b
     if not inviter or not inviter.is_alive() or inviter.location != character.location:
         await character.send("The person who invited you is no longer available.")
         return True
-    
+
     # Case 1: Inviter is not in a group, so a new one is formed.
     if not inviter.group:
         new_group = Group(leader=inviter)
@@ -128,7 +128,7 @@ async def cmd_accept(character: 'Character', world: 'World', args_str: str) -> b
             await character.send("The group is now full.")
             await inviter.send(f"{character.name} tried to join, but your group is full.")
             return True
-        
+
         inviter.group.add_member(character)
         await inviter.group.broadcast(f"{character.name} has joined the group.")
     
@@ -155,7 +155,7 @@ async def cmd_decline(character: 'Character', world: 'World', args_str: str) -> 
     inviter = world.get_active_character(inviter_id)
     if inviter and inviter.is_alive():
         await inviter.send(f"{character.name} has declined your group invitation.")
-        
+
     return True
 
 async def cmd_disband(character: 'Character', world: ' World', args_str: str) -> bool:
@@ -216,8 +216,9 @@ async def cmd_kick(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send("You can kick yourself. Use 'disband' instead.")
         return True
     
-    # Perform the kick
+  # Perform the kick
     character.group.remove_member(target_to_kick)
     await target_to_kick.send("{RYou have been kicked from the group.{x")
     await character.group.broadcast(f"{target_to_kick.name} has been kicked from the group.", exclude={target_to_kick})
     return True
+

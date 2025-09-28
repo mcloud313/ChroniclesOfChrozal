@@ -13,7 +13,6 @@ from .. import resolver as combat_logic
 if TYPE_CHECKING:
     from ..character import Character
     from ..world import World
-    import aiosqlite
     from ..room import Room
 
 log = logging.getLogger(__name__)
@@ -40,18 +39,6 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
 
     if "ROUGH_TERRAIN" in current_room.flags:
         move_rt *= 2
-
-    traps = character.world.db.query_all("SELECT * FROM room_traps WHERE room_id = %s", (new_room.id,))
-    for trap in traps:
-        if not utils.skill_check(character.get_skill("perception"), trap['difficulty']):
-            character.send_message("You triggered a trap!")
-            # Apply trap effect here
-            # For now, just deal some damage
-            character.take_damage(20) 
-            # Remove the trap after it's been triggered
-            character.world.db.execute("DELETE FROM room_traps WHERE id = %s", (trap['id'],))
-            return # Stop movement
-    
     
     final_rt = move_rt
     if is_group_move:
@@ -60,7 +47,6 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
 
     # --- 3. Announce Departure & Immediately Update Room State ---
     departure_message = utils.format_departure_message(character.name, exit_name)
-
 
     # Broadcast the departure message first.
     if is_group_move:
@@ -100,7 +86,7 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
             item_obj = world.get_item_object(item_id)
             if item_obj:
                 item_counts[item_obj.name] = item_counts.get(item_obj.name, 0) + 1
-        
+
         for name, count in sorted(item_counts.items()):
             display_name = name + (f" (x{count})" if count > 1 else "")
             ground_items_output.append(display_name)
@@ -110,9 +96,11 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
 
         if ground_items_output:
             await char.send("You also see here: " + ", ".join(ground_items_output) + ".")
-        
+
         if leader_penalty > 0 and char == character:
             await character.send(f"Your armor slows your movement (+{leader_penalty:.1f}s).")
+
+
 
 async def _perform_drag(dragger: 'Character', target_corpse: 'Character', target_room: 'Room', exit_name: str):
     """Handles the logic of dragging a corpse to another room."""
