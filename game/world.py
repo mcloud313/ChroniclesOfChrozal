@@ -310,6 +310,7 @@ class World:
         ticker.subscribe(self.update_ambient_scripts)
         ticker.subscribe(self.update_hunger_thirst)
         ticker.subscribe(self.update_game_time)
+        ticker.subscribe(self.update_bard_songs)
 
     # --- Ticker Callback Functions ---
     async def update_roundtimes(self, dt: float):
@@ -391,7 +392,6 @@ class World:
             details = song_data.get("effect_details", {})
             upkeep = details.get("essence_upkeep", 0)
 
-            # Pay upkeep cost
             if bard.essence < upkeep:
                 await bard.send(f"You run out of essence and your '{bard.active_song_name}' fades.")
                 bard.active_song = None
@@ -399,25 +399,24 @@ class World:
                 continue
             bard.essence -= upkeep
 
-            # Determine who the song should affect
             is_debuff = details.get("is_debuff", False)
             if is_debuff:
                 targets = [m for m in bard.location.mobs if m.is_alive()]
-            else: # It's a buff for allies
+            else:
                 if bard.group:
                     targets = [p for p in bard.group.members if p.location == bard.location and p.is_alive()]
                 else:
                     targets = [bard]
 
-            # Apply the song's effect as a very short-duration buff/debuff
             effect_name = details.get("name")
             for target in targets:
                 target.effects[f"Song_{effect_name}"] = {
                     "name": f"Song_{effect_name}",
                     "stat_affected": details.get("stat_affected"),
                     "amount": details.get("amount"),
-                    "ends_at": time.monotonic() + 2.0 # Lasts just until the next tick
+                    "ends_at": time.monotonic() + 2.0
                 }
+
     # In game/world.py
     async def update_death_timers(self, dt: float):
         current_time = time.monotonic()
@@ -614,46 +613,7 @@ class World:
         for char in self.get_active_characters_list():
             is_in_node = char.location and "NODE" in char.location.flags
             char.update_regen(dt, is_in_node)
-            
-    async def update_stealth_checks(self, dt: float):
-        """Ticker: Periodically allows observers to detect hidden characters and mobs."""
-        if random.random() > 0.10: # 10% chance per second
-            return
         
-        # Find all hidden entities (characters and mobs)
-        hidden_chars = [c for c in self.get_active_characters_list() if c.is_hidden]
-        all_mobs = [m for r in self.rooms.values() for m in r.mobs]
-        hidden_mobs = [m for m in all_mobs if m.is_hidden and m.is_alive()]
-        
-        hidden_entities = hidden_chars + hidden_mobs
-        if not hidden_entities:
-            return
-
-        for hidden_entity in hidden_entities:
-            # Determine the stealth value (DC) of the hidden entity
-            if isinstance(hidden_entity, Character):
-                stealth_dc = hidden_entity.get_skill_modifier("stealth")
-            else: # It's a Mob
-                stealth_dc = hidden_entity.get_stealth_value()
-
-            # Find observers in the same room
-            observers = [c for c in hidden_entity.location.characters if c.is_alive()]
-
-            for observer in observers:
-                # Mobs can't detect hidden players in this implementation yet, but players can detect mobs
-                if utils.skill_check(observer, "perception", dc=stealth_dc)['success']:
-                    hidden_entity.is_hidden = False
-                    
-                    if isinstance(hidden_entity, Character):
-                        await hidden_entity.send(f"{{RYou have been spotted by {observer.name}!{{x")
-                    
-                    await observer.send(f"{{YYou spot {hidden_entity.name} hiding in the shadows!{{x")
-                    await observer.location.broadcast(
-                        f"\r\n{observer.name} spots {hidden_entity.name} hiding in the shadows!\r\n",
-                        exclude={observer, hidden_entity}
-                    )
-                    break # Stop checking once spotted
-
     async def update_item_decay(self, dt: float):
         """
         Ticker: Periodically cleans up old, flagged items from the ground.

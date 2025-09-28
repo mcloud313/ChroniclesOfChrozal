@@ -11,9 +11,9 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 async def cmd_drag(character: 'Character', world: 'World', args_str: str) -> bool:
-    """drags a corpse to an adjacent room."""
+    """Drags a corpse to an adjacent room."""
     if not args_str:
-        await character.send("Who do you want to drag and where? (e.g. drag frodo).")
+        await character.send("Who do you want to drag, and where? (e.g., drag frodo north)")
         return True
     
     try:
@@ -22,10 +22,10 @@ async def cmd_drag(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send("Invalid syntax. (e.g., drag frodo north)")
         return True
     
-    #Find the target corpse in the room
+    # Find the target corpse in the room
     target_corpse = None
     for char in character.location.characters:
-        if target_name.lower() in char.name.lower() and char.status == "DEAD" or char.status == "DYING":
+        if target_name.lower() in char.first_name.lower() and (char.status == "DEAD" or char.status == "DYING"):
             target_corpse = char
             break
 
@@ -33,20 +33,22 @@ async def cmd_drag(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send("You don't see that body here.")
         return True
     
-    # Find the exit this logic is similar to the move command
+    # --- FIX: Correctly find the exit and its destination ID ---
     exit_data = character.location.exits.get(exit_name.lower())
-    if not isinstance(exit_data, int):
+    if not exit_data:
         await character.send("You can't drag a body that way.")
         return True
 
-    target_room = world.get_room(exit_data)
-    if not target_room:
+    destination_id = exit_data.get('destination_room_id')
+    if not destination_id:
         await character.send("The path seems to vanish into nothingness.")
         return True
     
-    # Call the new helper function to perform the move
-    await movement_logic._perform_drag(character, target_corpse, target_room, exit_name)
-    return True
+    target_room = world.get_room(destination_id)
+    if not target_room:
+        await character.send("The path seems to vanish into nothingness.")
+        log.error(f"Drag command failed: Exit '{exit_name}' in room {character.location.dbid} points to non-existent room {destination_id}.")
+        return True
 
 async def cmd_group(character: 'Character', world: 'World', args_str: str) -> bool:
     """Forms or joins a group with another creature."""
