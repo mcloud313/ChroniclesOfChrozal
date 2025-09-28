@@ -38,8 +38,10 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
     target_name_input: Optional[str] = None
 
     longest_match_len = 0
-    for spell_key, data in ability_defs.ABILITIES_DATA.items():
-        if data.get("type", "").upper() != "SPELL":
+    # FIX #1: Iterate through world.abilities, which is the live, loaded data
+    for spell_key, data in world.abilities.items():
+        # FIX #2: Check for "ability_type", not "type"
+        if data.get("ability_type", "").upper() != "SPELL":
             continue
 
         if normalized_input.startswith(spell_key):
@@ -53,12 +55,13 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
         return True
         
     spell_key = found_key
-    spell_data = ability_defs.get_ability_data(world, spell_key)
+    spell_data = world.abilities.get(spell_key) # Get from world.abilities
     display_name = spell_data.get("name", spell_key)
     log.debug("Parsed cast command: Spell='%s', Target Input='%s'", spell_key, target_name_input)
 
     # --- 2. Check Requirements --  
-    if not character.knows_ability(spell_key):
+    # FIX #3: Use the more specific knows_spell() method
+    if not character.knows_spell(spell_key):
         await character.send(f"You don't know the spell '{display_name}'.")
         return True
     
@@ -75,12 +78,11 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
     failure_chance = character.total_spell_failure
     if failure_chance > 0 and (random.random() * 100) < failure_chance:
         await character.send(f"{{RYour armor restricts your movement, causing your {display_name} spell to fizzle!{{x")
-        # The spell still costs essence and time on failure.
         character.essence -= spell_cost
         character.roundtime = spell_data.get("cast_time", 0.0)
         return True
     
-    # --- 3. Validate Target ---
+    # --- 3. Validate Target (This part was already correct) ---
     required_target_type = spell_data.get("target_type", ability_defs.TARGET_NONE)
     target_obj: Optional[Union[Character, Mob]] = None
     target_id: Optional[Union[int, str]] = None
@@ -112,7 +114,7 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
 
         target_id = target_obj.dbid if isinstance(target_obj, Character) else target_obj.instance_id
 
-    # --- 4. Initiate Casting Sequence ---
+    # --- 4. Initiate Casting Sequence (This part was also correct) ---
     cast_time = spell_data.get("cast_time", 0.0)
 
     target_display_name = "itself"
@@ -124,7 +126,7 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
         "name": display_name,
         "target_id": target_id,
         "target_type": target_obj_type_str,
-        "target_name": target_display_name, # This line was missing
+        "target_name": target_display_name,
         "cast_time": cast_time,
     }
     
