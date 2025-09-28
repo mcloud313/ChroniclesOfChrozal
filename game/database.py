@@ -360,6 +360,18 @@ class DatabaseManager:
                     )
                 """)
                 await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS ambient_scripts (
+                        id SERIAL PRIMARY KEY,
+                        room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
+                        area_id INTEGER REFERENCES areas(id) ON DELETE CASCADE,
+                        script_text TEXT NOT NULL,
+                        CONSTRAINT single_location_check_ambient CHECK (
+                            (room_id IS NOT NULL AND area_id IS NULL) OR
+                            (room_id IS NULL AND area_id IS NOT NULL)
+                        )
+                    )
+                """)
+                await conn.execute("""
                     CREATE TABLE IF NOT EXISTS room_traps (
                         id SERIAL PRIMARY KEY,
                         room_id INTEGER REFERENCES rooms(id),

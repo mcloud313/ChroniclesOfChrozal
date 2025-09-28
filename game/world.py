@@ -163,6 +163,14 @@ class World:
                 room = Room(dict(row_data))
                 self.rooms[room.dbid] = room
 
+            is_currently_night = self.is_night()
+            for room in self.rooms.values():
+                if "OUTDOORS" in room.flags:
+                    if is_currently_night:
+                        room.flags.add("DARK")
+                    else:
+                        room.flags.discard("DARK")
+
             if exit_rows:
                 for room_id, exits in groupby(exit_rows, key=itemgetter('source_room_id')):
                     if room_id in self.rooms:
@@ -212,7 +220,11 @@ class World:
     # --- Getters ---
     def get_room(self, room_id: int) -> Optional[Room]:
         return self.rooms.get(room_id)
-        
+
+    def is_night(self) -> bool:
+        """Determines if it is currently night time in the game world."""
+        return not (calendar_defs.DAWN_HOUR <= self.game_hour < calendar_defs.DUSK_HOUR)
+
     def mark_room_dirty(self, room: Room):
         self.dirty_rooms.add(room.dbid)
 
@@ -517,34 +529,52 @@ class World:
                     char.can_advance_notified = True
     
     async def update_stealth_checks(self, dt: float):
-        """Ticker: Periodically allows observers to detect hidden characters."""
-        # Only run this check occasionally to reduce spam and processing
-        if random.random() > 0.10: # 10 % chance per second
+        """Ticker: Periodically allows observers to detect hidden characters and mobs."""
+        if random.random() > 0.10: # 10% chance per second
             return
         
+        # Find all hidden entities (characters and mobs)
         hidden_chars = [c for c in self.get_active_characters_list() if c.is_hidden]
-        if not hidden_chars:
-            return
+        all_mobs = [m for r in self.rooms.values() for m in r.mobs]
+        hidden_mobs = [m for m in all_mobs if m.is_hidden and m.is_alive()]
         
-        for hidden_char in hidden_chars:
-            stealth_mod = hidden_char.get_skill_modifier("stealth")
+        hidden_entities = hidden_chars + hidden_mobs
+        if not hidden_entities:
+            return
 
-            observers = [c for c in hidden_char.location.characters if c != hidden_char] + \
-                        [m for m in hidden_char.location.mobs if m.is_alive()]
-            
+        for hidden_entity in hidden_entities:
+            # Determine the stealth value (DC) of the hidden entity
+            if isinstance(hidden_entity, Character):
+                stealth_dc = hidden_entity.get_skill_modifier("stealth")
+            else: # It's a Mob
+                stealth_dc = hidden_entity.get_stealth_value()
+
+            # --- FIX: Filter observers to exclude self and group members ---
+            observers = []
+            for char in hidden_entity.location.characters:
+                # Must be alive and not the hider themselves
+                if not char.is_alive() or char == hidden_entity:
+                    continue
+                # If the hider is a character and is in a group, exclude group members
+                if isinstance(hidden_entity, Character) and hidden_entity.group and char in hidden_entity.group.members:
+                    continue
+                observers.append(char)
+            # -----------------------------------------------------------------
+
             for observer in observers:
-                # Mobs get a base perception check
-                perception_mod = observer.get_skill_modifier("perception") if isinstance(observer, Character) \
-                    else observer.level * 3
-                
-                # The hidden character's stealth is the DC for the observer's perception check
-                if utils.skill_check(observer, "perception", dc=stealth_mod)['success']:
-                    hidden_char.is_hidden = False
-                    await hidden_char.send(f"{{RYou have been spotted by {observer.name}!{{x")
-                    if isinstance(observer, Character):
-                        await observer.send(f"You spot {hidden_char.name} hiding in the shadows!")
-                    # Once spotted, break the inner loop and move to the next hidden character
-                    break 
+                # Mobs can't detect hidden players in this implementation yet, but players can detect mobs
+                if utils.skill_check(observer, "perception", dc=stealth_dc)['success']:
+                    hidden_entity.is_hidden = False
+                    
+                    if isinstance(hidden_entity, Character):
+                        await hidden_entity.send(f"{{RYou have been spotted by {observer.name}!{{x")
+                    
+                    await observer.send(f"{{YYou spot {hidden_entity.name} hiding in the shadows!{{x")
+                    await observer.location.broadcast(
+                        f"\r\n{observer.name} spots {hidden_entity.name} hiding in the shadows!\r\n",
+                        exclude={observer, hidden_entity}
+                    )
+                    break # Stop checking once spotted
 
     async def update_hunger_thirst(self, dt: float):
         """Ticker: Decreases hunger and thirst and notifies characters on status changes."""
@@ -665,19 +695,20 @@ class World:
         log.info(f"Cleaned up {len(items_to_delete)} decayed items from the world.")
 
     async def update_game_time(self, dt: float):
-        """Ticker: Advances the in-game calendar and clock."""
+        """Ticker: Advances the in-game calendar and clock, and manages day/night cycle."""
         self.game_time_accumulator += dt
 
-        # Check if enough real time has passed to advance the game time
         if self.game_time_accumulator < calendar_defs.SECONDS_PER_GAME_MINUTE:
             return
         
-        #Calculate how many game minutes have passed
         minutes_passed = int(self.game_time_accumulator / calendar_defs.SECONDS_PER_GAME_MINUTE)
         self.game_time_accumulator %= calendar_defs.SECONDS_PER_GAME_MINUTE
 
         if not minutes_passed:
             return
+
+        # --- Day/Night Cycle Logic ---
+        hour_before_update = self.game_hour
         
         self.game_minute += minutes_passed
         while self.game_minute >= calendar_defs.MINUTES_PER_HOUR:
@@ -692,6 +723,47 @@ class World:
                     if self.game_month > calendar_defs.MONTHS_PER_YEAR:
                         self.game_month = 1
                         self.game_year += 1
+
+        # Check if the hour has changed
+        if self.game_hour == hour_before_update:
+            return
+
+        message = None
+        apply_dark = False
+        remove_dark = False
+
+        if self.game_hour == calendar_defs.DAWN_HOUR:
+            message = "{YThe sun crests the horizon, chasing away the shadows of the night.{x"
+            remove_dark = True
+        elif self.game_hour == calendar_defs.DUSK_HOUR:
+            message = "{yThe sun dips below the horizon, and darkness begins to fall.{x"
+            apply_dark = True
+        elif self.game_hour == 0: # Midnight
+            message = "{BThe moons hang high in the sky, marking the deepest point of the night.{x"
+        elif self.game_hour == 12: # Noon
+            message = "{CThe sun reaches its zenith in the sky.{x"
+
+        if message or apply_dark or remove_dark:
+            # Find all characters in outdoor rooms
+            outdoor_chars = [
+                char for char in self.get_active_characters_list()
+                if char.location and "OUTDOORS" in char.location.flags
+            ]
+            
+            # Send message to outdoor characters
+            if message:
+                tasks = [char.send(message) for char in outdoor_chars]
+                if tasks:
+                    await asyncio.gather(*tasks)
+
+            # Update room flags
+            for room in self.rooms.values():
+                if "OUTDOORS" in room.flags:
+                    if apply_dark:
+                        room.flags.add("DARK")
+                    elif remove_dark:
+                        room.flags.discard("DARK")
+
 
     async def generate_loot_for_container(self, container: Item, loot_table_id: int, character: Character):
         """

@@ -38,6 +38,26 @@ def roll_exploding_dice(max_roll: int) -> int:
         rolls += 1
     return total
 
+async def _check_and_break_concentration(target: Union['Character', 'Mob'], damage: int):
+    """
+    Checks if a character taking damage loses concentration on a spell they are casting.
+    """
+    if not isinstance(target, Character) or not target.casting_info or damage <= 0:
+        return False # Not a player, not casting, or no damage taken
+
+    # DC is 10 or half the damage taken, whichever is higher. A classic!
+    dc = max(10, damage // 2)
+    check = utils.skill_check(target, "spellcraft", dc)
+    
+    if not check['success']:
+        spell_name = target.casting_info.get("name", "your spell")
+        target.casting_info = None
+        target.roundtime = 0.0 # Clear casting roundtime
+        await target.send(f"{{RThe pain of the blow causes you to lose concentration on {spell_name}!{{x")
+        return True
+    return False
+
+
 async def resolve_physical_attack(
     attacker: Union[Character, Mob],
     target: Union[Character, Mob],
@@ -117,6 +137,8 @@ async def resolve_physical_attack(
         damage_info.pre_mitigation_damage = int(damage_info.pre_mitigation_damage * damage_multiplier)
     final_damage = damage_calculator.mitigate_damage(target, damage_info)
 
+    await _check_and_break_concentration(target, final_damage)
+
     #--- Handle Consequences
     if isinstance(attack_source, Item):
         await outcome_handler.handle_durability(attacker, target, attack_source, world)
@@ -126,6 +148,8 @@ async def resolve_physical_attack(
     if target.hp <= 0:
         await outcome_handler.handle_defeat(attacker, target, world)
         return
+    
+    
     
     # --- 8. Apply Final Roundtime for a successful hit ---
     attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
@@ -169,9 +193,17 @@ async def resolve_ranged_attack(
             await target.send(f"{attacker.name.capitalize()}'s {ammo.name} flies past you.")
         await attacker.location.broadcast(f"\r\n{attacker.name.capitalize()}'s shot goes wide of {target.name}!\r\n", {attacker, target})
         return
+    
+       # ---Resolve Block ---
+    if isinstance(target, Character) and (shield := target.get_shield()):
+        shield_skill_rank = target.get_skill_rank("shield usage")
+        block_chance = shield.block_chance + (math.floor(shield_skill_rank / 10) * 0.01)
+        if random.random() < block_chance:
+            await attacker.send(f"{{y{target.name} blocks your attack with their shield!{{x")
+            await target.send(f"{{gYou block {attacker.name}'s attack with your shield!{{x")
+            attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
+            return
         
-    # Ranged attacks cannot be parried or blocked by default. This can be changed later.
-
     # --- Calculate and Mitigate Damage ---
     # Damage is primarily from the weapon, with a possible bonus from ammo
     damage_info = damage_calculator.calculate_physical_damage(attacker, weapon, hit_result.is_crit)
@@ -182,6 +214,8 @@ async def resolve_ranged_attack(
     
     damage_info.attack_name = ammo.name # The projectile is what hits
     final_damage = damage_calculator.mitigate_damage(target, damage_info)
+
+    await _check_and_break_concentration(target, final_damage)
 
     # --- Handle Consequences ---
     outcome_handler.apply_damage(target, final_damage)
@@ -238,6 +272,8 @@ async def resolve_magical_attack(
         await target.send("{RThe magical assault disrupts your meditation!{x")
         if caster.location:
             await caster.location.broadcast(f"\r\n{target_name} is snapped out of their meditative trance by the attack!\r\n", exclude={target})
+
+    await _check_and_break_concentration(target, final_damage)
 
     # Apply any rider effects (e.g., a stun that accompanies the damage)
     if hit_result.is_hit and (rider_effect := effect_details.get("applies_effect")):
@@ -360,7 +396,7 @@ async def resolve_ability_effect(
             await caster.send(ability_data["messages"]["caster_self"])
             await caster.location.broadcast(f"\r\n{ability_data['messages']['room'].format(caster_name=caster.name)}\r\n", exclude={caster})
 
-            weapon = caster._equipped_items.get("WIELD_MAIN")
+            weapon = caster._equipped_items.get("main_hand")
             damage_mult = effect_details.get("damage_multiplier", 1.0)
             
             for t in all_targets:
@@ -378,7 +414,7 @@ async def resolve_ability_effect(
         damage_mult = effect_details.get("damage_multiplier", 1.0)
         
         weapon = None
-        if (weapon_obj := caster._equipped_items.get("WIELD_MAIN")):
+        if (weapon_obj := caster._equipped_items.get("main_hand")):
             weapon = weapon_obj
             
         await resolve_physical_attack(caster, target, weapon, world, 
@@ -427,7 +463,7 @@ async def resolve_ability_effect(
             await target.send(f"{caster.name} has cured your {cure_type}!")
 
     elif effect_type == ability_defs.EFFECT_STUN_ATTEMPT:
-        if effect_details.get("requires_shield", False) and not caster.get_shield(world):
+        if effect_details.get("requires_shield", False) and not caster.get_shield():
             await caster.send("You need a shield equipped for that!")
             return
         
@@ -743,3 +779,25 @@ async def resolve_consumable_effect(character: Character, item_template: Dict[st
     else:
         await character.send(f"The {item_name} doesn't seem to do anything.")
         return True
+    
+async def apply_damage(target: Union['Character', 'Mob'], damage_amount: int, damage_type: str, world: 'World'):
+    """
+    Applies direct damage to a target from a non-attack source (e.g., traps, falling).
+    A simplified version of the main combat damage application logic.
+    """
+    if not target.is_alive() or damage_amount <= 0:
+        return
+
+    # In the future, resistances could be applied here
+    final_damage = damage_amount
+    target.hp = max(0.0, target.hp - final_damage)
+
+    if isinstance(target, Character):
+        await target.send(f"{{RYou take {final_damage} {damage_type} damage from the fall!{{x")
+
+    if target.hp <= 0:
+        # Create a generic object to represent the "attacker"
+        class EnvironmentAttacker:
+            name = "the environment"
+            location = target.location
+        await outcome_handler.handle_defeat(EnvironmentAttacker(), target, world)
