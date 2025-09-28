@@ -76,13 +76,10 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
     if args_str.lower().startswith("in "):
         container_name = args_str[3:].strip()
         
-        # Search for the container in the character's inventory/equipment first
         container = character.find_container_by_name(container_name)
-        
-        # If not found, search for a container in the room
         if not container:
             container = character.location.get_item_instance_by_name(container_name, world)
-            if container and container.capacity <= 0: # Make sure it's actually a container
+            if container and container.capacity <= 0:
                 container = None
 
         if not container:
@@ -93,7 +90,6 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
             await character.send(f"The {container.name} is closed.")
             return True
         
-        # Display the contents
         if not container.contents:
             await character.send(f"The {container.name} is empty.")
         else:
@@ -106,7 +102,8 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
 
     # Case 1: Look at the room (no arguments)
     if not target_name or target_name == "here":
-        # This single call now generates the complete room description, including ground items.
+        # This single call to get_look_string now handles everything:
+        # room description, exits, players, mobs, and items on the ground.
         room_desc = character.location.get_look_string(character, world)
         await character.send(room_desc)
         return True
@@ -121,9 +118,7 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
         ]
         
         equipped_items_desc = []
-        # FIX: Iterate through the canonical list of slots
         for slot in slots.ALL_SLOTS:
-            # FIX: Use .get() to safely handle empty slots
             item = target_char._equipped_items.get(slot.lower())
             if item:
                 slot_display = slot.replace('_', ' ').title()
@@ -147,7 +142,7 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send(f"\n\r{target_obj_data.get('description', 'It looks unremarkable.')}")
         return True
     
-    # Check inventory, then equipment, then ground
+    # Check inventory, then equipment, then ground for item examination
     item_to_examine = (character.find_item_in_inventory_by_name(target_name) or
                        character.find_item_in_equipment_by_name(target_name) or
                        character.location.get_item_instance_by_name(target_name, world))
@@ -169,7 +164,6 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
 
     await character.send(f"You don't see anything like '{target_name}' here.")
     return True
-
 async def cmd_say(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'say' command."""
     if not args_str:
