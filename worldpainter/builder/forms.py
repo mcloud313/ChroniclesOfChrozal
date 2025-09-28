@@ -358,7 +358,6 @@ class AbilityTemplateAdminForm(forms.ModelForm):
             if "damage_rng" not in effect_details:
                 raise ValidationError("For DAMAGE/HEAL, 'effect_details' must contain 'damage_rng'.")
 
-            # --- THIS IS THE NEW LOGIC ---
             # If the damage spell also applies a secondary effect, validate it.
             if secondary_effect := effect_details.get("applies_effect"):
                 if not isinstance(secondary_effect, dict):
@@ -369,9 +368,10 @@ class AbilityTemplateAdminForm(forms.ModelForm):
                     raise ValidationError("The 'applies_effect' dictionary must have a 'duration'.")
                 if "stat_affected" not in secondary_effect:
                     raise ValidationError("The 'applies_effect' dictionary must have a 'stat_affected'.")
-                if "amount" not in secondary_effect:
-                    raise ValidationError("The 'applies_effect' dictionary must have an 'amount'.")
-            # --- END NEW LOGIC ---
+                
+                # Check for 'amount' OR 'potency' to support different effect types.
+                if "amount" not in secondary_effect and "potency" not in secondary_effect:
+                    raise ValidationError("The 'applies_effect' dictionary must have an 'amount' or 'potency'.")
 
         # Validation for BUFF or DEBUFF effects
         elif effect_type in [ability_defs.EFFECT_BUFF, ability_defs.EFFECT_DEBUFF]:
