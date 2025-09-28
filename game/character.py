@@ -605,9 +605,27 @@ class Character:
         return None
 
     def knows_spell(self, spell_key: str) -> bool:
-        """Checks if the character knows a specific spell by its internal key."""
-        # FIX: All learned powers, including spells, are stored in self.known_abilities.
-        return spell_key.lower() in self.known_abilities
+        """
+        Checks if the character knows a specific power by its internal key AND 
+        verifies that it is a spell.
+        """
+        # Make the check case-insensitive
+        key_lower = spell_key.lower()
+
+        # 1. Check if the character has learned the power at all.
+        if key_lower not in self.known_abilities:
+            return False
+        
+        # 2. If they know it, get its data from the world's master list.
+        ability_data = self.world.abilities.get(key_lower)
+        if not ability_data:
+            return False # Should not happen if it's in known_abilities, but a good safeguard.
+            
+        # 3. Verify that the ability_type is actually "SPELL".
+        # This is the crucial step that was missing.
+        is_spell = ability_data.get('ability_type') == 'SPELL'
+        
+        return is_spell
 
     def knows_ability(self, ability_key: str) -> bool:
         """Checks if the character knows a specific ability by its internal key."""
