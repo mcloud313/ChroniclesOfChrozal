@@ -323,7 +323,6 @@ class DatabaseManager:
                     CREATE TABLE IF NOT EXISTS game_economy (
                         key TEXT PRIMARY KEY,
                         value BIGINT NOT NULL DEFAULT 0,
-                        -- ADD THESE NEW COLUMNS --
                         game_year INTEGER,
                         game_month INTEGER,
                         game_day INTEGER,
@@ -797,10 +796,7 @@ class DatabaseManager:
         
         # First, fetch the raw database records
         ability_records = await self.fetch_all_query(query, character_id)
-        
-        # ✅ FIX: Process the records into a set of strings before returning.
-        # This ensures the function returns the data type the game expects,
-        # restoring the original behavior.
+
         if not ability_records:
             return set()
             

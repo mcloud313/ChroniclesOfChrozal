@@ -27,10 +27,17 @@ log = logging.getLogger(__name__)
 
 # --- Global Game State ---
 world: Optional[World] = None
+ACTIVE_TASKS = set()
 
 
 async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     """Coroutine called for each new client connection."""
+    # --- ADD THIS: Track the current task ---
+    task = asyncio.current_task()
+    ACTIVE_TASKS.add(task)
+    task.add_done_callback(ACTIVE_TASKS.discard)
+    # ------------------------------------
+
     addr = writer.get_extra_info('peername', 'Unknown Address')
     log.info("Connection received from %s", addr)
 
@@ -42,7 +49,6 @@ async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.Stream
     # Pass the global world object to the handler
     handler = ConnectionHandler(reader, writer, world, db_manager)
     await handler.handle()
-
 
 async def _autosave_loop(world: World, interval_seconds: int):
     """Periodically saves the entire world state."""
@@ -60,7 +66,6 @@ async def _autosave_loop(world: World, interval_seconds: int):
         except Exception:
             log.exception("Autosave: Unexpected error in autosave loop.")
             await asyncio.sleep(60)
-
 
 async def main():
     """Main server entry point."""
@@ -100,12 +105,22 @@ async def main():
         if autosave_task: autosave_task.cancel()
         server.close()
         await server.wait_closed()
+
+        # --- NEW SHUTDOWN LOGIC ---
+        # Wait for all client connection handlers to finish their cleanup.
+        if ACTIVE_TASKS:
+            log.info(f"Waiting for {len(ACTIVE_TASKS)} client tasks to complete cleanup...")
+            await asyncio.gather(*ACTIVE_TASKS, return_exceptions=True)
+            log.info("All client tasks are done.")
+
+        # Now that all characters are saved, perform a final world save.
         if world:
             log.info("Performing final world state save...")
             await world.save_state()
+        
+        # Finally, it is safe to close the database pool.
         await db_manager.close()
         log.info("Server shutdown complete.")
-
 
 if __name__ == "__main__":
     try:
