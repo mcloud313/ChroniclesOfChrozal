@@ -50,8 +50,9 @@ class CharacterStatsInline(admin.StackedInline):
 class CharacterSkillsInline(admin.TabularInline):
     model = CharacterSkills
     extra = 0
-    can_delete = False
-    readonly_fields = ('skill_name', 'rank')
+    # --- FIX: Allow rank to be edited, but not the skill name ---
+    can_delete = True # Allow deleting skills if necessary
+    readonly_fields = ('skill_name',)
 
 class CharacterEquipmentInline(admin.StackedInline):
     model = CharacterEquipment
@@ -78,16 +79,25 @@ class RoomAdmin(admin.ModelAdmin):
     list_filter = ('area',)
     search_fields = ('name', 'description')
 
+    # --- FIX: Reorganized fieldsets for clarity and usability ---
     fieldsets = (
-        ('Core Details', {'fields': ('area', 'name', 'description', 'flags')}),
-        ('Population', {'fields': ('spawner_1_mob', 'spawner_1_count', 'spawner_2_mob', 'spawner_2_count', 'spawner_3_mob', 'spawner_3_count')}),
+        (None, {
+            'fields': ('area', 'name', 'description')
+        }),
+        ('Behavior and Properties', {
+            'classes': ('collapse',), # Collapsed by default
+            'fields': ('flags', 'coinage')
+        }),
+        ('Spawners', {
+            'classes': ('collapse',),
+            'fields': ('spawner_1_mob', 'spawner_1_count', 'spawner_2_mob', 'spawner_2_count', 'spawner_3_mob', 'spawner_3_count'),
+            'description': 'Configure which mobs will spawn in this room.'
+        }),
         ('Shop Logic (Optional)', {
             'classes': ('collapse',),
             'fields': ('shop_buy_filter', 'shop_sell_modifier'),
-            # --- UPDATED HELP TEXT ---
             'description': 'Set these fields if the room has the "SHOP" flag. <br><b>Filter Format:</b> {"types": ["WEAPON"], "template_ids": [8, 15]}'
         }),
-        ('Treasure', {'fields': ('coinage',)})
     )
 
     inlines = [ExitsInline, RoomObjectsInline]
@@ -199,7 +209,8 @@ class ItemTemplateAdmin(admin.ModelAdmin):
 @admin.register(AbilityTemplates)
 class AbilityTemplateAdmin(admin.ModelAdmin):
     form = AbilityTemplateAdminForm
-    list_display = ('name', 'effect', 'essence_cost' 'cooldown')
+    # --- FIX: Added a comma between list items ---
+    list_display = ('name', 'ability_type', 'level_req', 'cost')
     search_fields = ('name', 'internal_name', 'description')
     list_filter = ('ability_type', 'level_req')
 

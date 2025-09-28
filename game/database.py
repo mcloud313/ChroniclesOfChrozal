@@ -4,6 +4,7 @@ Handles asynchronous database interactions using asyncpg for PostgreSQL.
 Encapsulates all database logic within the DatabaseManager class.
 """
 import uuid
+import random
 import logging
 import json
 import asyncio
@@ -412,7 +413,7 @@ class DatabaseManager:
                                       (5, "Ranger", "A master of ranged combat and survival."),
                                       (6, "Barbarian", "A ferocious warrior who channels primal fury."),
                                       (7, "Druid", "A shapeshifting force of nature."),
-                                      (8, "Bard", "A utilitarian, singing class.")
+                                      (8, "Bard", "A utilitarian, singing class."),
                                       (9, "Paladin", "A holy knight."),
                                       (10, "Monk", "A fist wielding martial artist.")])
                 # Areas & Rooms
@@ -475,11 +476,41 @@ class DatabaseManager:
     # --- Item Instance Management Functions ---
     async def create_item_instance(self, template_id: int, room_id: Optional[int] = None, owner_char_id: Optional[int] = None, container_id: Optional[str] = None, instance_stats: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """
-        Creates a new, unique instance of an item in the database.
-        Returns the new instance's data as a dictionary.
+        Creates a new, unique instance of an item, applying template-based randomization for locks/traps.
         """
+        # --- NEW: Randomization Logic ---
+        template_record = await self.fetch_one_query("SELECT random_properties, lock_details, trap_details FROM item_templates WHERE id = $1", template_id)
+        
+        generated_stats = instance_stats or {}
+        
+        if template_record and template_record['random_properties']:
+            props = template_record['random_properties']
+            
+            # Roll for lock
+            if random.random() < props.get('lock_chance', 0):
+                generated_stats['is_locked'] = True
+                dc_range = props.get('lock_dc_range', [10, 25])
+                generated_stats['lockpick_dc'] = random.randint(dc_range[0], dc_range[1])
+
+            # Roll for trap
+            if random.random() < props.get('trap_chance', 0):
+                trap = {}
+                trap['is_active'] = True
+                perc_range = props.get('trap_perception_dc_range', [10, 25])
+                disarm_range = props.get('trap_disarm_dc_range', [15, 30])
+                trap['perception_dc'] = random.randint(perc_range[0], perc_range[1])
+                trap['disarm_dc'] = random.randint(disarm_range[0], disarm_range[1])
+                generated_stats['trap'] = trap
+        
+        # Apply guaranteed locks/traps if no random one was generated
+        if 'is_locked' not in generated_stats and template_record and template_record['lock_details']:
+            generated_stats.update(template_record['lock_details'])
+        if 'trap' not in generated_stats and template_record and template_record['trap_details']:
+            generated_stats['trap'] = template_record['trap_details']
+        # --- END NEW LOGIC ---
+
         new_id = str(uuid.uuid4())
-        stats_json = json.dumps(instance_stats) if instance_stats else None
+        stats_json = json.dumps(generated_stats) if generated_stats else None
 
         query = """
             INSERT INTO item_instances (id, template_id, owner_char_id, room_id, container_id, instance_stats)
@@ -487,7 +518,6 @@ class DatabaseManager:
             RETURNING *;
         """
         try:
-            # This call will now work because fetch_one_query is defined above.
             record = await self.fetch_one_query(query, new_id, template_id, owner_char_id, room_id, container_id, stats_json)
             return dict(record) if record else None
         except Exception:

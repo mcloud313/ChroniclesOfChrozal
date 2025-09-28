@@ -158,7 +158,7 @@ async def cmd_decline(character: 'Character', world: 'World', args_str: str) -> 
 
     return True
 
-async def cmd_disband(character: 'Character', world: ' World', args_str: str) -> bool:
+async def cmd_disband(character: 'Character', world: 'World', args_str: str) -> bool:
     """Disbands the group you are leading."""
     if not character.group:
         await character.send("You are not in a group.")

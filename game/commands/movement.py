@@ -148,8 +148,9 @@ async def cmd_move(character: 'Character', world: 'World', args_str: str, *, dir
     if not character.can_see():
         if random.random() < 0.25: # 25% chance to trip and fail
             await character.send("{rYou stumble in the darkness and fall!{x}")
-            await combat_logic.apply_damage(character, 3) # Apply 3 damage
-            character.roundtime = 2.0
+            await combat_logic.apply_damage(character, 3, "bludgeon", world)
+            character.roundtime = 5.0
+            character.stance = "Lying"
             if not character.is_alive():
                 await combat_logic.handle_defeat(character, character, world)
             return True # Stop movement
@@ -190,8 +191,9 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
     if not character.can_see():
         if random.random() < 0.25: # 25% chance to trip and fail
             await character.send("{rYou stumble in the darkness and fall!{x}")
-            await combat_logic.apply_damage(character, 3) # Apply 3 damage
-            character.roundtime = 2.0
+            await combat_logic.apply_damage(character, 3, "bludgeon", world)
+            character.roundtime = 5.0
+            character.stance = "Lying"
             if not character.is_alive():
                 await combat_logic.handle_defeat(character, character, world)
             return True # Stop movement
