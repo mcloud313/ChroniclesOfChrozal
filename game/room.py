@@ -6,7 +6,8 @@ import asyncio
 import textwrap
 from .item import Item
 from typing import Set, Dict, Any, Optional, List, Union, TYPE_CHECKING
-import utils
+from . import utils
+
 
 # FIX: Import Mob for check_respawn
 if TYPE_CHECKING:
