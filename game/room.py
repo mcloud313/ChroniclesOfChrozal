@@ -83,7 +83,7 @@ class Room:
         if not looker.can_see():
             return "It is pitch black..."
 
-        # Display characters
+        # Display other characters
         other_chars = sorted([c.name for c in self.characters if c != looker])
         if other_chars:
             output_lines.append("Also Here: " + ", ".join(other_chars) + ".")
@@ -97,7 +97,7 @@ class Room:
             formatted_mob_list = [f"{name.capitalize()}" + (f" (x{count})" if count > 1 else "") for name, count in sorted(mob_counts.items())]
             output_lines.append("Visible Creatures: " + ", ".join(formatted_mob_list) + ".")
 
-        # FIX: This is the single, correct place to display ground items and coinage.
+        # FIX: This is now the one and only place that displays ground contents.
         ground_contents = []
         item_counts = {}
         for item_id in self.item_instance_ids:
@@ -114,9 +114,8 @@ class Room:
         
         if ground_contents:
             output_lines.append("You see here: " + ", ".join(ground_contents) + ".")
-        # End of fix
 
-        # Display room objects
+        # Display room objects of interest
         if self.objects:
             object_names = sorted([obj.get('name', 'an object') for obj in self.objects])
             output_lines.append("Objects of interest: " + ", ".join(object_names) + ".")

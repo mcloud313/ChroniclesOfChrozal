@@ -68,11 +68,11 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
         return True
     
     is_dark = "DARK" in character.location.flags and not character.is_holding_light_source()
-    if is_dark and not args_str: # Can't see the room, but can still try to look at self/items
+    if is_dark and not args_str:
         await character.send("It is pitch black...")
         return True
     
-    # --- NEW: Handle "look in <container>" ---
+    # --- Handle "look in <container>" ---
     if args_str.lower().startswith("in "):
         container_name = args_str[3:].strip()
         
@@ -101,34 +101,17 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
             await character.send(f"The {container.name} contains: {contents_list}.")
         return True
 
-    # --- Original look logic, with one addition for container state ---
+    # --- Standard look logic ---
     target_name = args_str.strip().lower()
 
     # Case 1: Look at the room (no arguments)
     if not target_name or target_name == "here":
+        # This single call now generates the complete room description, including ground items.
         room_desc = character.location.get_look_string(character, world)
         await character.send(room_desc)
-
-        ground_items_output = []
-        item_counts = {}
-        for item_id in character.location.item_instance_ids:
-            item_obj = world.get_item_object(item_id)
-            if item_obj:
-                item_counts[item_obj.name] = item_counts.get(item_obj.name, 0) + 1
-        
-        for name, count in sorted(item_counts.items()):
-            display_name = name + (f" (x{count})" if count > 1 else "")
-            ground_items_output.append(display_name)
-
-        if character.location.coinage > 0:
-            ground_items_output.append(utils.format_coinage(character.location.coinage))
-
-        if ground_items_output:
-            await character.send("You also see here: " + ", ".join(ground_items_output) + ".")
         return True
     
     # Case 2: Look at a specific target
-    target_name = args_str.strip().lower()
     target_char = character.location.get_character_by_name(target_name)
     if target_char:
         output = [
@@ -164,8 +147,10 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send(f"\n\r{target_obj_data.get('description', 'It looks unremarkable.')}")
         return True
     
-    item_to_examine = (character.location.get_item_instance_by_name(target_name, world) or
-                       character.find_item_in_inventory_by_name(target_name))
+    # Check inventory, then equipment, then ground
+    item_to_examine = (character.find_item_in_inventory_by_name(target_name) or
+                       character.find_item_in_equipment_by_name(target_name) or
+                       character.location.get_item_instance_by_name(target_name, world))
     
     if item_to_examine:
         uuid_str = f"{{i({item_to_examine.id}){{x"
@@ -176,7 +161,6 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
             f"Type: {item_to_examine.item_type.capitalize()}, Weight: {item_to_examine.weight} stones"
         ]
         
-        # --- NEW: Add open/closed state to description ---
         if item_to_examine.capacity > 0:
             examine_output.append("It is open." if item_to_examine.is_open else "It is closed.")
 
