@@ -18,6 +18,7 @@ from .mob import Mob
 from .item import Item
 from .definitions import abilities as ability_defs
 from .definitions import calendar as calendar_defs
+from .definitions import weather as weather_defs
 from . import resolver
 from . import utils
 from . import ticker
@@ -60,6 +61,7 @@ class World:
         self.game_day: int = calendar_defs.STARTING_DAY
         self.game_month: int = calendar_defs.STARTING_MONTH
         self.game_year: int = calendar_defs.STARTING_YEAR
+        self.area_weather: Dict[int, Dict[str, Any]] = {}
 
 
     async def build(self):
@@ -85,7 +87,8 @@ class World:
                 self.db_manager.fetch_all_query("SELECT * FROM loot_tables ORDER BY id"),
                 self.db_manager.fetch_all_query("SELECT * FROM loot_table_entries ORDER BY loot_table_id"),
                 self.db_manager.fetch_all_query("SELECT * FROM ambient_scripts"),
-                self.db_manager.get_game_time()
+                self.db_manager.get_game_time(),
+                self._update_world_weather(is_initial_build=True)
             )
             (area_rows, race_rows, class_rows, item_template_records, mob_rows, attack_rows,
              loot_rows, room_rows, exit_rows, shop_rows, ability_rows, damage_type_rows,
@@ -656,79 +659,79 @@ class World:
         log.info(f"Cleaned up {len(items_to_delete)} decayed items from the world.")
 
     async def update_game_time(self, dt: float):
-    """Ticker: Advances the in-game calendar and clock, and manages day/night cycle."""
-    self.game_time_accumulator += dt
+        """Ticker: Advances the in-game calendar and clock, and manages day/night cycle."""
+        self.game_time_accumulator += dt
 
-    if self.game_time_accumulator < calendar_defs.SECONDS_PER_GAME_MINUTE:
-        return
-    
-    minutes_passed = int(self.game_time_accumulator / calendar_defs.SECONDS_PER_GAME_MINUTE)
-    self.game_time_accumulator %= calendar_defs.SECONDS_PER_GAME_MINUTE
-
-    if not minutes_passed:
-        return
-
-    # --- Day/Night Cycle Logic ---
-    hour_before_update = self.game_hour
-    
-    self.game_minute += minutes_passed
-    while self.game_minute >= calendar_defs.MINUTES_PER_HOUR:
-        self.game_minute -= calendar_defs.MINUTES_PER_HOUR
-        self.game_hour += 1
-        if self.game_hour >= calendar_defs.HOURS_PER_DAY:
-            self.game_hour = 0
-            self.game_day += 1
-
-            # NEW: Call the weather update when a new day starts
-            await self._update_world_weather()
-
-            if self.game_day > calendar_defs.DAYS_PER_MONTH:
-                self.game_day = 1
-                self.game_month += 1
-                if self.game_month > calendar_defs.MONTHS_PER_YEAR:
-                    self.game_month = 1
-                    self.game_year += 1
-
-    # Check if the hour has changed
-    if self.game_hour == hour_before_update:
-        return
-
-    message = None
-    apply_dark = False
-    remove_dark = False
-
-    if self.game_hour == calendar_defs.DAWN_HOUR:
-        message = "{YThe sun crests the horizon, chasing away the shadows of the night.{x"
-        remove_dark = True
-    elif self.game_hour == calendar_defs.DUSK_HOUR:
-        message = "{yThe sun dips below the horizon, and darkness begins to fall.{x"
-        apply_dark = True
-    elif self.game_hour == 0: # Midnight
-        message = "{BThe moons hang high in the sky, marking the deepest point of the night.{x"
-    elif self.game_hour == 12: # Noon
-        message = "{CThe sun reaches its zenith in the sky.{x"
-
-    if message or apply_dark or remove_dark:
-        # Find all characters in outdoor rooms
-        outdoor_chars = [
-            char for char in self.get_active_characters_list()
-            if char.location and "OUTDOORS" in char.location.flags
-        ]
+        if self.game_time_accumulator < calendar_defs.SECONDS_PER_GAME_MINUTE:
+            return
         
-        # Send message to outdoor characters
-        if message:
-            tasks = [char.send(message) for char in outdoor_chars]
-            if tasks:
-                await asyncio.gather(*tasks)
+        minutes_passed = int(self.game_time_accumulator / calendar_defs.SECONDS_PER_GAME_MINUTE)
+        self.game_time_accumulator %= calendar_defs.SECONDS_PER_GAME_MINUTE
 
-        # Update room flags
-        for room in self.rooms.values():
-            if "OUTDOORS" in room.flags:
-                # NEW: Add 'and "LIT" not in room.flags' to prevent lit rooms from getting dark
-                if apply_dark and "LIT" not in room.flags:
-                    room.flags.add("DARK")
-                elif remove_dark:
-                    room.flags.discard("DARK")
+        if not minutes_passed:
+            return
+
+        # --- Day/Night Cycle Logic ---
+        hour_before_update = self.game_hour
+        
+        self.game_minute += minutes_passed
+        while self.game_minute >= calendar_defs.MINUTES_PER_HOUR:
+            self.game_minute -= calendar_defs.MINUTES_PER_HOUR
+            self.game_hour += 1
+            if self.game_hour >= calendar_defs.HOURS_PER_DAY:
+                self.game_hour = 0
+                self.game_day += 1
+
+                # NEW: Call the weather update when a new day starts
+                await self._update_world_weather()
+
+                if self.game_day > calendar_defs.DAYS_PER_MONTH:
+                    self.game_day = 1
+                    self.game_month += 1
+                    if self.game_month > calendar_defs.MONTHS_PER_YEAR:
+                        self.game_month = 1
+                        self.game_year += 1
+
+        # Check if the hour has changed
+        if self.game_hour == hour_before_update:
+            return
+
+        message = None
+        apply_dark = False
+        remove_dark = False
+
+        if self.game_hour == calendar_defs.DAWN_HOUR:
+            message = "{YThe sun crests the horizon, chasing away the shadows of the night.{x"
+            remove_dark = True
+        elif self.game_hour == calendar_defs.DUSK_HOUR:
+            message = "{yThe sun dips below the horizon, and darkness begins to fall.{x"
+            apply_dark = True
+        elif self.game_hour == 0: # Midnight
+            message = "{BThe moons hang high in the sky, marking the deepest point of the night.{x"
+        elif self.game_hour == 12: # Noon
+            message = "{CThe sun reaches its zenith in the sky.{x"
+
+        if message or apply_dark or remove_dark:
+            # Find all characters in outdoor rooms
+            outdoor_chars = [
+                char for char in self.get_active_characters_list()
+                if char.location and "OUTDOORS" in char.location.flags
+            ]
+            
+            # Send message to outdoor characters
+            if message:
+                tasks = [char.send(message) for char in outdoor_chars]
+                if tasks:
+                    await asyncio.gather(*tasks)
+
+            # Update room flags
+            for room in self.rooms.values():
+                if "OUTDOORS" in room.flags:
+                    # NEW: Add 'and "LIT" not in room.flags' to prevent lit rooms from getting dark
+                    if apply_dark and "LIT" not in room.flags:
+                        room.flags.add("DARK")
+                    elif remove_dark:
+                        room.flags.discard("DARK")
 
 
     async def generate_loot_for_container(self, container: Item, loot_table_id: int, character: Character):
@@ -778,6 +781,40 @@ class World:
             log.info(f"Generated loot in {container.name}: {', '.join(generated_items)}")
             # You can optionally add a message to the player here as well.
             await character.send(f"You also find: {', '.join(generated_items)}.")
+
+    async def _update_world_weather(self, is_initial_build: bool = False):
+        """Called once per game day to update the weather in all areas."""
+        current_season = calendar_defs.get_season(self.game_month)
+        log.info(f"Updating world weather for a new day. Season: {current_season}")
+
+        for area_id, area_data in self.areas.items():
+            climate = area_data.get("climate", weather_defs.CLIMATE_TEMPERATE)
+            
+            weather_table = weather_defs.WEATHER_TABLES.get(current_season, {}).get(climate)
+            if not weather_table:
+                continue
+
+            conditions, weights = zip(*weather_table)
+            new_condition = random.choices(conditions, weights=weights, k=1)[0]
+            
+            old_condition = self.area_weather.get(area_id, {}).get("condition")
+            
+            self.area_weather[area_id] = {
+                "condition": new_condition,
+                "temperature": random.randint(30, 80) # Placeholder temperature
+            }
+
+            # Don't broadcast on server startup
+            if not is_initial_build and new_condition != old_condition:
+                message = f"{{iThe weather in {area_data['name']} has changed to: {new_condition}.{{x"
+                # Find outdoor characters in this area to notify
+                chars_to_notify = [
+                    c for c in self.get_active_characters_list() 
+                    if c.location and c.location.area_id == area_id and "OUTDOORS" in c.location.flags
+                ]
+                tasks = [char.send(message) for char in chars_to_notify]
+                if tasks:
+                    await asyncio.gather(*tasks)
 
     async def update_ambient_scripts(self, dt: float):
         """Ticker: Periodically shows immersive messages to players."""
