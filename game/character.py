@@ -263,29 +263,23 @@ class Character:
         Fetches all related character data (stats, skills, items, equipment)
         and populates the character object.
         """
-        # Load stats, skills, equipment, and item instances concurrently
         results = await asyncio.gather(
             self.world.db_manager.get_character_stats(self.dbid),
             self.world.db_manager.get_character_skills(self.dbid),
             self.world.db_manager.get_character_abilities(self.dbid),
             self.world.db_manager.get_character_equipment(self.dbid),
             self.world.db_manager.get_instances_for_character(self.dbid)
-            
         )
         stats_record, skills_records, ability_set, equipment_record, instance_records = results
 
-        # Populate stats from the character_stats table
         if stats_record:
-            # Exclude character_id from the dictionary
             self.stats = {k: v for k, v in dict(stats_record).items() if k != 'character_id'}
         
-        # Populate skills from the character_skills table
         if skills_records:
             self.skills = {record['skill_name']: record['rank'] for record in skills_records}
 
         self.known_abilities = ability_set if ability_set else set()
 
-        # --- Item and Equipment Loading ---
         all_owned_items: Dict[str, Item] = {}
         if instance_records:
             for inst_record in instance_records:
@@ -298,30 +292,19 @@ class Character:
             if item.container_id and (container := all_owned_items.get(item.container_id)):
                 container.contents[item.id] = item
 
-        # Populate equipped items from the new character_equipment table
         if equipment_record:
             for slot, item_id in dict(equipment_record).items():
                 if slot != 'character_id' and item_id and item_id in all_owned_items:
                     self._equipped_items[slot] = all_owned_items[item_id]
 
-        # Populate top-level inventory (items not equipped or in a container)
         for item in all_owned_items.values():
             if not item.is_equipped(self) and not item.is_in_container():
                 self._inventory_items[item.id] = item
 
         log.debug("Loaded related data for %s.", self.name)
 
-    async def send(self, message: str, add_newline: bool = True):
-        """Safely sends a message to this character's client."""
-        if self.writer.is_closing(): return
-        message_to_send = utils.colorize(message)
-        if add_newline and not message_to_send.endswith('\r\n'):
-            message_to_send += '\r\n'
-        try:
-            self.writer.write(message_to_send.encode(config.ENCODING))
-            await self.writer.drain()
-        except (ConnectionResetError, BrokenPipeError):
-            log.warning("Connection lost for %s during write.", self.name)
+        await self.check_and_learn_new_abilities()
+        # --------------------------------------------------------------------------
 
     def get_core_data_for_saving(self) -> Dict[str, Any]:
         """
