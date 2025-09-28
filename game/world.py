@@ -231,7 +231,9 @@ class World:
             room_save_tasks = [self.get_room(room_id).save(self.db_manager) for room_id in rooms_to_save_ids if self.get_room(room_id)]
             if room_save_tasks:
                 await asyncio.gather(*room_save_tasks, return_exceptions=True)
+
                 log.info(f"Saved {len(room_save_tasks)} dirty rooms.")
+        await self.db_manager.save_game_time(self.game_year, self.game_month, self.game_day, self.game_hour, self.game_minute)
         log.info("World state save complete.")
 
     def get_shop_inventory(self, room_id: int) -> Optional[List[Dict]]:
