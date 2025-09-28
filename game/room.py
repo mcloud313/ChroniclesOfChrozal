@@ -99,8 +99,8 @@ class Room:
                 item = world.get_item_object(instance_id)
                 if item:
                     item_names.append(item.name)
-            # if item_names:
-            #     output_lines.append("On the ground: " + ", ".join(sorted(item_names)) + ".")
+            if item_names:
+                output_lines.append("On the ground: " + ", ".join(sorted(item_names)) + ".")
 
         if self.objects:
             object_names = sorted([obj.get('name', 'an object') for obj in self.objects])

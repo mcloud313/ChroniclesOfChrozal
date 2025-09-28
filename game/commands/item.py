@@ -211,19 +211,21 @@ async def cmd_sheathe(character: 'Character', world: 'World', args_str: str) -> 
     main_hand_item = character._equipped_items.get("main_hand")
     off_hand_item = character._equipped_items.get("off_hand")
 
+    # This check is for one-handed weapons in the off-hand, not two-handers
+    is_two_hander = main_hand_item and main_hand_item.item_type == item_defs.TWO_HANDED_WEAPON
+
     if not main_hand_item and not off_hand_item:
         await character.send("You are not wielding anything to sheathe.")
         return True
 
-    # Use special, non-conflicting slots for sheathed items
     sheathed_something = False
     if main_hand_item:
-        # Move main hand item to the sheathed slot
         character._equipped_items["sheathed_main_hand"] = main_hand_item
         del character._equipped_items["main_hand"]
         
         # If it's a two-handed weapon, it also frees the off-hand
-        if main_hand_item.item_type == item_defs.TWO_HANDED_WEAPON:
+        if is_two_hander:
+            # FIX: Only delete off_hand if the key actually exists
             if "off_hand" in character._equipped_items:
                 del character._equipped_items["off_hand"]
         
@@ -231,7 +233,8 @@ async def cmd_sheathe(character: 'Character', world: 'World', args_str: str) -> 
         await character.location.broadcast(f"\\r\\n{character.name} sheathes their {main_hand_item.name}.\\r\\n", exclude={character})
         sheathed_something = True
 
-    if off_hand_item:
+    # This handles a separate one-handed weapon in the off_hand
+    if off_hand_item and not is_two_hander:
         character._equipped_items["sheathed_off_hand"] = off_hand_item
         del character._equipped_items["off_hand"]
         await character.send(f"You sheathe your {off_hand_item.name}.")
