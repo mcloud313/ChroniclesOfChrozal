@@ -645,11 +645,13 @@ class Character:
     def get_stat_bonus_from_equipment(self, stat_name: str) -> int:
         """
         Calculate the total bonus for a given stat from all equipped items.
-        This reads from the item's unique 'instance stats'.
         """
         total_bonus = 0
+        # --- FIX: Added a check for 'if item' to prevent crashing on empty slots ---
         for item in self._equipped_items.values():
-            total_bonus += item.instance_stats.get(stat_name, 0)
+            if item:
+                # Stats on items are stored in the template's 'stats' dictionary
+                total_bonus += item._template_stats.get(stat_name, 0)
         return total_bonus
 
     def __repr__(self) -> str:

@@ -3,6 +3,7 @@
 Commands related to character skills and attributes.
 """
 import logging
+import re
 from typing import TYPE_CHECKING
 import aiosqlite  # <-- FIX: Added missing import
 
@@ -23,6 +24,15 @@ async def cmd_spend(character: 'Character', world: 'World', args_str: str) -> bo
         await character.send("Spend points on which skill? (e.g., spend lockpicking)")
         await character.send(f"You have {character.unspent_skill_points} skill points available.")
         return True
+    
+    match = re.match(r'([a-zA-Z\s]+?)\s*(\d*)$', args_str)
+    if not match:
+        await character.send("Invalid syntax. Use: spend <skill name> [amount]")
+        return True
+
+    skill_name_target = match.group(1).strip().lower()
+    amount_to_spend_str = match.group(2)
+    amount_to_spend = int(amount_to_spend_str) if amount_to_spend_str else 1
 
     parts = args_str.split()
     skill_name_target = parts[0].lower()
@@ -96,20 +106,33 @@ async def cmd_improve(character: 'Character', world: 'World', args_str: str) -> 
         await character.send("You have no attribute points available to spend.")
         return True
 
+    # --- FIX: Implement retroactive bonus instead of recalculating ---
+    # 1. Store the old modifiers BEFORE changing the stat
+    old_vit_mod = character.vit_mod
+    old_aura_pers_mod = character.aura_mod + character.pers_mod
+
+    # 2. Apply the stat change
     current_value = character.stats.get(stat_name_input, 10)
     new_value = current_value + 1
     character.unspent_attribute_points -= 1
     character.stats[stat_name_input] = new_value
+    character.is_dirty = True
+
+    # 3. Calculate the retroactive change to max HP and Essence
+    hp_change = (character.vit_mod - old_vit_mod) * character.level
+    essence_change = ((character.aura_mod + character.pers_mod) - old_aura_pers_mod) * character.level
+
+    character.max_hp += hp_change
+    character.max_essence += essence_change
+
+    # 4. Top off the character's current HP/Essence to their new max
+    character.hp = character.max_hp
+    character.essence = character.max_essence
     
-    character.recalculate_max_vitals()
-    character.hp = min(character.hp, character.max_hp)
-    character.essence = min(character.essence, character.max_essence)
-    
-    log.info("Character %s improved %s to %d. %d points remaining.",
-             character.name, stat_name_input, new_value, character.unspent_attribute_points)
+    log.info("Character %s improved %s to %d. HP changed by %.1f, Essence by %.1f.",
+             character.name, stat_name_input, new_value, hp_change, essence_change)
+    # --- END FIX ---
 
     await character.send(f"You focus your energies and improve your {stat_name_input.capitalize()}!")
     await character.send(f"({stat_name_input.capitalize()} is now {new_value}. You have {character.unspent_attribute_points} attribute points remaining.)")
     await character.send(f"(Your Max HP is now {int(character.max_hp)}, Max Essence is now {int(character.max_essence)})")
-
-    return True
