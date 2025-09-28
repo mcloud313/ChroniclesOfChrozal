@@ -43,7 +43,7 @@ def check_physical_hit(attacker: Union[Character, Mob], target: Union[Character,
         target_dv = max(0, target_dv - target.total_av)
 
 
-    target_dv = target.dv
+    # target_dv = target.dv
     roll = random.randint(1, 20)
     modified_roll = roll + hit_modifier
 

@@ -119,10 +119,11 @@ class DatabaseManager:
                         damage_type TEXT,
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        -- FIX: Added missing columns to match live DB
                         loot_table_id INTEGER,
                         lock_details JSONB,
-                        trap_details JSONB
+                        trap_details JSONB,
+                        -- FIX: Added the missing random_properties column
+                        random_properties JSONB
                     )
                 """)
                 await conn.execute("""
