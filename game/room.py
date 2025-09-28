@@ -6,6 +6,7 @@ import asyncio
 import textwrap
 from .item import Item
 from typing import Set, Dict, Any, Optional, List, Union, TYPE_CHECKING
+import utils
 
 # FIX: Import Mob for check_respawn
 if TYPE_CHECKING:
@@ -81,27 +82,40 @@ class Room:
         if not looker.can_see():
             return "It is pitch black..."
 
+        # Display characters
         other_chars = sorted([c.name for c in self.characters if c != looker])
         if other_chars:
             output_lines.append("Also Here: " + ", ".join(other_chars) + ".")
 
+        # Display mobs
         mob_counts = {}
         for mob in self.mobs:
-            if mob.is_alive() and not mob.is_hidden: # Add "and not mob.is_hidden"
+            if mob.is_alive() and not mob.is_hidden:
                 mob_counts[mob.name] = mob_counts.get(mob.name, 0) + 1
         if mob_counts:
             formatted_mob_list = [f"{name.capitalize()}" + (f" (x{count})" if count > 1 else "") for name, count in sorted(mob_counts.items())]
             output_lines.append("Visible Creatures: " + ", ".join(formatted_mob_list) + ".")
 
-        if self.item_instance_ids:
-            item_names = []
-            for instance_id in self.item_instance_ids:
-                item = world.get_item_object(instance_id)
-                if item:
-                    item_names.append(item.name)
-            if item_names:
-                output_lines.append("On the ground: " + ", ".join(sorted(item_names)) + ".")
+        # FIX: This is the single, correct place to display ground items and coinage.
+        ground_contents = []
+        item_counts = {}
+        for item_id in self.item_instance_ids:
+            item_obj = world.get_item_object(item_id)
+            if item_obj:
+                item_counts[item_obj.name] = item_counts.get(item_obj.name, 0) + 1
+        
+        for name, count in sorted(item_counts.items()):
+            display_name = name + (f" (x{count})" if count > 1 else "")
+            ground_contents.append(display_name)
 
+        if self.coinage > 0:
+            ground_contents.append(utils.format_coinage(self.coinage))
+        
+        if ground_contents:
+            output_lines.append("You see here: " + ", ".join(ground_contents) + ".")
+        # End of fix
+
+        # Display room objects
         if self.objects:
             object_names = sorted([obj.get('name', 'an object') for obj in self.objects])
             output_lines.append("Objects of interest: " + ", ".join(object_names) + ".")

@@ -103,7 +103,7 @@ class World:
                     self.game_day = time_data.get('game_day', calendar_defs.STARTING_DAY)
                     self.game_hour = time_data.get('game_hour', calendar_defs.STARTING_HOUR)
                     self.game_minute = time_data.get('game_minute', 0)
-                    self._update_world_weather(is_initial_build=True)
+            await self._update_world_weather(is_initial_build=True)
 
             for record in item_template_records:
                 stats_data = record.get('stats')

@@ -498,39 +498,44 @@ class DatabaseManager:
         """
         Creates a new, unique instance of an item, applying template-based randomization for locks/traps.
         """
-        # --- NEW: Randomization Logic ---
         template_record = await self.fetch_one_query("SELECT random_properties, lock_details, trap_details FROM item_templates WHERE id = $1", template_id)
         
         generated_stats = instance_stats or {}
         
-        if template_record and template_record['random_properties']:
-            props = template_record['random_properties']
+        if template_record and template_record.get('random_properties'):
+            # This handles randomized properties if you add them later
+            props_str = template_record['random_properties']
+            props = json.loads(props_str) if isinstance(props_str, str) else props_str
             
-            # Roll for lock
             if random.random() < props.get('lock_chance', 0):
                 generated_stats['is_locked'] = True
                 dc_range = props.get('lock_dc_range', [10, 25])
                 generated_stats['lockpick_dc'] = random.randint(dc_range[0], dc_range[1])
 
-            # Roll for trap
             if random.random() < props.get('trap_chance', 0):
-                trap = {}
-                trap['is_active'] = True
+                trap = {'is_active': True}
                 perc_range = props.get('trap_perception_dc_range', [10, 25])
                 disarm_range = props.get('trap_disarm_dc_range', [15, 30])
                 trap['perception_dc'] = random.randint(perc_range[0], perc_range[1])
                 trap['disarm_dc'] = random.randint(disarm_range[0], disarm_range[1])
                 generated_stats['trap'] = trap
         
-        # Apply guaranteed locks/traps if no random one was generated
-        if 'is_locked' not in generated_stats and template_record and template_record['lock_details']:
-            generated_stats.update(template_record['lock_details'])
-        if 'trap' not in generated_stats and template_record and template_record['trap_details']:
-            generated_stats['trap'] = template_record['trap_details']
-        # --- END NEW LOGIC ---
+        # FIX: Check for and parse the lock_details JSON string before using it
+        if 'is_locked' not in generated_stats and template_record and template_record.get('lock_details'):
+            lock_details_str = template_record['lock_details']
+            lock_details_dict = json.loads(lock_details_str) if isinstance(lock_details_str, str) else lock_details_str
+            if lock_details_dict:
+                generated_stats.update(lock_details_dict)
+
+        # FIX: Check for and parse the trap_details JSON string before using it
+        if 'trap' not in generated_stats and template_record and template_record.get('trap_details'):
+            trap_details_str = template_record['trap_details']
+            trap_details_dict = json.loads(trap_details_str) if isinstance(trap_details_str, str) else trap_details_str
+            if trap_details_dict:
+                generated_stats['trap'] = trap_details_dict
 
         new_id = str(uuid.uuid4())
-        stats_json = json.dumps(generated_stats) if generated_stats else None
+        stats_json = json.dumps(generated_stats) if generated_stats else '{}'
 
         query = """
             INSERT INTO item_instances (id, template_id, owner_char_id, room_id, container_id, instance_stats)

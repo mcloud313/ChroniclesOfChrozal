@@ -258,44 +258,37 @@ async def cmd_unsheathe(character: 'Character', world: 'World', args_str: str) -
         await character.send("You do not have any weapons sheathed.")
         return True
 
-    # Check if hands are free *before* doing anything
     main_hand_free = "main_hand" not in character._equipped_items
     off_hand_free = "off_hand" not in character._equipped_items
 
-    # Handle the main hand (or two-handed) weapon first
     if sheathed_main:
         is_two_handed = sheathed_main.item_type == item_defs.TWO_HANDED_WEAPON
         
         if is_two_handed:
             if not main_hand_free or not off_hand_free:
-                await character.send("You need both hands free to draw your {sheathed_main.name}.")
+                # FIX: Corrected the raw string to be an f-string
+                await character.send(f"You need both hands free to draw your {sheathed_main.name}.")
                 return True
-            # Wield in both hands
             character._equipped_items["main_hand"] = sheathed_main
             character._equipped_items["off_hand"] = sheathed_main
-        else: # It's a one-handed weapon
+        else:
             if not main_hand_free:
                 await character.send(f"Your main hand is not free to draw your {sheathed_main.name}.")
                 return True
-            # Wield in main hand
             character._equipped_items["main_hand"] = sheathed_main
 
-        # Move is successful, remove from sheathed slot
         del character._equipped_items["sheathed_main_hand"]
         await character.send(f"You draw your {sheathed_main.name}.")
         await character.location.broadcast(f"\\r\\n{character.name} draws their {sheathed_main.name}.\\r\\n", exclude={character})
         character.is_dirty = True
         
-        # Update hand status for the off-hand check
         main_hand_free = False
         if is_two_handed:
             off_hand_free = False
 
-    # Handle the off-hand weapon second
     if sheathed_off:
         if not off_hand_free:
             await character.send(f"Your off-hand is not free to draw your {sheathed_off.name}.")
-            # If the main-hand draw succeeded, we don't return here, just skip the off-hand
         else:
             character._equipped_items["off_hand"] = sheathed_off
             del character._equipped_items["sheathed_off_hand"]

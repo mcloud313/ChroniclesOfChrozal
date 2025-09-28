@@ -109,23 +109,23 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
         room_desc = character.location.get_look_string(character, world)
         await character.send(room_desc)
 
-        ground_items_output = []
-        item_counts = {}
-        for item_id in character.location.item_instance_ids:
-            item_obj = world.get_item_object(item_id)
-            if item_obj:
-                item_counts[item_obj.name] = item_counts.get(item_obj.name, 0) + 1
+        # ground_items_output = []
+        # item_counts = {}
+        # for item_id in character.location.item_instance_ids:
+        #     item_obj = world.get_item_object(item_id)
+        #     if item_obj:
+        #         item_counts[item_obj.name] = item_counts.get(item_obj.name, 0) + 1
         
-        for name, count in sorted(item_counts.items()):
-            display_name = name + (f" (x{count})" if count > 1 else "")
-            ground_items_output.append(display_name)
+        # for name, count in sorted(item_counts.items()):
+        #     display_name = name + (f" (x{count})" if count > 1 else "")
+        #     ground_items_output.append(display_name)
 
-        if character.location.coinage > 0:
-            ground_items_output.append(utils.format_coinage(character.location.coinage))
+        # if character.location.coinage > 0:
+        #     ground_items_output.append(utils.format_coinage(character.location.coinage))
 
-        if ground_items_output:
-            await character.send("You also see here: " + ", ".join(ground_items_output) + ".")
-        return True
+        # if ground_items_output:
+        #     await character.send("You also see here: " + ", ".join(ground_items_output) + ".")
+        # return True
     
     # Case 2: Look at a specific target
     target_name = args_str.strip().lower()
