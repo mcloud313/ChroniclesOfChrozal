@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from .world import World
     from .mob import Mob
     from .group import Group
-    from .handlers.connection import ConnectionHandler
 
 log = logging.getLogger(__name__)
 
@@ -193,8 +192,8 @@ class Character:
         return total_modifier
 
     
-    def __init__(self, handler: 'ConnectionHandler', db_data: Dict[str, Any], world: 'World', player_is_admin: bool = False):
-        self.handler = handler
+    def __init__(self, writer: asyncio.StreamWriter, db_data: Dict[str, Any], world: 'World', player_is_admin: bool = False):
+        self.writer: asyncio.StreamWriter = writer
         self.is_admin: bool = player_is_admin
         self.world: 'World' = world
 
@@ -344,10 +343,6 @@ class Character:
         recurse_items(self._inventory_items.values())
         recurse_items(self._equipped_items.values())
         return all_items
-    
-    async def send(self, message: str, add_newline: bool = True):
-        """A proxy method to send a message to this character's client via its handler."""
-        await self.handler.send(message, add_newline)
 
     async def save(self):
         """Prepares and saves the character's full state."""
@@ -650,13 +645,11 @@ class Character:
     def get_stat_bonus_from_equipment(self, stat_name: str) -> int:
         """
         Calculate the total bonus for a given stat from all equipped items.
+        This reads from the item's unique 'instance stats'.
         """
         total_bonus = 0
-        # --- FIX: Added a check for 'if item' to prevent crashing on empty slots ---
         for item in self._equipped_items.values():
-            if item:
-                # Stats on items are stored in the template's 'stats' dictionary
-                total_bonus += item._template_stats.get(stat_name, 0)
+            total_bonus += item.instance_stats.get(stat_name, 0)
         return total_bonus
 
     def __repr__(self) -> str:
