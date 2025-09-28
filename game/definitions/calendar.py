@@ -57,3 +57,16 @@ DAY_NAMES = [
     "Tidesday",    # A day for the fishermen and sailors of Port Valis. [cite: 160]
     "Hearthday"    # A day of community, rest, and family.
 ]
+
+def get_season(month: int) -> str:
+    """
+    Returns the name of the season for a given month number (1-12).
+    """
+    if month in [12, 1, 2]:
+        return "Winter"
+    elif month in [3, 4, 5]:
+        return "Spring"
+    elif month in [6, 7, 8]:
+        return "Summer"
+    else:  # months 9, 10, 11
+        return "Autumn"
