@@ -277,7 +277,7 @@ async def resolve_magical_attack(
 
     # Apply any rider effects (e.g., a stun that accompanies the damage)
     if hit_result.is_hit and (rider_effect := effect_details.get("applies_effect")):
-        await apply_effect(caster, target, rider_effect, spell_data, world)
+        await apply_effect(caster, target, spell_data, rider_effect, world)
 
     # --- 6. Check for Defeat ---
     if target.hp <= 0:
@@ -621,7 +621,7 @@ async def apply_effect(caster: Union[Character, Mob], target: Union[Character, M
 
     duration = final_effect_details.get("duration", 0.0)
     stat = final_effect_details.get("stat_affected")
-    amount = final_effect_details.get("amount")
+    amount = final_effect_details.get("amount", final_effect_details.get("potency"))
 
     if not all([duration > 0, stat, amount is not None]):
         log.error("Invalid effect data for '%s': %s", effect_name, final_effect_details)
