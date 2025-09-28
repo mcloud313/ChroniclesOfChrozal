@@ -1,9 +1,10 @@
 # game/commands/rogue.py
 import logging
 import random
-from typing import TYPE_CHECKING
+from typing import Union, TYPE_CHECKING
 from .. import utils
 from .. character import Character
+from .. mob import Mob
 
 if TYPE_CHECKING:
     from ..character import Character
@@ -152,24 +153,70 @@ async def cmd_disarm(character: 'Character', world: 'World', args_str: str) -> b
 
     return True
 
-def pickpocket(character, target_name):
-    target = character.room.get_character(target_name)
+async def cmd_pickpocket(character: 'Character', world: 'World', args_str: str) -> bool:
+    """
+    Attempts to steal coinage or an item from another character or mob.
+    """
+    if not args_str:
+        await character.send("Who do you want to pickpocket?")
+        return True
+
+    if character.is_fighting:
+        await character.send("You are a bit too busy to be picking pockets right now!")
+        return True
+
+    target: Union[Character, Mob] = character.location.get_character_by_name(args_str) or \
+                                   character.location.get_mob_by_name(args_str)
+
     if not target:
-        character.send_message("You don't see them here.")
-        return
+        await character.send("You don't see them here.")
+        return True
 
     if target == character:
-        character.send_message("You can't pickpocket yourself.")
-        return
+        await character.send("You can't pickpocket yourself.")
+        return True
 
-    # Contested skill check
-    if utils.skill_check(character.get_skill("pickpocket"), target.get_skill("perception")):
-        # For now, let's just steal some gold
-        gold_amount = 10 # This should be randomized
-        target.gold -= gold_amount
-        character.gold += gold_amount
-        character.send_message(f"You successfully pickpocket {target.name} and steal {gold_amount} gold.")
-        target.send_message(f"You feel a slight tug at your purse.")
+    if not target.is_alive():
+        await character.send(f"{target.name.capitalize()} has nothing left to steal.")
+        return True
+
+    character.roundtime = 4.0
+
+    # --- Contested Skill Check ---
+    # The target's perception roll becomes the DC for the rogue's sleight of hand.
+    target_perception_dc = 10 + target.get_skill_modifier("perception") if isinstance(target, Character) else target.level * 2
+    
+    check = utils.skill_check(character, "sleight of hand", dc=target_perception_dc)
+
+    if check['success']:
+        # For now, let's just steal coinage. Item stealing can be added later.
+        if target.coinage > 0:
+            # Steal between 1% and 10% of their money, plus a bonus for skill
+            max_steal = int(target.coinage * 0.10) + check['total_check']
+            amount_stolen = min(target.coinage, random.randint(1, max(1, max_steal)))
+
+            target.coinage -= amount_stolen
+            character.coinage += amount_stolen
+            character.is_dirty = True
+            if isinstance(target, Character):
+                target.is_dirty = True
+
+            await character.send(f"{{gYou deftly lift {utils.format_coinage(amount_stolen)} from {target.name}!{{x")
+            # The victim only gets a message if they are a player
+            if isinstance(target, Character):
+                await target.send("{yYou feel a slight tug at your purse...{x")
+        else:
+            await character.send(f"{target.name} has no coinage to steal.")
     else:
-        character.send_message(f"You fail to pickpocket {target.name} and are noticed!")
-        target.send_message(f"{character.name} just tried to pickpocket you!")
+        # --- Failure ---
+        await character.send(f"{{rYou fail to pickpocket {target.name} and are noticed!{{x")
+        if isinstance(target, Character):
+            await target.send(f"{{R{character.name} just tried to pickpocket you!{{x")
+        
+        # Make mobs aggressive on failure
+        if isinstance(target, Mob):
+            await character.location.broadcast(f"\r\n{target.name.capitalize()} becomes enraged at {character.name}! \r\n")
+            target.is_fighting = True
+            target.target = character
+
+    return True
