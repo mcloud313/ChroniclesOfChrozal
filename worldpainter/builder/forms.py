@@ -4,6 +4,8 @@ from .models import Rooms, MobTemplates, ItemTemplates, Classes, AbilityTemplate
 from game.definitions.item_defs import ITEM_TYPE_CHOICES
 from game.definitions import abilities as ability_defs
 from game.definitions import slots
+from django.core.exceptions import ValidationError
+
 
 # Wear location choices for dropdowns, now matching slots.py
 WEAR_LOCATION_CHOICES = [
@@ -333,3 +335,62 @@ class AbilityTemplateAdminForm(forms.ModelForm):
             return super().save(commit=False)
             
         return super().save(commit)
+    
+    def clean(self):
+        """
+        Custom validation for the effect_details JSON field based on the
+        selected effect_type.
+        """
+        cleaned_data = super().clean()
+        effect_type = cleaned_data.get("effect_type")
+        effect_details = cleaned_data.get("effect_details", {})
+        damage_type = cleaned_data.get("damage_type")
+
+        if not isinstance(effect_details, dict):
+            raise ValidationError("Effect Details must be a valid JSON object (e.g., {\"key\": \"value\"}).")
+
+        # Validation for DAMAGE or HEAL effects
+        if effect_type in [ability_defs.EFFECT_DAMAGE, ability_defs.EFFECT_HEAL]:
+            if "damage_type" not in effect_details:
+                raise ValidationError("For DAMAGE/HEAL, 'effect_details' must contain 'damage_type'.")
+            if "damage_base" not in effect_details:
+                raise ValidationError("For DAMAGE/HEAL, 'effect_details' must contain 'damage_base'.")
+            if "damage_rng" not in effect_details:
+                raise ValidationError("For DAMAGE/HEAL, 'effect_details' must contain 'damage_rng'.")
+
+            # --- THIS IS THE NEW LOGIC ---
+            # If the damage spell also applies a secondary effect, validate it.
+            if secondary_effect := effect_details.get("applies_effect"):
+                if not isinstance(secondary_effect, dict):
+                    raise ValidationError("'applies_effect' must be a dictionary.")
+                if "name" not in secondary_effect:
+                    raise ValidationError("The 'applies_effect' dictionary must have a 'name'.")
+                if "duration" not in secondary_effect:
+                    raise ValidationError("The 'applies_effect' dictionary must have a 'duration'.")
+                if "stat_affected" not in secondary_effect:
+                    raise ValidationError("The 'applies_effect' dictionary must have a 'stat_affected'.")
+                if "amount" not in secondary_effect:
+                    raise ValidationError("The 'applies_effect' dictionary must have an 'amount'.")
+            # --- END NEW LOGIC ---
+
+        # Validation for BUFF or DEBUFF effects
+        elif effect_type in [ability_defs.EFFECT_BUFF, ability_defs.EFFECT_DEBUFF]:
+            if "name" not in effect_details:
+                raise ValidationError("For BUFF/DEBUFF, 'effect_details' must have 'name'.")
+            if "duration" not in effect_details:
+                raise ValidationError("For BUFF/DEBUFF, 'effect_details' must have 'duration'.")
+            if "stat_affected" not in effect_details:
+                raise ValidationError("For BUFF/DEBUFF, 'effect_details' must have 'stat_affected'.")
+            if "amount" not in effect_details:
+                raise ValidationError("For BUFF/DEBUFF, 'effect_details' must have 'amount'.")
+
+        # Data consistency check
+        if damage_type and effect_details.get("damage_type") and damage_type != effect_details.get("damage_type"):
+            raise ValidationError(
+                "The top-level 'Damage Type' and the 'damage_type' in Effect Details must match."
+            )
+
+        if not damage_type and effect_details.get("damage_type"):
+            cleaned_data["damage_type"] = effect_details.get("damage_type")
+
+        return cleaned_data
