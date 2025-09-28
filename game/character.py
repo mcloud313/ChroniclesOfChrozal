@@ -306,6 +306,33 @@ class Character:
         await self.check_and_learn_new_abilities()
         # --------------------------------------------------------------------------
 
+    async def send(self, message: str, add_newline: bool = True):
+        """
+        Formats and sends a message to the character's client.
+        This is the central method for all server-to-client communication.
+        """
+        if self.writer.is_closing():
+            # Avoid trying to write to a closed stream
+            return
+
+        # Apply color codes and ensure proper line endings for MUD clients
+        message_to_send = utils.colorize(message)
+        if add_newline and not message_to_send.endswith('\r\n'):
+            message_to_send += '\r\n'
+        
+        try:
+            self.writer.write(message_to_send.encode(config.ENCODING))
+            await self.writer.drain()
+        except (ConnectionResetError, BrokenPipeError) as e:
+            # This is expected if the player disconnects abruptly.
+            # No need to raise an error, just log it for debugging.
+            log.warning("Failed to send to %s: %s", self.name, e)
+            # The main connection handler will manage the cleanup.
+        except Exception as e:
+            log.exception("Unexpected error while sending to %s:", self.name, exc_info=e)
+
+
+
     def get_core_data_for_saving(self) -> Dict[str, Any]:
         """
         Gathers the character's core attributes into a dictionary for saving.
