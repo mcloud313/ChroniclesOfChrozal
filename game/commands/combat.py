@@ -10,12 +10,14 @@ from .. import resolver
 from ..character import Character
 from ..world import World
 from ..definitions import item_defs
+from ..mob import Mob
 
 log = logging.getLogger(__name__)
 
 
+
 async def cmd_attack(character: Character, world: World, args_str: str) -> bool:
-    """Handles the 'attack <target>' command."""
+    """Handles the attack <target> command."""
     if character.stance != "Standing":
         await character.send("You must be standing to attack.")
         return True
@@ -23,53 +25,76 @@ async def cmd_attack(character: Character, world: World, args_str: str) -> bool:
     if not args_str:
         await character.send("Attack whom?")
         return True
-        
+    
     if not character.location:
-        # This case should ideally never happen, but it's a good safeguard.
         return True
-        
+    
+    # --- Step 1: Try to find a mob target first
     target = character.location.get_mob_by_name(args_str)
-
+    
+    # --- STEP 2: If no mob found, try to find a player ---
+    if not target:
+        target = character.location.get_character_by_name(args_str)
+        
+        # PvP validation checks
+        if target:
+            if target == character:
+                await character.send("You can't attack yourself.")
+                return True
+            
+            if not target.is_alive():
+                await character.send("They're already dead.")
+                return True
+            
+            # Check for safe zone (cities, respawn points, etc.)
+            if "SAFE_ZONE" in character.location.flags:
+                await character.send("{RThe guards intervene! You cannot attack other players here.{x")
+                return True
+            
+            # Optional: Check if target is in your group
+            if character.group and target in character.group.members:
+                await character.send("You can't attack your own group members!")
+                return True
+    
+    # --- STEP 3: No valid target found ---
     if not target:
         await character.send(f"You don't see '{args_str}' here to attack.")
         return True
     
-    if "FLYING" in target.flags:
+    # --- STEP 4: Check for flying mobs ---
+    if isinstance(target, Mob) and "FLYING" in target.flags:
         await character.send(f"You can't reach the {target.name}, it's flying too high!")
         return True
     
+    # --- STEP 5: Check for ranged weapon equipped ---
     weapon = character._equipped_items.get("main_hand")
     if weapon and weapon.item_type == item_defs.RANGED_WEAPON:
         await character.send(f"You can't attack with {weapon.name}, you should try to <shoot> it instead.")
         return True
     
-    # --- NEW: Check for two-handed weapon rules ---
-    # The character might be holding something they picked up after wielding.
+    # --- STEP 6: Check two-handed weapon rules ---
     if weapon and weapon.item_type == item_defs.TWO_HANDED_WEAPON:
-        if character._inventory_items: # If there's anything in inventory, a hand is full.
+        if character._inventory_items:
             await character.send(f"You need two hands free to swing {weapon.name} effectively!")
             return True
-        
+    
+    # --- STEP 7: Set combat states ---
     log.info("%s is initiating combat with %s.", character.name, target.name)
-
-    # Set combat states for both character and mob
+    
     character.target = target
     character.is_fighting = True
-
+    
     if not target.is_fighting:
         target.target = character
         target.is_fighting = True
-
+    
     await character.send(f"You attack {target.name}!")
-
-    # Determine if the character is using a weapon or is unarmed
-    weapon = character._equipped_items.get("main_hand")
+    
+    # --- STEP 8: Resolve the attack ---
     valid_weapon_types = {item_defs.WEAPON, item_defs.TWO_HANDED_WEAPON}
     if weapon and weapon.item_type not in valid_weapon_types:
-        # If the wielded item is not a valid weapon, treat the attack as unarmed.
         weapon = None
-        
-    # Call the resolver with the correct, direct import
+    
     await resolver.resolve_physical_attack(character, target, weapon, world)
     return True
 
@@ -89,8 +114,27 @@ async def cmd_shoot(character: Character, world: World, args: str) -> bool:
 
     target = character.location.get_mob_by_name(args)
     if not target:
+        target = character.location.get_character_by_name(args)
+
+        #PvP Validation
+        if target:
+            if target == character:
+                await character.send("You can't shoot yourself.")
+                return True
+            if not target.is_alive():
+                await character.send("They're already dead.")
+                return True
+            if "SAVE_ZONE" in character.location.flags:
+                await character.send("{RThe guards intervene! You cannot attack other players here.{x")
+                return True
+            if character.group and target in character.group.members:
+                await character.send("You can't shoot your own group members!")
+                return True
+            
+    if not target:
         await character.send("You don't see them here.")
         return True
+
         
     # 1. Check for Ranged Weapon
     weapon = character._equipped_items.get("main_hand")

@@ -104,15 +104,20 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
         target_mob = character.location.get_mob_by_name(target_name_input)
 
         if target_char and target_char.is_alive():
+            effect_type = spell_data.get("effect_type")
+            is_offensive = effect_type in [ability_defs.EFFECT_DAMAGE, ability_defs.EFFECT_DEBUFF]
+
+            if is_offensive and target_char != character:
+                if "SAFE_ZONE" in character.location.flags:
+                    await character.send("{RThe guards intervene! You cannot attack other players here.{x")
+                    return True
+                if character.group and target_char in character.group.members:
+                    await character.send("You can't cast hostile spells on your own group members!")
+                    return True
+                
             target_obj, target_obj_type_str = target_char, "CHAR"
         elif target_mob and target_mob.is_alive():
             target_obj, target_obj_type_str = target_mob, "MOB"
-        
-        if not target_obj:
-            await character.send(f"You don't see '{target_name_input}' here to target.")
-            return True
-
-        target_id = target_obj.dbid if isinstance(target_obj, Character) else target_obj.instance_id
 
     # --- 4. Initiate Casting Sequence (This part was also correct) ---
     cast_time = spell_data.get("cast_time", 0.0)

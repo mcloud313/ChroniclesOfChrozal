@@ -3,6 +3,7 @@ import logging
 from typing import TYPE_CHECKING
 from . import movement as movement_logic
 from ..group import Group
+from .. import utils
 
 if TYPE_CHECKING:
     from ..character import Character
@@ -98,81 +99,123 @@ async def cmd_group(character: 'Character', world: 'World', args_str: str) -> bo
     return True
 
 async def cmd_accept(character: 'Character', world: 'World', args_str: str) -> bool:
-    """Accepts a pending group invitation."""
-    if not args_str or "group" not in args_str.lower():
-        await character.send("Accept what? (Try 'accept group')")
-        return True
-    
-    # --- MODIFIED: Retrieve invite from the world state ---
+    """Unified accept handler for groups and trades."""
+
+    # --- Group invite logic
     inviter_id = world.pending_invites.get(character.dbid)
-    if not inviter_id:
-        await character.send("You don't have a pending group invitation.")
-        return True
-    
-    # Fetch the inviter's full character object
-    inviter = world.get_active_character(inviter_id)
-    
-    # Clear the invite immediately
-    del world.pending_invites[character.dbid]
+    if inviter_id and ("group" in args_str.lower() or not args_str):
+        # Fetch teh actual inviter character object
+        inviter = world.get_active_character(inviter_id)
 
-    if not inviter or not inviter.is_alive() or inviter.location != character.location:
-        await character.send("The person who invited you is no longer available.")
-        return True
+        #Clear the invite immediately
+        del world.pending_invites[character.dibd]
 
-    # Case 1: Inviter is not in a group, so a new one is formed.
-    if not inviter.group:
-        new_group = Group(leader=inviter)
-        new_group.add_member(character)
-        world.add_active_group(new_group)
-        await new_group.broadcast(f"{character.name} has joined the group, which is now led by {inviter.name}.")
-    else: # Case 2: Join the inviter's existing group
-        if len(inviter.group.members) >= 4:
-            await character.send("The group is now full.")
-            await inviter.send(f"{character.name} tried to join, but your group is full.")
+        # Validate inviter is still available
+        if not inviter or not inviter.is_alive() or inviter.location != character.location:
+            await character.send("The person who invited you is no longer available.")
             return True
+        
+        # case #1 Inviter is not in a group, so a new one is formed.
+        if not inviter.group:
+            new_group = Group(leader=inviter)
+            new_group.add_member(character)
+            world.add_active_group(new_group)
+            await new_group.broadcast(f"{character.name} has joined the group, which is now led by {inviter.name}.")
+        else:
+            if len(inviter.group.members) >= 4:
+                await character.send("The group is now full.")
+                await inviter.send(f"{character.name} tried to join, but your group is full.")
+                return True
+            inviter.group.add_member(character)
+            await inviter.group.broadcast(f"{character.name} has joined the group.")
 
-        inviter.group.add_member(character)
-        await inviter.group.broadcast(f"{character.name} has joined the group.")
+        return True
     
-    return True
+    # TRADE OFFER LOGIC
+    elif character.pending_give_offer:
+        offer = character.pending_give_offer
+        giver = offer["from_char"]
+        item_to_receive = offer["item"]
+        coinage_to_receive = offer["coinage"]
+
+        # Clear the offer immediately to prevent race conditions
+        character.pending_give_offer = None
+
+        # Re-validate the conditions
+        if not giver or giver.location != character.location:
+            await character.send(f"{giver.name} is no longer here.")
+            return True
+        
+        if item_to_receive:
+            if len(character._inventory_items) >= 2:
+                await character.send("Your hands are full. You cannot accept the item.")
+                await giver.send(f"{character.name}'s hands are now full; they could not accept your {item_to_receive.name}.")
+                return True
+            if item_to_receive.id not in giver._inventory_items:
+                await character.send("The item is no longer available.")
+                return True
+            
+            #Perform item transfer
+            del giver._inventory_items[item_to_receive.id]
+            character._inventory_items[item_to_receive.id] = item_to_receive
+            await world.db_manager.update_item_location(item_to_receive.id, owner_char_id=character.dbid)
+
+            await character.send(f"You accept the {item_to_receive.name} from {giver.name}.")
+            await giver.send(f"{character.name} accepts your {item_to_receive.name}.")
+
+        elif coinage_to_receive > 0:
+            if giver.coinage < coinage_to_receive:
+                await character.send("The coinage is no longer available.")
+
+            # Peform coin transfer
+            giver.coinage -= coinage_to_receive
+            character.coinage += coinage_to_receive
+
+            await character.send(f"You accept {utils.format_coinage(coinage_to_receive)} from {giver.name}.")
+            await giver.send(f"{character.name} accepts your {utils.format_coinage(coinage_to_receive)}.")
+
+        return True
+    else:
+        await character.send("You don't have any pending offers to accept.")
+        return True
 
 async def cmd_decline(character: 'Character', world: 'World', args_str: str) -> bool:
-    """Declines a pending group invitation."""
-    if not args_str or "group" not in args_str.lower():
-        await character.send("Decline what? (Try 'decline group')")
-        return True
-
-    # --- MODIFIED: Check and retrieve from the world state ---
+    """Unified decline handler for groups and trades."""
+    
+    # --- GROUP INVITE LOGIC ---
     inviter_id = world.pending_invites.get(character.dbid)
-    if not inviter_id:
-        await character.send("You don't have a pending group invitation.")
-        return True
-
-    # Clear the invite
-    del world.pending_invites[character.dbid]
-    
-    await character.send("You have declined the group invitation.")
-    
-    # Notify the inviter if they are still around
-    inviter = world.get_active_character(inviter_id)
-    if inviter and inviter.is_alive():
-        await inviter.send(f"{character.name} has declined your group invitation.")
-
-    return True
-
-async def cmd_disband(character: 'Character', world: 'World', args_str: str) -> bool:
-    """Disbands the group you are leading."""
-    if not character.group:
-        await character.send("You are not in a group.")
-        return True
-    if character.group.leader != character:
-        await character.send("Only the group leader can disband the group.")
+    if inviter_id and ("group" in args_str.lower() or not args_str):
+        # Clear the invite
+        del world.pending_invites[character.dbid]
+        
+        await character.send("You have declined the group invitation.")
+        
+        # Notify the inviter if they are still around
+        inviter = world.get_active_character(inviter_id)
+        if inviter and inviter.is_alive():
+            await inviter.send(f"{character.name} has declined your group invitation.")
+        
         return True
     
-    world.remove_active_group(character.group.id)
-    await character.group.disband() # This notifies members and clears their group
-    return True
-
+    # --- TRADE OFFER LOGIC ---
+    elif character.pending_give_offer:
+        offer = character.pending_give_offer
+        giver = offer["from_char"]
+        
+        # Clear the offer
+        character.pending_give_offer = None
+        
+        await character.send("You decline the offer.")
+        if giver and giver.location == character.location:
+            await giver.send(f"{character.name} has declined your offer.")
+        
+        return True
+    
+    # --- NO PENDING OFFERS ---
+    else:
+        await character.send("You don't have any pending offers to decline.")
+        return True
+    
 async def cmd_leave(character: 'Character', world: 'World', args_str: str) -> bool:
     """Leaves your current group."""
     if not character.group:
