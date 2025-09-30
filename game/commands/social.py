@@ -267,3 +267,15 @@ async def cmd_kick(character: 'Character', world: 'World', args_str: str) -> boo
     await character.group.broadcast(f"{target_to_kick.name} has been kicked from the group.", exclude={target_to_kick})
     return True
 
+async def cmd_disband(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Disbands the group you are leading."""
+    if not character.group:
+        await character.send("You are not in a group.")
+        return True
+    if character.group.leader != character:
+        await character.send("Only the group leader can disband the group.")
+        return True
+    
+    world.remove_active_group(character.group.id)
+    await character.group.disband()  # This notifies members and clears their group
+    return True
