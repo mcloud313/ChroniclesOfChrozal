@@ -287,7 +287,7 @@ admin.site.register(Players)
 admin.site.register(Races)
 admin.site.register(Classes)
 admin.site.register(DamageTypes)
-admin.site.register(ItemInstances)
+# admin.site.register(ItemInstances)
 admin.site.register(ShopInventories)
 admin.site.register(BankAccounts)
 # We don't register RoomObjects here because it's handled by an Inline
