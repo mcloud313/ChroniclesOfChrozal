@@ -675,6 +675,23 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "cooldown": 4,
         "requirements": {"class": "monk", "level": 5},
     },
+    "light": {
+    "name": "Light",
+    "type": "SPELL",
+    "class_req": ["mage", "cleric", "druid"],
+    "level_req": 1,
+    "cost": 5,
+    "target_type": TARGET_SELF,
+    "effect_type": EFFECT_BUFF,
+    "cast_time": 6.0,
+    "roundtime": 1.0,
+    "effect_details": {
+        "name": "Magical Light",
+        "duration": 600.0,  # 10 minutes
+        "stat_affected": "emits_light",
+        "amount": 1
+    }
+}
 }
 }
 
