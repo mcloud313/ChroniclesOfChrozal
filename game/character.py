@@ -172,6 +172,14 @@ class Character:
         # The final calculation from the traceback
         return int((base_av * av_percentage) + bonus_av)
     
+    @property
+    def is_wielding_two_handed(self) -> bool:
+        """Returns True if wielding a two-handed or ranged weapon."""
+        weapon = self._equipped_items.get("main_hand")
+        if weapon is None:
+            return False
+        return weapon.item_type in (item_defs.TWO_HANDED_WEAPON, item_defs.RANGED_WEAPON)
+    
     def get_base_av_from_armor(self) -> int:
         """Sums the armor value from all equipped armor items."""
         total = 0

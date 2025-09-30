@@ -178,19 +178,29 @@ async def cmd_wear(character: 'Character', world: 'World', args_str: str) -> boo
             await character.send(f"You are already using your {slot.replace('_', ' ')}.")
             return True
     
+    if item_to_equip.item_type == item_defs.RANGED_WEAPON:
+        if character._equipped_items.get("main_hand") or character._equipped_items.get("off_hand"):
+            await character.send("You must have both hands free to wield that weapon.")
+            return True
+    
+        del character._inventory_items[item_to_equip.id]
+        character._equipped_items["main_hand"] = item_to_equip
+        character.is_dirty = True
+    
+        await character.send(f"You ready {item_to_equip.name}.")
+        await character.location.broadcast(f"\r\n{character.name} readies {item_to_equip.name}.\r\n", exclude={character})
+        return True
+    
     # --- NEW: Two-Handed Wielding Logic ---
     if item_to_equip.item_type == item_defs.TWO_HANDED_WEAPON:
         if character._equipped_items.get("main_hand") or character._equipped_items.get("off_hand"):
             await character.send("You must have both hands free to wield that weapon.")
             return True
-        
-        # Equip in both hands
+    
         del character._inventory_items[item_to_equip.id]
         character._equipped_items["main_hand"] = item_to_equip
-        character._equipped_items["off_hand"] = item_to_equip # Use same item as a placeholder
-
         character.is_dirty = True
-        
+    
         await character.send(f"You heft {item_to_equip.name} with both hands.")
         await character.location.broadcast(f"\r\n{character.name} hefts {item_to_equip.name} with both hands.\r\n", exclude={character})
         return True
@@ -211,36 +221,30 @@ async def cmd_sheathe(character: 'Character', world: 'World', args_str: str) -> 
     main_hand_item = character._equipped_items.get("main_hand")
     off_hand_item = character._equipped_items.get("off_hand")
 
-    # This check is for one-handed weapons in the off-hand, not two-handers
-    is_two_hander = main_hand_item and main_hand_item.item_type == item_defs.TWO_HANDED_WEAPON
-
     if not main_hand_item and not off_hand_item:
         await character.send("You are not wielding anything to sheathe.")
         return True
 
     sheathed_something = False
+    
     if main_hand_item:
         character._equipped_items["sheathed_main_hand"] = main_hand_item
         del character._equipped_items["main_hand"]
         
-        # If it's a two-handed weapon, it also frees the off-hand
-        if is_two_hander:
-            # FIX: Only delete off_hand if the key actually exists
-            if "off_hand" in character._equipped_items:
-                del character._equipped_items["off_hand"]
+        # Don't try to delete off_hand if wielding two-handed
+        # (it was never set in the first place with the new logic)
         
         await character.send(f"You sheathe your {main_hand_item.name}.")
-        await character.location.broadcast(f"\\r\\n{character.name} sheathes their {main_hand_item.name}.\\r\\n", exclude={character})
+        await character.location.broadcast(f"\r\n{character.name} sheathes their {main_hand_item.name}.\r\n", exclude={character})
         sheathed_something = True
 
     # This handles a separate one-handed weapon in the off_hand
-    if off_hand_item and not is_two_hander:
+    if off_hand_item and off_hand_item != main_hand_item:
         character._equipped_items["sheathed_off_hand"] = off_hand_item
         del character._equipped_items["off_hand"]
         await character.send(f"You sheathe your {off_hand_item.name}.")
-        # Broadcast is handled by the main_hand check to avoid spam
         if not main_hand_item:
-             await character.location.broadcast(f"\\r\\n{character.name} sheathes their {off_hand_item.name}.\\r\\n", exclude={character})
+            await character.location.broadcast(f"\r\n{character.name} sheathes their {off_hand_item.name}.\r\n", exclude={character})
         sheathed_something = True
 
     if sheathed_something:
@@ -303,36 +307,23 @@ async def cmd_remove(character: 'Character', world: 'World', args_str: str) -> b
         await character.send("Remove what?")
         return True
 
-    item_to_remove = None
-    # Find the item in the equipped items dict by name
-    for item in character._equipped_items.values():
-        if item and args_str.lower() in item.name.lower():
-            item_to_remove = item
-            break
-            
+    item_to_remove = character.find_item_in_equipment_by_name(args_str)
     if not item_to_remove:
         await character.send("You are not wearing that.")
         return True
 
-    # --- THE FIX IS HERE ---
-    # Determine which slots the item actually occupies from its wear_location
+    # Determine which slots this item occupies
     slots_to_clear = []
-    wear_loc = item_to_remove.wear_location
-    if isinstance(wear_loc, str):
-        slots_to_clear = [wear_loc]
-    elif isinstance(wear_loc, list):
-        slots_to_clear = wear_loc
+    for slot, equipped_item in character._equipped_items.items():
+        if equipped_item and equipped_item.id == item_to_remove.id:
+            slots_to_clear.append(slot)
     
-    # Remove the item from all of its associated slots
+    # Remove from all slots
     for slot in slots_to_clear:
-        if slot in character._equipped_items:
-            # We only delete the key if the item matches, to prevent bugs
-            if character._equipped_items[slot].id == item_to_remove.id:
-                del character._equipped_items[slot]
+        del character._equipped_items[slot]
     
-    # Place the item back in inventory
+    # Place back in inventory
     character._inventory_items[item_to_remove.id] = item_to_remove
-
     character.is_dirty = True
 
     await character.send(f"You remove {item_to_remove.name}.")

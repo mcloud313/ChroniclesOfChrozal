@@ -73,10 +73,10 @@ async def cmd_attack(character: Character, world: World, args_str: str) -> bool:
         return True
     
     # --- STEP 6: Check two-handed weapon rules ---
-    if weapon and weapon.item_type == item_defs.TWO_HANDED_WEAPON:
-        if character._inventory_items:
-            await character.send(f"You need two hands free to swing {weapon.name} effectively!")
-            return True
+    if character.is_wielding_two_handed and character._inventory_items:
+        weapon = character._equipped_items.get("main_hand")
+        await character.send(f"You need two hands free to swing {weapon.name} effectively!")
+        return True
     
     # --- STEP 7: Set combat states ---
     log.info("%s is initiating combat with %s.", character.name, target.name)
