@@ -78,6 +78,11 @@ async def cmd_attack(character: Character, world: World, args_str: str) -> bool:
         await character.send(f"You need two hands free to swing {weapon.name} effectively!")
         return True
     
+    # --- STEP 6.5: Break stealth when attacking ---
+    if character.is_hidden:
+        character.is_hidden = False
+        await character.send("You emerge from the shadows to attack!")
+    
     # --- STEP 7: Set combat states ---
     log.info("%s is initiating combat with %s.", character.name, target.name)
     
@@ -179,6 +184,10 @@ async def cmd_shoot(character: Character, world: World, args: str) -> bool:
     if not ammo_stack or ammo_stack.instance_stats.get("quantity", 0) <= 0:
         await character.send(f"You don't have any {required_ammo_type}s in your {quiver.name}.")
         return True
+    
+    if character.is_hidden:
+        character.is_hidden = False
+        await character.send("You emerge from the shadows to shoot!")
 
     # 4. We have a weapon, quiver, and ammo. Resolve the attack.
     character.target = target

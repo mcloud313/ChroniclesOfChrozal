@@ -107,6 +107,10 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
             effect_type = spell_data.get("effect_type")
             is_offensive = effect_type in [ability_defs.EFFECT_DAMAGE, ability_defs.EFFECT_DEBUFF]
 
+            if character.is_hidden and is_offensive:
+                character.is_hidden = False
+                await character.send("You emerge from the shadows to cast!")
+
             if is_offensive and target_char != character:
                 if "SAFE_ZONE" in character.location.flags:
                     await character.send("{RThe guards intervene! You cannot attack other players here.{x")

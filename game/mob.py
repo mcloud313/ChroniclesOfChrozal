@@ -271,7 +271,6 @@ class Mob:
                         self.flags.add("FLYING")
                         await self.location.broadcast(f"\r\n{self.name.capitalize()} takes to the air!\r\n")
 
-
         # If hidden and a player is present, initiate an ambush.
         if self.is_hidden:
             potential_targets = [char for char in self.location.characters if char.is_alive()]
@@ -297,6 +296,10 @@ class Mob:
 
         # --- Combat Logic ---
         if self.is_fighting and self.target:
+            if isinstance(self.target, Character) and self.target.is_hidden:
+                self.target = None
+                self.fighting = False
+                await self.location.broadcast(f"\r\n{self.name.capitalize()} looks around in confusion.\r\n")
             target_is_valid = (
                 self.target.is_alive() and
                 hasattr(self.target, 'location') and
@@ -340,7 +343,10 @@ class Mob:
 
         # --- Aggressive Check ---
         if self.has_flag("AGGRESSIVE") and not self.is_fighting:
-            potential_targets = [char for char in self.location.characters if char.is_alive()]
+            potential_targets = [
+                char for char in self.location.characters
+                if char.is_alive() and not char.is_hidden
+            ]
             if potential_targets:
                 self.target = random.choice(potential_targets)
                 self.is_fighting = True
