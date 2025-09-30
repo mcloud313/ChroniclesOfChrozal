@@ -456,17 +456,21 @@ class Character:
     def can_see(self) -> bool:
         """
         Determines if the character can see in their current room.
-        This is the central check for all darkness-related penalties.
+        Checks personal light sources AND other players' lights.
         """
         if not self.location:
-            return False # Can't see in the void
+            return False
         
-        # If the room is not flagged as DARK, the character can see.
+        # If the room has the LIT flag (permanent lighting), everyone can see
+        if "LIT" in self.location.flags:
+            return True
+        
+        # If the room is not flagged as DARK, anyone can see
         if "DARK" not in self.location.flags:
             return True
         
-        # If the room IS dark, the character can only see if they have a light source.
-        return self.is_holding_light_source()
+        # If the room IS dark, check if ANYONE has a light source
+        return self.location.has_light_source()
 
     def update_regen(self, dt: float, is_in_node: bool):
         """Applies HP and essence regeneration using config-driven values."""
@@ -694,6 +698,9 @@ class Character:
         for item in self._equipped_items.values():
             if item.instance_stats.get("is_lit"):
                 return True
+            
+        if "Magical Light" in self.effects:
+            return True
         return False
 
     def get_stat_bonus_from_equipment(self, stat_name: str) -> int:

@@ -59,6 +59,13 @@ class Room:
         """Removes a character object from the room."""
         self.characters.discard(character)
 
+    def has_light_source(self) -> bool:
+        """Returns True if any character in the room has a lit light source."""
+        for char in self.characters:
+            if char.is_holding_light_source():
+                return True
+        return False
+
     def get_item_instance_by_name(self, item_name: str, world: 'World') -> Optional['Item']:
         name_lower = item_name.lower()
         for instance_id in self.item_instance_ids:

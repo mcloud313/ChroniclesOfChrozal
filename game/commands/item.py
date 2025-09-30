@@ -733,6 +733,13 @@ async def cmd_light(character: 'Character', world: 'World', args_str: str) -> bo
         f"\r\n{character.name} lights a {item_to_light.name}.\r\n",
         exclude={character}
     )
+
+    if "DARK" in character.location.flags:
+        await character.location.broadcast(
+        f"\r\n{character.name}'s {item_to_light.name} illuminates the area.\r\n",
+        exclude={character}
+    ) 
+
     return True
 
 async def cmd_snuff(character: 'Character', world: 'World', args_str: str) -> bool:
@@ -766,5 +773,19 @@ async def cmd_snuff(character: 'Character', world: 'World', args_str: str) -> bo
         f"\r\n{character.name} snuffs out their {item_to_snuff.name}.\r\n",
         exclude={character}
     )
+
+    if "DARK" in character.location.flags:
+    # Check if this was the LAST light source
+        if not character.location.has_light_source():
+            await character.location.broadcast(
+                f"\r\n{character.name} snuffs out their {item_to_snuff.name}, plunging the area into darkness.\r\n",
+                exclude={character}
+            )
+    else:
+        await character.location.broadcast(
+            f"\r\n{character.name} snuffs out their {item_to_snuff.name}.\r\n",
+            exclude={character}
+        )
+
     return True
         
