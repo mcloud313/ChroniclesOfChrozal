@@ -434,17 +434,17 @@ def format_departure_message(character_name: str, direction: str) -> str:
 def format_hunger_status(character: 'Character') -> str:
     """Returns a descriptive string for the character's hunger level."""
     percent = (character.hunger / 100) * 100
-    if percent >= 95: return "{gSatiated{x"
-    if percent >= 70: return "{gContent{x"
-    if percent >= 40: return "{YPeckish{x"
-    if percent >= 15: return "{YHungry{x"
-    return "{RStarving{x"
+    if percent >= 95: return "<g>Satiated<x>"
+    if percent >= 70: return "<g>Content<x>"
+    if percent >= 40: return "<Y>Peckish<x>"
+    if percent >= 15: return "<Y>Hungry<x>"
+    return "<R>Starving<x>"
 
 def format_thirst_status(character: 'Character') -> str:
     """Returns a descriptive string for the character's thirst level."""
     percent = (character.thirst / 100) * 100
-    if percent >= 95: return "{cSated{x"
-    if percent >= 70: return "{cQuenched{x"
-    if percent >= 40: return "{yThirsty{x"
-    if percent >= 15: return "{yParched{x"
-    return "{rDehydrated{x"
+    if percent >= 95: return "<c>Sated<x>"
+    if percent >= 70: return "<c>Quenched<x>"
+    if percent >= 40: return "<y>Thirsty<x>"
+    if percent >= 15: return "<y>Parched<x>"
+    return "<r>Dehydrated<x>"
