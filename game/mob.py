@@ -297,7 +297,6 @@ class Mob:
         if self.is_fighting and self.target:
             # check if target is hidden and handle it
             if isinstance(self.target, Character) and self.target.is_hidden:
-                log.info(f"STEALTH DEBUG: Mob {self.name} lost target {self.target.name} (hidden)")
                 self.target = None
                 self.is_fighting = False
                 await self.location.broadcast(f"\r\n{self.name.capitalize()} looks around in confusion.\r\n")

@@ -24,7 +24,6 @@ class Player:
         self.email: str = email
         self.hashed_password: str = hashed_password
         self.is_admin: bool = bool(is_admin)
-        log.debug("Player object initialized: %s (ID: %s)", self.username, self.dbid)
 
     def set_password(self, plain_password: str):
         """

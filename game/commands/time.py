@@ -2,9 +2,12 @@
 """
 Implements the 'time' command for players.
 """
+import logging
 from game.character import Character
 from game.world import World
 from game.definitions import calendar as calendar_defs
+
+log = logging.getLogger(__name__)
 
 def get_celestial_body_position(hour: int) -> str:
     """Returns a descriptive string for the sun or moons' position."""
@@ -41,6 +44,10 @@ async def cmd_time(character: Character, world: World, args_str: str) -> bool:
     if character.location and "OUTDOORS" in character.location.flags:
         celestial_str = get_celestial_body_position(world.game_hour)
         await character.send(celestial_str)
+
+        area_id = character.location.area_id
+        log.info(f"TIME DEBUG: Checking weather for area {area_id}")
+        log.info(f"TIME DEBUG: area_weather keys: {list(world.area_weather.keys())}")
         
         # Weather information for outdoor characters
         current_weather = world.area_weather.get(character.location.area_id)

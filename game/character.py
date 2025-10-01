@@ -308,9 +308,6 @@ class Character:
         for item in all_owned_items.values():
             if not item.is_equipped(self) and not item.is_in_container():
                 self._inventory_items[item.id] = item
-
-        log.debug("Loaded related data for %s.", self.name)
-
         await self.check_and_learn_new_abilities()
         # --------------------------------------------------------------------------
 
@@ -333,7 +330,6 @@ class Character:
             await self.writer.drain()
         except (ConnectionResetError, BrokenPipeError) as e:
             # This is expected if the player disconnects abruptly.
-            # No need to raise an error, just log it for debugging.
             log.warning("Failed to send to %s: %s", self.name, e)
             # The main connection handler will manage the cleanup.
         except Exception as e:
@@ -712,6 +708,23 @@ class Character:
         for item in self._equipped_items.values():
             total_bonus += item.instance_stats.get(stat_name, 0)
         return total_bonus
+
+    def get_stealth_dc(self) -> int:
+        """
+        Calculates the difficulty class for others to detect this charcter while hidden
+        Lower DC = easier to detect
+        """
+        base_dc = self.get_skill_modifier("stealth")
+
+        # Penalty for wearing heavy armor
+        armor_penalty = self.total_av // 5
+
+        # Penalty for carying a light source
+        light_penalty = 10 if self.is_holding_light_source() else 0
+
+        final_dc = max(5, base_dc - armor_penalty - light_penalty)
+
+        return final_dc
 
     def __repr__(self) -> str:
         return f"<Character {self.dbid}: '{self.name}'>"

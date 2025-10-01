@@ -151,16 +151,10 @@ async def resolve_physical_attack(
     
     if isinstance(attacker, Character) and attacker.is_hidden:
         attacker.is_hidden = False
-        log.info(f"STEALTH DEBUG: Clearing {attacker.name}'s is_hidden after attack")
     
     # --- 8. Apply Final Roundtime for a successful hit ---
     attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
 
-    log.info(
-        f"[COMBAT-DEBUG] Roundtime for {attacker.name}: "
-        f"{attacker.roundtime:.2f}s (Speed: {wpn_speed:.2f}s, "
-        f"Armor Penalty: {rt_penalty:.2f}s, Slow Penalty: {attacker.slow_penalty:.2f}s)"
-    )
 
 async def resolve_ranged_attack(
     attacker: Union[Character, Mob],
@@ -229,7 +223,6 @@ async def resolve_ranged_attack(
 
     if isinstance(attacker, Character) and attacker.is_hidden:
         attacker.is_hidden = False
-        log.info(f"STEALTH DEBUG: Clearing {attacker.name}'s is_hidden after attack")
 
 async def resolve_magical_attack(
     caster: Union[Character, Mob], 
@@ -296,7 +289,6 @@ async def resolve_magical_attack(
 
     if isinstance(caster, Character) and caster.is_hidden:
         caster.is_hidden = False
-        log.info(f"STEALTH DEBUG: Clearing {caster.name}'s is_hidden after attack")
 
 async def resolve_ability_effect(
     caster: Character,

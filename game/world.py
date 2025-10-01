@@ -533,7 +533,7 @@ class World:
     
     async def update_stealth_checks(self, dt: float):
         """Ticker: Periodically allows observers to detect hidden characters and mobs."""
-        if random.random() > 0.15: # 10% chance per second
+        if random.random() > 0.20: # 10% chance per second
             return
         
         # Find all hidden entities (characters and mobs)
@@ -548,7 +548,7 @@ class World:
         for hidden_entity in hidden_entities:
             # Determine the stealth value (DC) of the hidden entity
             if isinstance(hidden_entity, Character):
-                stealth_dc = hidden_entity.get_skill_modifier("stealth")
+                stealth_dc = hidden_entity.get_stealth_dc()
             else: # It's a Mob
                 stealth_dc = hidden_entity.get_stealth_value()
 
@@ -563,6 +563,8 @@ class World:
                     continue
                 observers.append(char)
             # -----------------------------------------------------------------
+            mobs_in_room = [m for m in hidden_entity.location.mobs if m.is_alive()]
+            log.info(f"STEALTH CHECK: {hidden_entity.name} (DC:{stealth_dc}) - Room has {len(mobs_in_room)} mobs, {len(observers)} player observers")
 
             for observer in observers:
                 # Mobs can't detect hidden players in this implementation yet, but players can detect mobs
@@ -578,6 +580,27 @@ class World:
                         exclude={observer, hidden_entity}
                     )
                     break # Stop checking once spotted
+
+            for mob in mobs_in_room:
+                # Mobs use their level * 2 as perception skill
+                mob_perception = mob.level * 2
+                roll = random.randint(1, 20)
+                total = roll + mob_perception
+                success = total >= stealth_dc
+            
+                log.info(f"  -> Mob {mob.name} (Lvl {mob.level}) perception: Roll {roll} + {mob_perception} = {total} vs DC {stealth_dc} = {'SUCCESS' if success else 'FAIL'}")
+            
+                if success:
+                    hidden_entity.is_hidden = False
+                    log.info(f"STEALTH CHECK: Mob {mob.name} detected {hidden_entity.name}!")
+                
+                    if isinstance(hidden_entity, Character):
+                        await hidden_entity.send(f"<R>{mob.name.capitalize()} spots you!<x>")
+                        await hidden_entity.location.broadcast(
+                            f"\r\n{mob.name.capitalize()} spots {hidden_entity.name}!\r\n",
+                            exclude={hidden_entity}
+                        )
+                    break
 
     async def update_hunger_thirst(self, dt: float):
         """Ticker: Decreases hunger and thirst and notifies characters on status changes."""
