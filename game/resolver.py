@@ -440,25 +440,40 @@ async def resolve_ability_effect(
         if not isinstance(target, Character) or target.status != "DEAD":
             await caster.send("Your spell requires a dead target.")
             return
-
-        xp_cost = effect_details.get("xp_cost", 5000)
-        if caster.xp_total < xp_cost:
-            await caster.send(f"<R>You lack the spiritual energy ({xp_cost} XP) to perform the ritual.<x>")
-            return
-        
-        caster.xp_total -= xp_cost
-        await caster.send(f"<y>You sacrifice {xp_cost} of your stored experience to fuel the ritual...<x>")
-
-        target.status = "ALIVE"
-        target.hp = 1
         
         if target.location != caster.location:
-            if old_room := target.location:
-                old_room.remove_character(target)
-            target.update_location(caster.location)
-            caster.location.add_character(target)
+            await caster.send("Your target is not here.")
+            return
 
-        await world.broadcast(f"<Y>{caster.name}'s divine intervention brings {target.name} back from the dead!<x>")
+        # Scale XP cost based on target's remaining tether (exponential scaling)
+        base_xp_cost = effect_details.get("xp_cost", 5000)
+        tether_multiplier = 2 ** (10 - target.spiritual_tether) # Exponential 1x at 10. 2x at 9, 512x at 1
+        xp_cost = base_xp_cost * tether_multiplier
+
+        if caster.xp_total < xp_cost:
+            await caster.send(f"<R>You lack the spiritual energy ({xp_cost:,} XP) to perform the ritual.<x>")
+            await caster.send(f"<y>(Base cost: {base_xp_cost:,} × {tether_multiplier}x for tether level {target.spiritual_tether})<x>")
+            return
+    
+        caster.xp_total -= xp_cost
+        await caster.send(f"<y> You sacrifice {xp_cost:,} of your stored experience to fuel the ritual...<x>")
+
+        # Restore target
+        target.status = "ALIVE"
+        target.hp = target.max_hp // 10
+        target.spiritual_tether = min(10, target.spiritual_tether + 1)
+        target.essence = 0
+        target.is_dirty = True
+
+        await caster.send(f"<Y>A blinding column of divine energy surges through you into {target.name}'s corpse!<x>")
+        await target.send("<Y>You feel your spirit violently pulled back into your body! You have been resurrected!<x>")
+        await target.send(f"<g>Your spiritual tether strengthens. ({target.spiritual_tether}/10)<x>")
+
+        if caster.location:
+            await caster.location.broadcast(
+            f"\r\n<Y>A blinding column of divine energy strikes {target.name}'s corpse as {caster.name} completes a powerful resurrection ritual!<x>\r\n",
+            exclude={caster, target}
+        )
 
     elif effect_type == "CURE":
         cure_type = effect_details.get("cure_type")

@@ -227,6 +227,7 @@ class Character:
         self.unspent_skill_points: int = db_data['unspent_skill_points']
         self.unspent_attribute_points: int = db_data['unspent_attribute_points']
         self.spiritual_tether: int = db_data.get('spiritual_tether', 10) # Default if not in db
+        self.respawn_room_id: int = db_data.get('respawn_room_id', 44)
         self.coinage: int = db_data['coinage']
         self.location_id: int = db_data['location_id']
         self.total_playtime_seconds: int = db_data['total_playtime_seconds']
@@ -352,6 +353,7 @@ class Character:
             "xp_pool": self.xp_pool,
             "coinage": self.coinage,
             "spiritual_tether": self.spiritual_tether,
+            "respawn_room_id": self.respawn_room_id,
             "total_playtime_seconds": self.total_playtime_seconds,
             "unspent_skill_points": self.unspent_skill_points,
             "unspent_attribute_points": self.unspent_attribute_points,

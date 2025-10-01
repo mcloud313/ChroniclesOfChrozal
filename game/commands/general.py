@@ -5,6 +5,7 @@ General player commands like look, say, quit, who, help, and score.
 import math
 import logging
 import config
+import asyncio
 from typing import TYPE_CHECKING
 from .. import utils
 from ..definitions import slots, skills as skill_defs
@@ -532,27 +533,86 @@ async def cmd_search(character: 'Character', world: 'World', args_str: str) -> b
         
     return True
 
-# Add this function to game/commands/general.py
+async def cmd_bind(character: 'Character', world: 'World', args_str: str) -> bool:
+    """Binds your respawn point to the current room (must have RESPAWN flag)."""
+    if not character.location:
+        return True
+    
+    if "RESPAWN" not in character.location.flags:
+        await character.send("You cannot bind your spirit to this location.")
+        return True
+    
+    character.respawn_room_id = character.location.dbid
+    character.is_dirty = True
+    await character.send(f"<g>You bind your spirit to {character.location.name}.<x>")
+    await character.send("<y>You will return here when you die.")
+    return True
+
 async def cmd_release(character: 'Character', world: 'World', args_str: str) -> bool:
     """Releases a dead character's spirit to their tether point."""
     if character.status != "DEAD":
         await character.send("You are not dead.")
         return True
-
-    await character.send("{RYou release your spirit from your corpse...{x")
     
-    # Apply tether loss
-    initial_tether = character.spiritual_tether
-    character.spiritual_tether = max(0, initial_tether - 1)
-    log.info("Character %s tether decreased from %d to %d.", character.name, initial_tether, character.spiritual_tether)
-    await character.send("{RYour connection to the living world weakens...{x")
-    
-    if character.spiritual_tether <= 0:
-        log.critical("!!! PERMANENT DEATH: Character %s (ID: %s) has reached 0 spiritual tether!", character.name, character.dbid)
-        await character.send("{R*** Your soul feels irrevocably severed! ***{x")
+    # Decrease spiritual tether
+    character.spiritual_tether -= 1
+    character.is_dirty = True
 
-    # Call the existing respawn logic
+    if character.spiritual_tether < 0:
+        await character.send("\r\n<R>═══════════════════════════════════════════════════════<x>")
+        await character.send("<R>        Your spirit has been severed from Chrozal.        <x>")
+        await character.send("<R>             This character has been lost.                <x>")
+        await character.send("<R>═══════════════════════════════════════════════════════<x>\r\n")
+
+        log.critical("PERMANENT DEATH: Character %s (ID: %s) has reached 0 spiritual tether!",
+                     character.name, character.dbid)
+        
+        # Drop all items and coinage at death location
+        if character.location:
+        # Drop coinage
+            if character.coinage > 0:
+                await character.location.add_coinage(character.coinage, world)
+                character.coinage = 0
+        
+        # Drop all inventory items
+            for item in list(character._inventory_items.values()):
+                item.container_id = None
+                item.room = character.location
+                character.location.item_instance_ids.append(item.id)
+                world._all_item_instances[item.id] = item
+            character._inventory_items.clear()
+            
+        # Drop all equipped items
+            for item in list(character._equipped_items.values()):
+                item.container_id = None
+                item.room = character.location
+                character.location.item_instance_ids.append(item.id)
+                world._all_item_instances[item.id] = item
+            character._equipped_items.clear()
+        
+            await character.location.broadcast(
+                f"\r\n<R>{character.name}'s possessions scatter across the ground as their spirit departs forever.<x>\r\n"
+            )
+    
+        # TODO: Transfer bank contents to auction house for estate sale
+
+
+        # Mark character as permanently dead
+        character.status = "PERMADEAD"
+        await character.save()
+
+        #Disconnect the player after a delay
+        await asyncio.sleep(5.0)
+        if character.writer and not character.writer.is_closing():
+            character.writer.close()
+            await character.writer.wait_closed()
+
+        return True
+    
+    # Normal Respawn
+    await character.send("<R>You release your spirit from your corpse...<x>")
     await world.respawn_character(character)
+    await character.send(f"<y>Your spiritual tether weakens. ({character.spiritual_tether} remaining)<x>")
+
     return True
-    
                         

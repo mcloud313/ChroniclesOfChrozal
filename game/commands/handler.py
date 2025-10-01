@@ -23,6 +23,7 @@ from . import trade as trade_cmds
 from . import social as social_cmds
 from . import rogue as rogue_cmds
 from . import time as time_cmds
+from . import roleplay as roleplay_cmds
 
 log = logging.getLogger(__name__)
 
@@ -43,8 +44,6 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "abilities": general_cmds.cmd_abilities,
     "advance": general_cmds.cmd_advance, "level": general_cmds.cmd_advance,
     "meditate": general_cmds.cmd_meditate,
-    "emote": general_cmds.cmd_emote, ":": general_cmds.cmd_emote,
-    "tell": general_cmds.cmd_tell,
     "sit": general_cmds.cmd_sit,
     "stand": general_cmds.cmd_stand,
     "lie": general_cmds.cmd_lie,
@@ -96,12 +95,34 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "eat": item_cmds.cmd_eat,
     "light": item_cmds.cmd_light,
     "snuff": item_cmds.cmd_snuff,
+    "pickpocket": rogue_cmds.cmd_pickpocket,
+
+    #Roleplay commands
+    "/me": roleplay_cmds.cmd_me,
+    "pose": roleplay_cmds.cmd_pose,
+    "whisper": roleplay_cmds.cmd_whisper,
+    "wave": roleplay_cmds.cmd_wave,
+    "nod": roleplay_cmds.cmd_nod,
+    "shake": roleplay_cmds.cmd_shake,
+    "salute": roleplay_cmds.cmd_salute,
+    "bow": roleplay_cmds.cmd_bow,
+    "laugh": roleplay_cmds.cmd_laugh,
+    "chuckle": roleplay_cmds.cmd_chuckle,
+    "grin": roleplay_cmds.cmd_grin,
+    "smile": roleplay_cmds.cmd_smile,
+    "frown": roleplay_cmds.cmd_frown,
+    "sigh": roleplay_cmds.cmd_sigh,
+    "shrug": roleplay_cmds.cmd_shrug,
+    "flex": roleplay_cmds.cmd_flex,
+    "whistle": roleplay_cmds.cmd_whistle,
+    "yawn": roleplay_cmds.cmd_yawn,
+    "point": roleplay_cmds.cmd_point,
+
 
     # Skill/Progression Commands
     "spend": skill_cmds.cmd_spend, "invest": skill_cmds.cmd_spend,
     "improve": skill_cmds.cmd_improve,
-    "pickpocket": rogue_cmds.cmd_pickpocket,
-
+    
     # Movement Command
     "go": movement_cmds.cmd_go,
     "drag": social_cmds.cmd_drag,
