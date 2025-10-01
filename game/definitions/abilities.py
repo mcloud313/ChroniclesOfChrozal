@@ -183,11 +183,11 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "messages": {
             # --- THIS BLOCK IS FIXED ---
             # Double the curly braces to escape them for the .format() method
-            "caster_self_complete": "{<W>}You gesture and a shimmering magical barrier forms around you.{<x>}",
-            "apply_msg_self": "{<W>}An shimmering barrier surrounds you!{<x>}",
-            "apply_msg_room": "{<W>}{caster_name} is suddenly surrounded by a shimmering barrier.{<x>}",
-            "expire_msg_self": "{<W>}The shimmering barrier around you dissipates.{<x>}",
-            "expire_msg_room": "{<W>}The shimmering barrier surrounding {target_name} dissipates.{<x>}"
+            "caster_self_complete": "<W>You gesture and a shimmering magical barrier forms around you.<x>",
+            "apply_msg_self": "<W>An shimmering barrier surrounds you!<x>",
+            "apply_msg_room": "<W>{caster_name} is suddenly surrounded by a shimmering barrier.<x>",
+            "expire_msg_self": "<W>The shimmering barrier around you dissipates.<x>",
+            "expire_msg_room": "<W>The shimmering barrier surrounding {target_name} dissipates.<x>"
         }
     },
     "chill touch": {

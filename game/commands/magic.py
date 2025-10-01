@@ -132,10 +132,8 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
 
     character.casting_info = {
         "key": spell_key,
-        "name": display_name,
-        "target_id": target_id,
-        "target_type": target_obj_type_str,
-        "target_name": target_display_name,
+        "target_id": character.dbid,
+        "target_type": "character",
         "cast_time": cast_time,
     }
     
