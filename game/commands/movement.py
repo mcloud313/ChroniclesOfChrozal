@@ -77,13 +77,10 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
 
     # --- 5. Announce Arrival ---
     opposite_direction = utils.get_opposite_direction(exit_name)
+    canonical_opp = utils.get_canonical_direction(opposite_direction) or opposite_direction
 
     if is_group_move:
         arrival_msg = f"\r\n{character.name}'s group arrives.\r\n"
-    elif opposite_direction:
-        # Use the canonical form for display
-        canonical_opp = utils.get_canonical_direction(opposite_direction) or opposite_direction
-        arrival_msg = f"\r\n{character.name} arrives from the {canonical_opp}.\r\n"
     else:
         arrival_msg = f"\r\n{character.name} arrives from the {canonical_opp}.\r\n"
 

@@ -806,16 +806,11 @@ class World:
         from .definitions import weather as weather_defs
 
         current_season = calendar_defs.get_season(self.game_month)
-        log.info(f"WEATHER INIT: Updating weather for season {current_season}, {len(self.areas)} areas")
 
         for area_id, area_data in self.areas.items():
-            log.info(f"WEATHER INIT: Processing area {area_id}: {area_data.get('name')}")
             climate = area_data.get("climate", weather_defs.CLIMATE_TEMPERATE)
-            log.info(f"WEATHER INIT: Area {area_id} climate: {climate}")
-
             weather_table = weather_defs.WEATHER_TABLES.get(current_season, {}).get(climate)
             if not weather_table:
-                log.warning(f"WEATHER INIT: No weather table for season={current_season}, climate={climate}")
                 continue
 
             conditions, weights = zip(*weather_table)

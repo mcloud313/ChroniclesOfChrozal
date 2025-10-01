@@ -112,31 +112,32 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
     else:
         target_char = character.location.get_character_by_name(target_name_input)
         target_mob = character.location.get_mob_by_name(target_name_input)
-        if target_char and target_char.is_alive():
-            target_obj, target_obj_type_str = target_char, "CHAR"
-        elif target_mob and target_mob.is_alive():
-            target_obj, target_obj_type_str = target_mob, "MOB"
-
-        target_char = character.location.get_character_by_name(target_name_input)
-        target_mob = character.location.get_mob_by_name(target_name_input)
 
         if target_char and target_char.is_alive():
             effect_type = ability_data.get("effect_type")
-            is_offensive = effect_type in [ability_defs.EFFECT_DAMAGE, ability_defs.EFFECT_DEBUFF, 
-                                   ability_defs.EFFECT_MODIFIED_ATTACK, ability_defs.EFFECT_STUN_ATTEMPT]
-            
+            is_offensive = effect_type in [ability_defs.EFFECT_DAMAGE, ability_defs.EFFECT_DEBUFF,
+                                           ability_defs.EFFECT_MODIFIED_ATTACK, ability_defs.EFFECT_STUN_ATTEMPT]
+
             if is_offensive and target_char != character:
                 if "SAFE_ZONE" in character.location.flags:
-                    await character.send("{RThe guards intervene! You cannot attack other players here.{x")
+                    await character.send("<R>The guards intervene! You cannot attack other players here.<x>")
                     return True
                 if character.group and target_char in character.group.members:
-                    await character.send("You can't use hostile abilities on your own group members!")
+                    await character.send("You can't use hostile abilities on your own group.")
                     return True
-                
-            target_obj, target_obj_type_str = target_char, "CHAR"
-        elif target_mob and target_mob.is_alive():
-            target_obj, target_obj_type_str = target_mob, "MOB"
 
+            target_obj = target_char
+            target_id = target_char.dbid
+            target_obj_type_str = "character"
+
+        elif target_mob and target_mob.is_alive():
+            target_obj = target_mob
+            target_id = target_mob.instance_id
+            target_obj_type_str = "mob"
+        else:
+            await character.send(f"You don't see {target_name_input} here.")
+            return True
+            
     # --- 4. Execute Ability ---
     # Break stealth if hidden
     if character.is_hidden:

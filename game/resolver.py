@@ -155,7 +155,6 @@ async def resolve_physical_attack(
     # --- 8. Apply Final Roundtime for a successful hit ---
     attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
 
-
 async def resolve_ranged_attack(
     attacker: Union[Character, Mob],
     target: Union[Character, Mob],
