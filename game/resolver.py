@@ -361,6 +361,8 @@ async def resolve_ability_effect(
     if required_target_type != ability_defs.TARGET_NONE and (
         target is None or not target.is_alive() or (target != caster and target.location != caster.location)
     ):
+        log.info(f"RESOLVE DEBUG: Target object: {target}")
+        log.info(f"RESOLVE DEBUG: Target is_alive: {target.is_alive() if target else 'N/A'}")
         await caster.send("Your target is no longer valid.")
         return
 

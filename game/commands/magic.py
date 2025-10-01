@@ -130,12 +130,27 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
     if target_obj:
         target_display_name = "yourself" if target_obj == character else target_obj.name
 
+    if target_obj_type_str == "SELF" or target_obj == character:
+        final_target_id = character.dbid
+        final_target_type = "character"
+    elif target_obj_type_str == "MOB":
+        final_target_id = target_obj.instance_id  # ← Use mob's instance_id
+        final_target_type = "mob"
+    elif target_obj_type_str == "CHAR":
+        final_target_id = target_obj.dbid
+        final_target_type = "character"
+    else:
+        final_target_id = None
+        final_target_type = "NONE"
+
+
     character.casting_info = {
-        "key": spell_key,
-        "target_id": character.dbid,
-        "target_type": "character",
-        "cast_time": cast_time,
-    }
+    "key": spell_key,
+    "target_id": final_target_id,
+    "target_type": final_target_type,
+    "target_name": target_obj.name if target_obj else "nothing",
+    "cast_time": cast_time,
+}
     
     log.debug("Character %s starting cast: %s", character.name, character.casting_info)
 
