@@ -357,8 +357,6 @@ class Mob:
                 char for char in self.location.characters
                 if char.is_alive() and not char.is_hidden
             ]
-            if potential_targets > 1:
-                log.info(f"STEALTH DEBUG: Mob {self.name} checking aggro. Visible targets: {[c.name for c in potential_targets]}")
             if potential_targets:
                 self.target = random.choice(potential_targets)
                 self.is_fighting = True
