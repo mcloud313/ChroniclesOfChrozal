@@ -25,7 +25,7 @@ async def cmd_list(character: 'Character', world: 'World', args_str: str) -> boo
         return True
     
     # 3. Build the formatted output
-    output = ["\n\r{c--- Items for Sale ---{x"]
+    output = ["\n\r<c>--- Items for Sale ---<x>"]
     for shop_item in inventory:
         template = world.get_item_template(shop_item['item_template_id'])
         if not template:
@@ -44,7 +44,7 @@ async def cmd_list(character: 'Character', world: 'World', args_str: str) -> boo
         price_str = f"[{utils.format_coinage(price):>10}]"
         output.append(f" {price_str} {template['name']} {stock_display}")
 
-    output.append("{c----------------------{x")
+    output.append("<c>----------------------<x>")
     await character.send("\n\r".join(output))
     return True
 

@@ -319,7 +319,7 @@ async def cmd_advance(character: 'Character', world: 'World', args_str: str) -> 
              character.name, character.level, hp_gain, essence_gain, sp_gain, ap_gain)
 
     level_msg = [
-        "\r\n{G*** CONGRATULATIONS! ***{x",
+        "\r\n<G>*** CONGRATULATIONS! ***<x>",
         f"You have advanced to level {character.level}!",
         "=" * 30,
         f"Maximum HP increased by {int(hp_gain)} (Now: {int(character.max_hp)}).",

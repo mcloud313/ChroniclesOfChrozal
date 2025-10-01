@@ -43,6 +43,7 @@ async def cmd_hide(character: 'Character', world: 'World', args_str: str) -> boo
 
     if not spotted:
         character.is_hidden = True
+        log.info(f"STEALTH DEBUG: {character.name} set is_hidden=True")
         await character.send("You slip into the shadows.")
 
     return True

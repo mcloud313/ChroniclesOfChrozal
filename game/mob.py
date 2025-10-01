@@ -298,7 +298,7 @@ class Mob:
         if self.is_fighting and self.target:
             if isinstance(self.target, Character) and self.target.is_hidden:
                 self.target = None
-                self.fighting = False
+                self.is_fighting = False
                 await self.location.broadcast(f"\r\n{self.name.capitalize()} looks around in confusion.\r\n")
 
                 if self.has_flag("AGGRESSIVE"):
@@ -357,6 +357,7 @@ class Mob:
                 char for char in self.location.characters
                 if char.is_alive() and not char.is_hidden
             ]
+            log.info(f"STEALTH DEBUG: Mob {self.name} checking aggro. Visible targets: {[c.name for c in potential_targets]}")
             if potential_targets:
                 self.target = random.choice(potential_targets)
                 self.is_fighting = True

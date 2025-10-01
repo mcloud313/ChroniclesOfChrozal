@@ -18,8 +18,8 @@ COINAGE_KEYWORDS = {"coins", "coin", "money", "coinage", "talons", "shards", "or
 
 async def cmd_inventory(character: 'Character', world: 'World', args_str: str) -> bool:
     """Displays character's unique item instances."""
-    output = ["\r\n{c========================= Inventory ========================{x"]
-    output.append("{cYou are wearing:{x")
+    output = ["\r\n<c>========================= Inventory ========================<x>"]
+    output.append("<c>You are wearing:<x>")
     if not character._equipped_items:
         output.append(" Nothing.")
     else:
@@ -28,7 +28,7 @@ async def cmd_inventory(character: 'Character', world: 'World', args_str: str) -
             slot_display = slot.replace('_', ' ').title()
             output.append(f" <{slot_display:<12}> {item.name}")
     
-    output.append("\r\n{cYou are carrying:{x")
+    output.append("\r\n<c>You are carrying:<x>")
     if not character._inventory_items:
         output.append(" Nothing.")
     else:
@@ -37,7 +37,7 @@ async def cmd_inventory(character: 'Character', world: 'World', args_str: str) -
 
     output.append(f"\r\nCoins: {utils.format_coinage(character.coinage)}")
     output.append(f"Weight: {character.get_current_weight()}/{character.get_max_weight()} stones")
-    output.append("{c========================================================={x")
+    output.append("<c>=========================================================<x>")
     await character.send("\r\n".join(output))
     return True
 
