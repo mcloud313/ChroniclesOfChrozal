@@ -253,6 +253,7 @@ class Character:
 
         self.active_song: Optional[str] = None
         self.active_song_name: Optional[str] = None
+        self.pose: Optional[str] = None
 
         # --- Data Structures to be populated by load_related_data() ---
         self.stats: Dict[str, int] = {}

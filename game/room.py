@@ -91,9 +91,16 @@ class Room:
             return "It is pitch black..."
 
         # Display other characters
-        other_chars = sorted([c.name for c in self.characters if c != looker])
+        other_chars = []
+        for c in self.characters:
+            if c != looker:
+                display = c.name
+                if hasattr(c, 'pose') and c.pose:
+                    display += f" ({c.pose})"
+                other_chars.append(display)
+        
         if other_chars:
-            output_lines.append("Also Here: " + ", ".join(other_chars) + ".")
+            output_lines.append("Also Here: " + ", ".join(sorted(other_chars)) + ".")
 
         # Display mobs
         mob_counts = {}

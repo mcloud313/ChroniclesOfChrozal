@@ -64,6 +64,8 @@ CANONICAL_DIRECTIONS_MAP = {
 
 def get_canonical_direction(direction: str) -> Optional[str]:
     """Returns the canonical (short) form of a direction string (lowercase)."""
+    if direction is None:
+        return None
     return CANONICAL_DIRECTIONS_MAP.get(direction.lower())
 
 def get_opposite_direction(direction: str) -> Optional[str]:
