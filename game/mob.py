@@ -201,8 +201,6 @@ class Mob:
 
     def respawn(self):
         """Resets mob state for respawning."""
-        log.info("RESPAWN: %s (Instance: %d) respawns in Room %d.",
-                 self.name.capitalize(), self.instance_id, getattr(self.location, 'dbid', '?'))
         self.hp = self.max_hp
         self.target = None
         self.is_fighting = False

@@ -303,12 +303,6 @@ async def resolve_ability_effect(
     ability_key = ability_data.get("name", "?").lower()
     required_target_type = ability_data.get("target_type")
 
-    log.info(f"RESOLVE DEBUG: Starting resolution")
-    log.info(f"  - caster: {caster.name}")
-    log.info(f"  - target_id: {target_ref}")
-    log.info(f"  - target_type: {target_type_str}")
-    log.info(f"  - ability: {ability_data.get('name')}")
-
     # 1. --- Area of Effect (AoE) Logic ---
     if required_target_type == ability_defs.TARGET_AREA:
         if not caster.location: return

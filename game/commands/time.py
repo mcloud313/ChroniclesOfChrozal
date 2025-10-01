@@ -45,10 +45,7 @@ async def cmd_time(character: Character, world: World, args_str: str) -> bool:
         celestial_str = get_celestial_body_position(world.game_hour)
         await character.send(celestial_str)
 
-        area_id = character.location.area_id
-        log.info(f"TIME DEBUG: Checking weather for area {area_id}")
-        log.info(f"TIME DEBUG: area_weather keys: {list(world.area_weather.keys())}")
-        
+        area_id = character.location.area_id     
         # Weather information for outdoor characters
         current_weather = world.area_weather.get(character.location.area_id)
         if current_weather:

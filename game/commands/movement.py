@@ -58,12 +58,16 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
 
     # Broadcast the departure message first.
     if is_group_move:
-        await current_room.broadcast(f"\r\n{character.name}'s group {departure_message}.\r\n")
+        await current_room.broadcast(f"\r\n{character.name}'s group leaves {exit_name}.\r\n", exlclude=set(chars_to_move))
     else:
         await current_room.broadcast(f"\r\n{character.name} {departure_message}.\r\n", exclude={character})
     
     for char in chars_to_move:
         current_room.remove_character(char)
+
+    for char in chars_to_move:
+        if char != character:
+            await char.send(f"Your leader moves the group {exit_name}")
 
     # --- 4. Update Character State & Add to New Room ---
     for char in chars_to_move:
@@ -73,15 +77,17 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
 
     # --- 5. Announce Arrival ---
     opposite_direction = utils.get_opposite_direction(exit_name)
-    arrival_msg = ""
+
     if is_group_move:
         arrival_msg = f"\r\n{character.name}'s group arrives.\r\n"
     elif opposite_direction:
-        arrival_msg = f"\r\n{character.name} arrives from the {opposite_direction}.\r\n"
+        # Use the canonical form for display
+        canonical_opp = utils.get_canonical_direction(opposite_direction) or opposite_direction
+        arrival_msg = f"\r\n{character.name} arrives from the {canonical_opp}.\r\n"
     else:
-        arrival_msg = f"\r\n{character.name} arrives.\r\n"
-    
-    await target_room.broadcast(arrival_msg)
+        arrival_msg = f"\r\n{character.name} arrives from the {canonical_opp}.\r\n"
+
+    await target_room.broadcast(arrival_msg, exclude={character})
 
     # --- 6. Send Room Info to All Movers ---
     for char in chars_to_move:

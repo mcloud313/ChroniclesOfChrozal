@@ -362,10 +362,6 @@ class World:
                         p.essence -= cost
                         try:
                             await resolver.resolve_ability_effect(p, info.get("target_id"), info.get("target_type"), ability_data, self)
-                            log.info(f"SPELL RESOLVE DEBUG: {p.name} casting {ability_key}")
-                            log.info(f"  - target_id: {info.get('target_id')}")
-                            log.info(f"  - target_type: {info.get('target_type')}")
-                            log.info(f"  - ability target_type: {ability_data.get('target_type')}")
                         except Exception:
                             log.exception("Error resolving ability effect '%s' for %s", ability_key, p.name)
                             await p.send("Something went wrong as your action finished.")
