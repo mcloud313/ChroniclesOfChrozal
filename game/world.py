@@ -564,8 +564,6 @@ class World:
                 observers.append(char)
             # -----------------------------------------------------------------
             mobs_in_room = [m for m in hidden_entity.location.mobs if m.is_alive()]
-            log.info(f"STEALTH CHECK: {hidden_entity.name} (DC:{stealth_dc}) - Room has {len(mobs_in_room)} mobs, {len(observers)} player observers")
-
             for observer in observers:
                 # Mobs can't detect hidden players in this implementation yet, but players can detect mobs
                 if utils.skill_check(observer, "perception", dc=stealth_dc)['success']:
@@ -592,8 +590,7 @@ class World:
                 
                     if success:
                         hidden_entity.is_hidden = False
-                        log.info(f"STEALTH CHECK: Mob {mob.name} detected {hidden_entity.name}!")
-                    
+                        
                         if isinstance(hidden_entity, Character):
                             await hidden_entity.send(f"<R>{mob.name.capitalize()} spots you!<x>")
                             await hidden_entity.location.broadcast(

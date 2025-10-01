@@ -63,10 +63,10 @@ def get_season(month: int) -> str:
     Returns the name of the season for a given month number (1-12).
     """
     if month in [12, 1, 2]:
-        return "Winter"
+        return "winter"
     elif month in [3, 4, 5]:
-        return "Spring"
+        return "spring"
     elif month in [6, 7, 8]:
-        return "Summer"
+        return "summer"
     else:  # months 9, 10, 11
-        return "Autumn"
+        return "autumn"
