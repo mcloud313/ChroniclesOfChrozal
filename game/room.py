@@ -190,15 +190,13 @@ class Room:
         living_mobs = [mob for mob in self.mobs if mob.is_alive()]
         if not living_mobs:
             return
-
-        tasks = [mob.simple_ai_tick(dt, world) for mob in living_mobs]
-    
-        # Run all AI ticks concurrently and log any that fail
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                mob_name = getattr(living_mobs[i], 'name', 'Unknown Mob')
-                log.exception("Room %d: Exception in AI tick for mob '%s'", self.dbid, mob_name)
+        
+        # Run each AI tick individually so we can catch and log exceptions properly
+        for mob in living_mobs:
+            try:
+                await mob.simple_ai_tick(dt, world)
+            except Exception as e:
+                log.exception("Room %d: Exception in AI tick for mob '%s'", self.dbid, mob.name)
         
     async def add_coinage(self, amount: int, world: 'World') -> bool:
         """Adds or removes coinage from the room's cache and the database."""
