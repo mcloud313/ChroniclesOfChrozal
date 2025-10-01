@@ -379,9 +379,9 @@ async def cmd_abilities(character: 'Character', world: 'World', args_str: str) -
 async def cmd_skills(character: 'Character', world: 'World', args_str: str) -> bool:
     """Displays all available skills and the character's rank in each."""
     output = [
-        "\r\n{c================== Skills =================={x",
+        "\r\n<c>================== Skills ==================<x>",
         f" Unspent Skill Points: {character.unspent_skill_points}",
-        "{c------------------------------------------{x"
+        "<c>------------------------------------------<x>"
     ]
     
     # --- FIX: Iterate through the complete list of skills from the attribute map ---
@@ -389,7 +389,7 @@ async def cmd_skills(character: 'Character', world: 'World', args_str: str) -> b
         rank = character.get_skill_rank(skill_name)
         output.append(f" {skill_name.title():<25}: {rank}")
         
-    output.append("{c=========================================={x")
+    output.append("<c>==========================================<x>")
     await character.send("\r\n".join(output))
     return True
 

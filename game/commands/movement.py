@@ -102,8 +102,8 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
         if target_room.coinage > 0:
             ground_items_output.append(utils.format_coinage(target_room.coinage))
 
-        if ground_items_output:
-            await char.send("You also see here: " + ", ".join(ground_items_output) + ".")
+        # if ground_items_output:
+        #     await char.send("You also see here: " + ", ".join(ground_items_output) + ".")
 
         if leader_penalty > 0 and char == character:
             await character.send(f"Your armor slows your movement (+{leader_penalty:.1f}s).")

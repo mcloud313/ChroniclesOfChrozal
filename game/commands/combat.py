@@ -29,10 +29,6 @@ async def cmd_attack(character: Character, world: World, args_str: str) -> bool:
     if not character.location:
         return True
     
-    if character.is_hidden:
-        character.is_hidden = False
-        log.info(f"STEALTH DEBUG: {character.name} forced visible BEFORE attack")
-    
     # --- Step 1: Try to find a mob target first
     target = character.location.get_mob_by_name(args_str)
     

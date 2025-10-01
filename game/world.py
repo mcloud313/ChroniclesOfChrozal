@@ -597,20 +597,20 @@ class World:
             # Check if hunger status has changed to a worse state and notify
             if new_hunger_status != old_hunger_status:
                 if "Peckish" in new_hunger_status:
-                    await char.send("{YYou are starting to feel peckish.{x")
+                    await char.send("<Y>You are starting to feel peckish.<x>")
                 elif "Hungry" in new_hunger_status:
-                    await char.send("{YYour stomach rumbles loudly.{x")
+                    await char.send("<Y>Your stomach rumbles loudly.<x>")
                 elif "Starving" in new_hunger_status:
-                    await char.send("{RYou are starving! Your health regeneration has stopped!{x")
+                    await char.send("<R>You are starving! Your health regeneration has stopped!<x>")
 
             # Check if thirst status has changed to a worse state and notify
             if new_thirst_status != old_thirst_status:
                 if "Thirsty" in new_thirst_status:
-                    await char.send("{yYou feel thirsty.{x")
+                    await char.send("<y>You feel thirsty.<x>")
                 elif "Parched" in new_thirst_status:
-                    await char.send("{yYour mouth feels dry and parched.{x")
+                    await char.send("<y>Your mouth feels dry and parched.<x>")
                 elif "Dehydrated" in new_thirst_status:
-                    await char.send("{rYou are dehydrated! Your essence regeneration has stopped!{x")
+                    await char.send("<r>You are dehydrated! Your essence regeneration has stopped!<x>")
 
     async def update_regen(self, dt: float):
         """Ticker: Calls the regeneration logic for all active characters."""
