@@ -391,7 +391,7 @@ async def cmd_examine(character: ' Character', world: 'World', args_str: str) ->
         return True
     
     # --- Use color codes for italics on the UUID and call our new helper
-    uuid_str = f"{{i({item_to_examine.id}){{x"
+    uuid_str = f"<i>({item_to_examine.id})<x>"
 
     output = [
         f"\n\r--- {item_to_examine.name} {uuid_str} ---",
@@ -540,12 +540,12 @@ async def cmd_open(character: 'Character', world: 'World', args_str: str) -> boo
     # We check for a 'trap' key in the instance_stats, which holds the trap's details.
     if trap_data := container.instance_stats.get("trap"):
         if trap_data.get("is_active"):
-            await character.send(f"{{RYou open the {container.name} and trigger a trap!{{x")
+            await character.send(f"<R>You open the {container.name} and trigger a trap!<x>")
             
             # Apply damage or other effects from the trap
             if damage := trap_data.get("damage", 0):
                 await outcome_handler.apply_damage(character, damage)
-                await character.send(f"{{rYou take {damage} damage!{{x")
+                await character.send(f"<r>You take {damage} damage!<x>")
 
             # Deactivate the trap so it doesn't fire again
             trap_data["is_active"] = False

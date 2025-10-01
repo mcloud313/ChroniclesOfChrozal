@@ -34,7 +34,7 @@ def apply_damage(target: Union[Character, Mob], final_damage: int):
         if not check_result['success']:
             spell_name = target.casting_info.get("name", "their spell")
             target.casting_info = None # Interrupt the spell
-            asyncio.create_task(target.send(f"{{RThe pain causes you to lose concentration on {spell_name}!{{x"))
+            asyncio.create_task(target.send(f"<R>The pain causes you to lose concentration on {spell_name}!<x>"))
     # ----------------------------
     
     target.hp = max(0.0, target.hp - final_damage)
@@ -82,13 +82,13 @@ async def handle_durability(attacker: Union[Character, Mob], target: Union[Chara
             await world.db_manager.update_item_condition(attack_source.id, attack_source.condition)
 
             if attack_source.condition <= 0:
-                await attacker.send(f"{{RYour {attack_source.name} shatters into pieces!{{x")
+                await attacker.send(f"<R>Your {attack_source.name} shatters into pieces!<x>")
                 if attack_source.wear_location:
                     del attacker._equipped_items[attack_source.wear_location[0]]
                 del world._all_item_instances[attack_source.id]
                 await world.db_manager.delete_item_instance(attack_source.id)
             elif attack_source.condition <= 10:
-                await attacker.send(f"{{yYour {attack_source.name} is badly damaged.{{x")
+                await attacker.send(f"<y>Your {attack_source.name} is badly damaged.<x>")
 
     # Target armor durability
     if isinstance(target, Character):
@@ -99,13 +99,13 @@ async def handle_durability(attacker: Union[Character, Mob], target: Union[Chara
             await world.db_manager.update_item_condition(armor_hit.id, armor_hit.condition)
 
             if armor_hit.condition <= 0:
-                await target.send(f"{{RYour {armor_hit.name} is destroyed by the blow!{{x")
+                await target.send(f"<R>Your {armor_hit.name} is destroyed by the blow!<x>")
                 if armor_hit.wear_location:
                     del target._equipped_items[armor_hit.wear_location[0]]
                 del world._all_item_instances[armor_hit.id]
                 await world.db_manager.delete_item_instance(armor_hit.id)
             elif armor_hit.condition <= 10:
-                await target.send(f"{{yYour {armor_hit.name} was damaged.{{x")
+                await target.send(f"<y>Your {armor_hit.name} was damaged.<x>")
 
 async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Character, Mob], 
                                hit_result: HitResult, damage_info: 'DamageInfo', final_damage: int):
@@ -134,13 +134,13 @@ async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Ch
         verb = "hit" if not hit_result.is_crit else "CRITICALLY HIT"
         clean_weapon_name = utils.strip_article(attack_name)
         msg = (f"Your {clean_weapon_name} {verb} {target_name}!\n\r"
-               f"You deal {{y{final_damage}{{x damage. {hit_details} {damage_details}")
+               f"You deal <y>{final_damage}<x> damage. {hit_details} {damage_details}")
         await attacker.send(msg)
 
     # --- Message to Target (if player) ---
     if isinstance(target, Character):
-        msg = (f"{{R{attacker_name}'s {attack_name} {hit_desc.lower()} you!{{x\n\r"
-               f"{{RYou take {{y{final_damage}{{x damage. {hit_details} {damage_details} "
+        msg = (f"<R>{attacker_name}'s {attack_name} {hit_desc.lower()} you!<x>\n\r"
+               f"<R>You take {final_damage}<x> damage. {hit_details} {damage_details} "
                f"({int(target.hp)}/{int(target.max_hp)} HP)")
         await target.send(msg)
     
@@ -167,7 +167,7 @@ async def send_magical_attack_messages(caster: Union[Character, Mob], target: Un
     # Only build the verbose detail strings if requested.
     if show_roll_details:
         rating_name = "APR" if damage_info.damage_type in ["arcane", "fire", "cold"] else "DPR"
-        hit_details = f"{{i[Roll:{hit_result.roll} + {rating_name}:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]{{x"
+        hit_details = f"<i>[Roll:{hit_result.roll} + {rating_name}:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]<x>"
         mitigation = damage_info.pre_mitigation_damage - final_damage
 
         effective_bv = target.barrier_value
@@ -175,20 +175,20 @@ async def send_magical_attack_messages(caster: Union[Character, Mob], target: Un
         defense_name = "BV" if effective_bv >= effective_av else "AV"
         defense_value = max(effective_bv, effective_av)
         
-        mit_details = f"{{i[Dmg:{damage_info.pre_mitigation_damage}(Base) - {mitigation}(SDS:{target.sds}, {defense_name}:{defense_value}) = {final_damage}]{{x"
+        mit_details = f"<i>[Dmg:{damage_info.pre_mitigation_damage}(Base) - {mitigation}(SDS:{target.sds}, {defense_name}:{defense_value}) = {final_damage}]<x>"
         details_str = f" {hit_details} {mit_details}"
 
     # --- Message to Caster (if player) ---
     if isinstance(caster, Character):
         verb = "critically hit" if hit_result.is_crit else "hit"
         msg = (f"Your {spell_name} {verb} {target_name}!\n\r"
-               f"You deal {{y{final_damage}{{x damage.{details_str}")
+               f"You deal <y>{final_damage}<x> damage.{details_str}")
         await caster.send(msg)
 
     # --- Message to Target (if player) ---
     if isinstance(target, Character):
-        msg = (f"{{R{caster_name}'s {spell_name} {hit_desc.lower()} you!{{x\n\r"
-               f"{{RYou take {{y{final_damage}{{x damage.{details_str} "
+        msg = (f"<R>{caster_name}'s {spell_name} {hit_desc.lower()} you!<x>\n\r"
+               f"<R>You take {final_damage}<x> damage.{details_str} "
                f"({int(target.hp)}/{int(target.max_hp)} HP)")
         await target.send(msg)
     
@@ -206,19 +206,19 @@ async def send_ranged_attack_messages(attacker, target, hit_result, damage_info,
     attack_name = utils.strip_article(damage_info.attack_name)
 
     roll_details_attacker = (
-        f"{{i[Roll: {hit_result.roll} + RAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]"
-        f" -> Damage: {final_damage}{{x"
+        f"<i>[Roll: {hit_result.roll} + RAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]"
+        f" -> Damage: {final_damage}<x>"
     )
     roll_details_target = f"({int(target.hp)}/{int(target.max_hp)} HP)"
 
     # Attacker message
     if isinstance(attacker, Character):
-        msg = (f"Your {attack_name} {hit_desc.lower()}s {target.name} for {{y{final_damage}{{x damage! {roll_details_attacker}")
+        msg = (f"Your {attack_name} {hit_desc.lower()}s {target.name} for <y>{final_damage}<x> damage! {roll_details_attacker}")
         await attacker.send(msg)
 
     # Target message
     if isinstance(target, Character):
-        msg = (f"{{R{attacker.name.capitalize()}'s {attack_name} {hit_desc}s you for {{y{final_damage}{{x damage! {roll_details_target}")
+        msg = (f"<R>{attacker.name.capitalize()}'s {attack_name} {hit_desc}s you for {final_damage}<x> damage! {roll_details_target}")
         await target.send(msg)
 
     # Room message
@@ -271,7 +271,7 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
             coins_per_member = dropped_coinage // len(present_members)
             remainder_coins = dropped_coinage % len(present_members)
             
-            await killer.group.broadcast(f"{{yYour group receives {group_xp_total} XP and {utils.format_coinage(dropped_coinage)}!{{x")
+            await killer.group.broadcast(f"<y>Your group receives {group_xp_total} XP and {utils.format_coinage(dropped_coinage)}!<x>")
             
             for member in present_members:
                 await _award_xp_to_character(member, xp_per_member)

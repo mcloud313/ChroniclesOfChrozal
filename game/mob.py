@@ -281,10 +281,10 @@ class Mob:
                 self.is_fighting = True
 
                 await self.location.broadcast(
-                    f"\r\n{{R{self.name.capitalize()} leaps from the shadows to ambush {target.name}!{{x\r\n",
+                    f"\r\n<R>{self.name.capitalize()} leaps from the shadows to ambush {target.name}!<x>\r\n",
                     exclude={target}
                 )
-                await target.send(f"\r\n{{R{self.name.capitalize()} leaps from the shadows to ambush you!{{x\r\n")
+                await target.send(f"\r\n<R>{self.name.capitalize()} leaps from the shadows to ambush you!<x>\r\n")
 
                 # Find a special "ambush" attack, or fall back to a normal one.
                 ambush_attack = next((atk for atk in self.attacks if atk.get("name") == "ambush"), self.choose_attack())
@@ -300,6 +300,16 @@ class Mob:
                 self.target = None
                 self.fighting = False
                 await self.location.broadcast(f"\r\n{self.name.capitalize()} looks around in confusion.\r\n")
+
+                if self.has_flag("AGGRESSIVE"):
+                    potential_targets = [
+                        char for char in self.location.characters
+                        if char.is_alive() and not char.is_hidden
+                    ]
+                    if potential_targets:
+                        self.target = random.choice(potential_targets)
+                        self.is_fighting = True
+                        await self.location.broadcast(f"\r\n{self.name.capitalize()} spots {self.target.name}!\r\n")
             target_is_valid = (
                 self.target.is_alive() and
                 hasattr(self.target, 'location') and

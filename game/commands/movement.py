@@ -39,6 +39,14 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
 
     if "ROUGH_TERRAIN" in current_room.flags:
         move_rt *= 2
+
+    if character.location:
+        from ..definitions import weather as weather_defs
+        area_weather = world.area_weather.get(character.location.area_id, {})
+        condition = area_weather.get("condition", "CLEAR")
+        weather_effect = weather_defs.WEATHER_EFFECTS.get(condition, {})
+        weather_penalty = weather_effect.get("movement_penalty", 0.0)
+        move_rt += weather_penalty
     
     final_rt = move_rt
     if is_group_move:
@@ -147,7 +155,7 @@ async def cmd_move(character: 'Character', world: 'World', args_str: str, *, dir
     
     if not character.can_see():
         if random.random() < 0.25: # 25% chance to trip and fail
-            await character.send("{rYou stumble in the darkness and fall!{x}")
+            await character.send("{rYou stumble in the darkness and fall!<x>")
             await combat_logic.apply_damage(character, 3, "bludgeon", world)
             character.roundtime = 5.0
             character.stance = "Lying"
@@ -190,7 +198,7 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
     
     if not character.can_see():
         if random.random() < 0.25: # 25% chance to trip and fail
-            await character.send("{rYou stumble in the darkness and fall!{x}")
+            await character.send("{rYou stumble in the darkness and fall!<x>")
             await combat_logic.apply_damage(character, 3, "bludgeon", world)
             character.roundtime = 5.0
             character.stance = "Lying"
@@ -255,8 +263,8 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
         check_result = utils.skill_check(character, skill_name, dc=dc)
         
         feedback = (f"You attempt {skill_name.title()}... "
-                    f"{{c[Roll: {check_result['roll']} + Skill: {check_result['skill_value']} = {check_result['total_check']} vs DC: {check_result['dc']}]"
-                    f"{{x {{gSuccess!{{x" if check_result['success'] else f"{{x {{rFailure!{{x")
+                    f"<c>[Roll: {check_result['roll']} + Skill: {check_result['skill_value']} = {check_result['total_check']} vs DC: {check_result['dc']}]"
+                    f"<x> <g>Success!<x>" if check_result['success'] else f"<x> <r>Failure!<x>")
         await character.send(feedback)
 
         if not check_result['success']:
@@ -266,7 +274,7 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
             if (fail_damage := skill_check_data.get('fail_damage', 0)) > 0:
                 # Use the resolver to handle damage and concentration checks
                 await combat_logic.apply_damage(character, fail_damage)
-                await character.send(f"{{rYou take {int(fail_damage)} damage!{{x")
+                await character.send(f"<r>You take {int(fail_damage)} damage!<x>")
                 if not character.is_alive():
                     # The resolver doesn't handle defeat, so we check here.
                     await combat_logic.handle_defeat(character, character, world)

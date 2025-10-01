@@ -362,7 +362,7 @@ async def cmd_give(character: 'Character', world: 'World', args_str: str) -> boo
             "coinage": amount,
             "item": None
         }
-        await target_char.send(f"{{y{character.name} offers you {utils.format_coinage(amount)}. Type 'accept' or 'decline'.{{x")
+        await target_char.send(f"<y>{character.name} offers you {utils.format_coinage(amount)}. Type 'accept' or 'decline'.<x>")
         await character.send(f"You offer {utils.format_coinage(amount)} to {target_char.name}.")
         return True
     except ValueError:
@@ -383,7 +383,7 @@ async def cmd_give(character: 'Character', world: 'World', args_str: str) -> boo
         "coinage": 0,
         "item": item_to_give
     }
-    await target_char.send(f"{{y{character.name} offers you {item_to_give.name}. Type 'accept' or 'decline'.{{x")
+    await target_char.send(f"<y>{character.name} offers you {item_to_give.name}. Type 'accept' or 'decline'.<x>")
     await character.send(f"You offer {item_to_give.name} to {target_char.name}.")
     return True
 

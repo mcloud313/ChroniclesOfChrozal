@@ -183,11 +183,11 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "messages": {
             # --- THIS BLOCK IS FIXED ---
             # Double the curly braces to escape them for the .format() method
-            "caster_self_complete": "{{W}}You gesture and a shimmering magical barrier forms around you.{{x}}",
-            "apply_msg_self": "{{W}}An shimmering barrier surrounds you!{{x}}",
-            "apply_msg_room": "{{W}}{caster_name} is suddenly surrounded by a shimmering barrier.{{x}}",
-            "expire_msg_self": "{{W}}The shimmering barrier around you dissipates.{{x}}",
-            "expire_msg_room": "{{W}}The shimmering barrier surrounding {target_name} dissipates.{{x}}"
+            "caster_self_complete": "{<W>}You gesture and a shimmering magical barrier forms around you.{<x>}",
+            "apply_msg_self": "{<W>}An shimmering barrier surrounds you!{<x>}",
+            "apply_msg_room": "{<W>}{caster_name} is suddenly surrounded by a shimmering barrier.{<x>}",
+            "expire_msg_self": "{<W>}The shimmering barrier around you dissipates.{<x>}",
+            "expire_msg_room": "{<W>}The shimmering barrier surrounding {target_name} dissipates.{<x>}"
         }
     },
     "chill touch": {
@@ -380,11 +380,11 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "effect_details": {"name": "QuickReflexBuff", "type": "buff", "stat_affected": STAT_DODGE_VALUE, "amount": 5, "duration": 15.0},
         "roundtime": 1.0,
         "description": "Heightens your awareness...",
-        "apply_msg_self": "{{GYou feel your reflexes quicken!{{x",
+        "apply_msg_self": "<G>You feel your reflexes quicken!<x>",
         "apply_msg_target": None,
-        "apply_msg_room": "{{G{caster_name} seems to move with sudden alertness.{{x",
-        "expire_msg_self": "{{GYour heightened reflexes return to normal.{{x",
-        "expire_msg_room": "{{G{target_name} seems less twitchy.{{x",
+        "apply_msg_room": "<G>{caster_name} seems to move with sudden alertness.<x>",
+        "expire_msg_self": "<G>Your heightened reflexes return to normal.<x>",
+        "expire_msg_room": "<G>{target_name} seems less twitchy.<x>",
     },
     "apply poison": {
         "name": "Apply Poison",

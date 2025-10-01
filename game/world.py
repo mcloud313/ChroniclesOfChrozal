@@ -371,7 +371,7 @@ class World:
                         rt_penalty = p.total_av * 0.05
                         p.roundtime = base_rt + rt_penalty
                     else:
-                        await p.send(f"{{RYou lose focus ({ability_data.get('name', ability_key)}) - not enough essence!{{x")
+                        await p.send(f"<R>You lose focus ({ability_data.get('name', ability_key)}) - not enough essence!<x>")
 
     async def update_mob_ai(self, dt: float):
         tasks = [room.mob_ai_tick(dt, self) for room in self.rooms.values()]
@@ -533,7 +533,7 @@ class World:
     
     async def update_stealth_checks(self, dt: float):
         """Ticker: Periodically allows observers to detect hidden characters and mobs."""
-        if random.random() > 0.10: # 10% chance per second
+        if random.random() > 0.15: # 10% chance per second
             return
         
         # Find all hidden entities (characters and mobs)
@@ -570,9 +570,9 @@ class World:
                     hidden_entity.is_hidden = False
                     
                     if isinstance(hidden_entity, Character):
-                        await hidden_entity.send(f"{{RYou have been spotted by {observer.name}!{{x")
+                        await hidden_entity.send(f"<R>You have been spotted by {observer.name}!<x>")
                     
-                    await observer.send(f"{{YYou spot {hidden_entity.name} hiding in the shadows!{{x")
+                    await observer.send(f"<Y>You spot {hidden_entity.name} hiding in the shadows!<x>")
                     await observer.location.broadcast(
                         f"\r\n{observer.name} spots {hidden_entity.name} hiding in the shadows!\r\n",
                         exclude={observer, hidden_entity}
@@ -784,33 +784,50 @@ class World:
 
     async def _update_world_weather(self, is_initial_build: bool = False):
         """Called once per game day to update the weather in all areas."""
+        from .definitions import weather as weather_defs
+
         current_season = calendar_defs.get_season(self.game_month)
         log.info(f"Updating world weather for a new day. Season: {current_season}")
 
         for area_id, area_data in self.areas.items():
             climate = area_data.get("climate", weather_defs.CLIMATE_TEMPERATE)
-            
+
             weather_table = weather_defs.WEATHER_TABLES.get(current_season, {}).get(climate)
             if not weather_table:
                 continue
 
             conditions, weights = zip(*weather_table)
             new_condition = random.choices(conditions, weights=weights, k=1)[0]
-            
+
             old_condition = self.area_weather.get(area_id, {}).get("condition")
-            
+
+            # Store weather data
             self.area_weather[area_id] = {
                 "condition": new_condition,
-                "temperature": random.randint(30, 80) # Placeholder temperature
+                "temperature": random.randint(30, 80)
             }
 
-            # Don't broadcast on server startup
+            # Apply weather flags to all outdoor rooms in this area
+            weather_effect = weather_defs.WEATHER_EFFECTS.get(new_condition, {})
+            new_flags = set(weather_effect.get("room_flags", []))
+
+            for room in self.rooms.values():
+                if room.area_id == area_id and "OUTDOORS" in room.flags:
+                    # remove old weather flags
+                    if old_condition:
+                        old_effect = weather_defs.WEATHER_EFFECTS.get(old_condition, {})
+                        old_flags = set(old_effect.get("room_flags", []))
+                        room.flags -= old_flags
+
+                    # add new weather flags
+                    room.flags.update(new_flags)
+
+            # Broadcast weather change to players (skip on initial build)
             if not is_initial_build and new_condition != old_condition:
-                message = f"{{iThe weather in {area_data['name']} has changed to: {new_condition}.{{x"
-                # Find outdoor characters in this area to notify
+                message = f"<i>The weather in {area_data['name']} has changed to: {new_condition.lower()}.<x>"
                 chars_to_notify = [
-                    c for c in self.get_active_characters_list() 
-                    if c.location and c.location.area_id == area_id and "OUTDOORS" in c.location.flags
+                    c for c in self.get_active_characters_list()
+                    if c.location and c.location.area_id == area_id and "OUTDOORS" in c.location.flags   
                 ]
                 tasks = [char.send(message) for char in chars_to_notify]
                 if tasks:
@@ -845,7 +862,7 @@ class World:
 
                 if possible_scripts:
                     chosen_script = random.choice(possible_scripts)
-                    message = f"{{i{chosen_script['script_text']}{{x"
+                    message = f"<i>{chosen_script['script_text']}<x>"
 
                     tasks = [char.send(message) for char in chars_in_room]
                     if tasks:

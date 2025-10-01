@@ -24,29 +24,49 @@ def get_general_time_of_day(hour: int) -> str:
     return "night"
 
 async def cmd_time(character: Character, world: World, args_str: str) -> bool:
-    """Displays the current in-game date and time descriptively."""
+    """Displays the current in-game date and time with weather information."""
+    from game.definitions import weather as weather_defs
     
-    # Date calculation remains the same
+    # Date calculation
     total_days_this_year = (world.game_month - 1) * calendar_defs.DAYS_PER_MONTH + (world.game_day - 1)
     day_of_week_index = total_days_this_year % calendar_defs.DAYS_PER_WEEK
     day_name = calendar_defs.DAY_NAMES[day_of_week_index]
     month_name = calendar_defs.MONTH_NAMES[world.game_month - 1]
     
     date_str = f"It is {day_name}, the {world.game_day}th day of the month of {month_name}, in the Year of the Drifting Star, {world.game_year}."
-
+    
     await character.send(date_str)
-
-    # FIX: Display different messages based on location
+    
+    # Time of day display
     if character.location and "OUTDOORS" in character.location.flags:
         celestial_str = get_celestial_body_position(world.game_hour)
         await character.send(celestial_str)
-        # Also show the player the weather in their current area
+        
+        # Weather information for outdoor characters
         current_weather = world.area_weather.get(character.location.area_id)
         if current_weather:
-            await character.send(f"The weather is currently: {current_weather['condition']}.")
-
-    else: # Character is indoors
+            condition = current_weather.get('condition', 'CLEAR')
+            weather_effect = weather_defs.WEATHER_EFFECTS.get(condition, {})
+            description = weather_effect.get('description', 'The weather is unremarkable.')
+            
+            await character.send(f"{description}")
+            
+            # Show tactical effects if present
+            room_flags = weather_effect.get('room_flags', [])
+            if room_flags:
+                flag_str = ", ".join(f"<y>{flag}<x>" for flag in room_flags)
+                await character.send(f"<i>[Active conditions: {flag_str}]<x>")
+    
+    else:  # Character is indoors
         general_time_str = get_general_time_of_day(world.game_hour)
         await character.send(f"Judging by the light from outside, it is currently {general_time_str}.")
-
+        
+        # Show area weather even if indoors (you can hear/sense it)
+        if character.location:
+            current_weather = world.area_weather.get(character.location.area_id)
+            if current_weather:
+                condition = current_weather.get('condition', 'CLEAR')
+                if condition != 'CLEAR':
+                    await character.send(f"<i>You sense the weather outside is: {condition.lower()}.<x>")
+    
     return True

@@ -25,6 +25,13 @@ def check_physical_hit(attacker: Union[Character, Mob], target: Union[Character,
     Returns:
         A hitresult object with the outcome
     """
+    if use_rar and attacker.location:
+        from ..definitions import weather as weather_defs
+        area_weather = attacker.world.area_weather.get(attacker.location.area_id, {})
+        condition = area_weather.get("condition", "CLEAR")
+        weather_effect = weather_defs.WEATHER_EFFECTS.get(condition, {})
+        hit_modifier += weather_effect.get("visibility_penalty", 0)
+
     attacker_rating = attacker.rar if use_rar else attacker.mar
 
     if isinstance(attacker, Character):

@@ -16,6 +16,7 @@ from .combat import hit_resolver, damage_calculator, outcome_handler
 from .character import Character
 from .mob import Mob
 from .item import Item
+from .room import Room
 from .definitions import abilities as ability_defs
 from .definitions import item_defs
 
@@ -53,10 +54,9 @@ async def _check_and_break_concentration(target: Union['Character', 'Mob'], dama
         spell_name = target.casting_info.get("name", "your spell")
         target.casting_info = None
         target.roundtime = 0.0 # Clear casting roundtime
-        await target.send(f"{{RThe pain of the blow causes you to lose concentration on {spell_name}!{{x")
+        await target.send(f"<R>The pain of the blow causes you to lose concentration on {spell_name}!<x>")
         return True
     return False
-
 
 async def resolve_physical_attack(
     attacker: Union[Character, Mob],
@@ -100,7 +100,7 @@ async def resolve_physical_attack(
     rt_penalty = attacker.total_av * 0.05 if isinstance(attacker, Character) else 0.0
     
     if not hit_result.is_hit:
-        roll_details = f"{{i[Roll: {hit_result.roll} + MAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]{{x"
+        roll_details = f"<i>[Roll: {hit_result.roll} + MAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]<x>"
         if isinstance(attacker, Character):
             await attacker.send(f"You miss {target.name} with your {utils.strip_article(attack_name)}. {roll_details}")
         if isinstance(target, Character):
@@ -113,8 +113,8 @@ async def resolve_physical_attack(
         parry_skill_rank = target.get_skill_rank("parrying")
         parry_chance = parry_skill_rank * 0.005
         if random.random() < parry_chance:
-            await attacker.send(f"{{y{target.name} parries your attack with their {weapon.name}!{{x")
-            await target.send(f"{{gYou parry {attacker.name}'s attack with your {weapon.name}!{{x")
+            await attacker.send(f"<y>{target.name} parries your attack with their {weapon.name}!<x>")
+            await target.send(f"<g>You parry {attacker.name}'s attack with your {weapon.name}!<x>")
             attacker.roundtime = 1.0 + rt_penalty + attacker.slow_penalty
             return
 
@@ -123,8 +123,8 @@ async def resolve_physical_attack(
         shield_skill_rank = target.get_skill_rank("shield usage")
         block_chance = shield.block_chance + (math.floor(shield_skill_rank / 10) * 0.01)
         if random.random() < block_chance:
-            await attacker.send(f"{{y{target.name} blocks your attack with their shield!{{x")
-            await target.send(f"{{gYou block {attacker.name}'s attack with your shield!{{x")
+            await attacker.send(f"<y>{target.name} blocks your attack with their shield!<x>")
+            await target.send(f"<g>You block {attacker.name}'s attack with your shield!<x>")
             attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
             return
         
@@ -149,7 +149,8 @@ async def resolve_physical_attack(
         await outcome_handler.handle_defeat(attacker, target, world)
         return
     
-    
+    if isinstance(attacker, Character) and attacker.is_hidden:
+        attacker.is_hidden = False
     
     # --- 8. Apply Final Roundtime for a successful hit ---
     attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
@@ -186,7 +187,7 @@ async def resolve_ranged_attack(
     hit_result = hit_resolver.check_physical_hit(attacker, target, use_rar=True, hit_modifier=hit_modifier)
 
     if not hit_result.is_hit:
-        roll_details = f"{{i[Roll: {hit_result.roll} + RAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]{{x"
+        roll_details = f"<i>[Roll: {hit_result.roll} + RAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]<x>"
         if isinstance(attacker, Character):
             await attacker.send(f"Your {utils.strip_article(ammo.name)} misses {target.name}. {roll_details}")
         if isinstance(target, Character):
@@ -199,8 +200,8 @@ async def resolve_ranged_attack(
         shield_skill_rank = target.get_skill_rank("shield usage")
         block_chance = shield.block_chance + (math.floor(shield_skill_rank / 10) * 0.01)
         if random.random() < block_chance:
-            await attacker.send(f"{{y{target.name} blocks your attack with their shield!{{x")
-            await target.send(f"{{gYou block {attacker.name}'s attack with your shield!{{x")
+            await attacker.send(f"<y>{target.name} blocks your attack with their shield!<x>")
+            await target.send(f"<g>You block {attacker.name}'s attack with your shield!<x>")
             attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
             return
         
@@ -224,6 +225,9 @@ async def resolve_ranged_attack(
 
     if target.hp <= 0:
         await outcome_handler.handle_defeat(attacker, target, world)
+
+    if isinstance(attacker, Character) and attacker.is_hidden:
+        attacker.is_hidden = False
 
 async def resolve_magical_attack(
     caster: Union[Character, Mob], 
@@ -250,7 +254,7 @@ async def resolve_magical_attack(
         hit_result = hit_resolver.check_magical_hit(caster, target, school)
 
         if not hit_result.is_hit:
-            roll_details = f"{{i[Roll: {hit_result.roll} + {rating_name}: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]{{x"
+            roll_details = f"<i>[Roll: {hit_result.roll} + {rating_name}: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]<x>"
             if isinstance(caster, Character):
                 await caster.send(f"Your {spell_name} misses {target_name}. {roll_details}")
             if isinstance(target, Character):
@@ -259,8 +263,13 @@ async def resolve_magical_attack(
     
     # ---Calculate Damage ---
     damage_info = damage_calculator.calculate_magical_damage(caster, spell_data, hit_result.is_crit)
+
+    weather_mod = _get_weather_damage_modifier(caster.location, damage_info.damage_type)
+    if weather_mod != 1.0:
+        damage_info.pre_mitigation_damage = int(damage_info.pre_mitigation_damage * weather_mod)
     damage_info.attack_name = spell_name # Add spell name to the info object
     final_damage = damage_calculator.mitigate_magical_damage(target, damage_info)
+
 
     outcome_handler.apply_damage(target, final_damage)
 
@@ -282,6 +291,9 @@ async def resolve_magical_attack(
     # --- 6. Check for Defeat ---
     if target.hp <= 0:
         await outcome_handler.handle_defeat(caster, target, world)
+
+    if isinstance(caster, Character) and caster.is_hidden:
+        caster.is_hidden = False
 
 async def resolve_ability_effect(
     caster: Character,
@@ -428,11 +440,11 @@ async def resolve_ability_effect(
 
         xp_cost = effect_details.get("xp_cost", 5000)
         if caster.xp_total < xp_cost:
-            await caster.send(f"{{RYou lack the spiritual energy ({xp_cost} XP) to perform the ritual.{{x")
+            await caster.send(f"<R>You lack the spiritual energy ({xp_cost} XP) to perform the ritual.<x>")
             return
         
         caster.xp_total -= xp_cost
-        await caster.send(f"{{yYou sacrifice {xp_cost} of your stored experience to fuel the ritual...{{x")
+        await caster.send(f"<y>You sacrifice {xp_cost} of your stored experience to fuel the ritual...<x>")
 
         target.status = "ALIVE"
         target.hp = 1
@@ -443,7 +455,7 @@ async def resolve_ability_effect(
             target.update_location(caster.location)
             caster.location.add_character(target)
 
-        await world.broadcast(f"{{Y{caster.name}'s divine intervention brings {target.name} back from the dead!{{x")
+        await world.broadcast(f"<Y>{caster.name}'s divine intervention brings {target.name} back from the dead!<x>")
 
     elif effect_type == "CURE":
         cure_type = effect_details.get("cure_type")
@@ -487,12 +499,15 @@ async def resolve_ability_effect(
         defender_roll = random.randint(1, 20) + defender_mod
 
         if attacker_roll > defender_roll:
-            await caster.send(f"{{gYou successfully trip {target.name}!{{x")
+            await caster.send(f"<g>You successfully trip {target.name}!<x>")
             success_effects = effect_details.get("on_success")
             if success_effects:
                 await apply_effect(caster, target, ability_data, success_effects, world)
         else:
-            await caster.send(f"{{rYou fail to trip {target.name}.{{x")
+            await caster.send(f"<r>You fail to trip {target.name}.<x>")
+    
+    if isinstance(caster, Character) and caster.is_hidden:
+        caster.is_hidden = False
 
 async def apply_dot_damage(target: Union[Character, Mob], effect_data: Dict[str, Any], world: 'World'):
     """Applies damage from a damage over time effect like poison or bleed."""
@@ -507,7 +522,7 @@ async def apply_dot_damage(target: Union[Character, Mob], effect_data: Dict[str,
 
     # Send feedback if the target is a player
     if isinstance(target, Character):
-        await target.send(f"{{rYou take {int(damage)} {effect_type} damage!{{x")
+        await target.send(f"<r>You take {int(damage)} {effect_type} damage!<x>")
 
     # Check if the DoT was fatal
     if target.hp <= 0:
@@ -793,7 +808,7 @@ async def apply_damage(target: Union['Character', 'Mob'], damage_amount: int, da
     target.hp = max(0.0, target.hp - final_damage)
 
     if isinstance(target, Character):
-        await target.send(f"{{RYou take {final_damage} {damage_type} damage from the fall!{{x")
+        await target.send(f"<R>You take {final_damage} {damage_type} damage from the fall!<x>")
 
     if target.hp <= 0:
         # Create a generic object to represent the "attacker"
@@ -801,3 +816,42 @@ async def apply_damage(target: Union['Character', 'Mob'], damage_amount: int, da
             name = "the environment"
             location = target.location
         await outcome_handler.handle_defeat(EnvironmentAttacker(), target, world)
+
+def _get_weather_damage_modifier(room: 'Room', damage_type: str) -> float:
+    """Returns damage multiplier based on weather conditions in the room."""
+    if not room:
+        return 1.0
+    
+    modifier = 1.0
+
+    # WET Conditions
+    if "WET" in room.flags:
+        if damage_type == "fire":
+            modifier *= 0.75 
+        elif damage_type == "lightning":
+            modifier *= 1.25
+    
+    # STORMY conditions (bonus to lightning)
+    if "STORMY" in room.flags and damage_type == "lightning":
+        modifier *= 1.5  # +50%
+    
+    # FREEZING conditions
+    if "FREEZING" in room.flags:
+        if damage_type == "cold":
+            modifier *= 1.25  # +25%
+        elif damage_type == "fire":
+            modifier *= 0.9  # -10%
+    
+    # BLAZING conditions
+    if "BLAZING" in room.flags:
+        if damage_type == "fire":
+            modifier *= 1.25  # +25%
+        elif damage_type == "cold":
+            modifier *= 0.75  # -25%
+    
+    # SANDSTORM (reduces all magic)
+    if "SANDSTORM" in room.flags:
+        if damage_type in ["arcane", "fire", "cold", "lightning"]:
+            modifier *= 0.85  # -15%
+    
+    return modifier

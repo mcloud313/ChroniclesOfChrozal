@@ -5,7 +5,7 @@ Commands related to spellcasting.
 import logging
 import random
 from typing import TYPE_CHECKING, Optional, Union
-import aiosqlite  # <-- FIX: Added missing import
+
 
 from ..definitions import abilities as ability_defs
 from ..mob import Mob
@@ -77,7 +77,7 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
     # --- Armor Spell Failure Check
     failure_chance = character.total_spell_failure
     if failure_chance > 0 and (random.random() * 100) < failure_chance:
-        await character.send(f"{{RYour armor restricts your movement, causing your {display_name} spell to fizzle!{{x")
+        await character.send(f"<R>Your armor restricts your movement, causing your {display_name} spell to fizzle!<x>")
         character.essence -= spell_cost
         character.roundtime = spell_data.get("cast_time", 0.0)
         return True

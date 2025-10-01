@@ -10,40 +10,42 @@ Inspired by common MUD color code systems.
 # 90-97 bright foreground, 100-107 = bright background
 
 COLOR_MAP = {
-    #RESET
-    "{x": "\x1b[0m",    # Reset all attributes
+    # RESET
+    "<x>": "\x1b[0m",
 
-    # Basic Foreground Colors (Non-bold)
-    "{k": "\x1b[0;30m", # Black
-    "{R": "\x1b[0;31m", # Red
-    "{G": "\x1b[0;32m", # Green
-    "{Y": "\x1b[0;33m", # Yellow
-    "{B": "\x1b[0;34m", # Blue
-    "{M": "\x1b[0;35m", # Magenta
-    "{C": "\x1b[0;36m", # Cyan
-    "{W": "\x1b[0;37m", # White (often grey)
+    # Basic Foreground Colors
+    "<k>": "\x1b[0;30m",  # Black
+    "<R>": "\x1b[0;31m",  # Red
+    "<G>": "\x1b[0;32m",  # Green
+    "<Y>": "\x1b[0;33m",  # Yellow
+    "<B>": "\x1b[0;34m",  # Blue
+    "<M>": "\x1b[0;35m",  # Magenta
+    "<C>": "\x1b[0;36m",  # Cyan
+    "<W>": "\x1b[0;37m",  # White
 
-    # Bright/Bold Foreground Colors (Use these more often for visibility)
-    "{K": "\x1b[1;30m", # Bold Black (Dark Grey)
-    "{r": "\x1b[1;31m", # Bold Red (Bright Red)
-    "{g": "\x1b[1;32m", # Bold Green (Bright Green)
-    "{y": "\x1b[1;33m", # Bold Yellow (often Brown/Orange on some clients)
-    "{b": "\x1b[1;34m", # Bold Blue (Bright Blue)
-    "{m": "\x1b[1;35m", # Bold Magenta (Bright Magenta/Pink)
-    "{c": "\x1b[1;36m", # Bold Cyan (Bright Cyan)
-    "{w": "\x1b[1;37m", # Bold White (Bright White)
+    # Bright/Bold Foreground Colors
+    "<K>": "\x1b[1;30m",  # Dark Grey
+    "<r>": "\x1b[1;31m",  # Bright Red
+    "<g>": "\x1b[1;32m",  # Bright Green
+    "<y>": "\x1b[1;33m",  # Yellow/Brown
+    "<b>": "\x1b[1;34m",  # Bright Blue
+    "<m>": "\x1b[1;35m",  # Bright Magenta
+    "<c>": "\x1b[1;36m",  # Bright Cyan
+    "<w>": "\x1b[1;37m",  # Bright White
 
-    # Basic Background Colors (Use sparingly)
-    "{bk": "\x1b[40m", # Black background
-    "{bR": "\x1b[41m", # Red background
-    "{bG": "\x1b[42m", # Green background
-    "{bY": "\x1b[43m", # Yellow background
-    "{bB": "\x1b[44m", # Blue background
-    "{bM": "\x1b[45m", # Magenta background
-    "{bC": "\x1b[46m", # Cyan background
-    "{bW": "\x1b[47m", # White background
-
-    # Add other codes as needed (e.g., underline "{u", blink "{f")
+    # Background Colors
+    "<bk>": "\x1b[40m",
+    "<bR>": "\x1b[41m",
+    "<bG>": "\x1b[42m",
+    "<bY>": "\x1b[43m",
+    "<bB>": "\x1b[44m",
+    "<bM>": "\x1b[45m",
+    "<bC>": "\x1b[46m",
+    "<bW>": "\x1b[47m",
+    
+    # Special formatting
+    "<i>": "\x1b[3m",    # Italic
+    "<u>": "\x1b[4m",    # Underline
 }
 
 # You can add more complex codes like specific RGB later if needed,

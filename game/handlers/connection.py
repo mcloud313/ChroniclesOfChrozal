@@ -245,7 +245,7 @@ class ConnectionHandler:
         await self._send(MOTD)
         await self.send(f"Welcome back, {self.active_character.name}.")
         await command_handler.process_command(self.active_character, self.world, "look")
-        await self.world.broadcast_to_all(f"{{Y** {self.active_character.name} has entered the realm. **{{x", exclude={self.active_character})
+        await self.world.broadcast_to_all(f"<Y>** {self.active_character.name} has entered the realm. **<x>", exclude={self.active_character})
         self.state = ConnectionState.PLAYING
 
     async def _handle_playing(self):
@@ -335,7 +335,7 @@ class ConnectionHandler:
                     character_to_remove.location.remove_character(character_to_remove)
                     # Announce departure after removal to prevent the ghost from being seen.
                     await self.world.broadcast_to_all(
-                        f"{{Y** {character_to_remove.name} has left the realm. **{{x",
+                        f"<Y> {character_to_remove.name} has left the realm. **<x>",
                         exclude={character_to_remove}
                     )
                 self.world.remove_active_character(character_to_remove.dbid)

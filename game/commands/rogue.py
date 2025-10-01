@@ -72,9 +72,9 @@ async def cmd_lockpick(character: 'Character', world: 'World', args_str: str) ->
             if check_result['success']:
                 exit_data['is_locked'] = False # unlock in memory
                 await world.db_manager.update_room_exits(character.location.dbid, character.location.exits) # Save to DB
-                await character.send(f"{{gSuccess! You pick the lock on the {exit_name}.{{x")
+                await character.send(f"<g>Success! You pick the lock on the {exit_name}.<x>")
             else:
-                await character.send(f"{{rYou fail to pick the lock on the {exit_name}.{{x")
+                await character.send(f"<r>You fail to pick the lock on the {exit_name}.<x>")
             character.roundtime = 10.0 # Lockpicking takes time
             return True
     
@@ -91,9 +91,9 @@ async def cmd_lockpick(character: 'Character', world: 'World', args_str: str) ->
         if check_result['success']:
             target_item.instance_stats['is_locked'] = False
             await world.db_manager.update_item_instance_stats(target_item.id, target_item.instance_stats) # Save to DB
-            await character.send(f"{{gSuccess! You pick the lock on the {target_item.name}.{{x")
+            await character.send(f"<g>Success! You pick the lock on the {target_item.name}.<x>")
         else:
-            await character.send(f"{{rYou fail to pick the lock on the {target_item.name}.{{x")
+            await character.send(f"<r>You fail to pick the lock on the {target_item.name}.<x>")
         character.roundtime = 3.0
         return True
 
@@ -141,12 +141,12 @@ async def cmd_disarm(character: 'Character', world: 'World', args_str: str) -> b
             await world.db_manager.update_room_exits(character.location.dbid, character.location.exits)
         else: # It's an item
             await world.db_manager.update_item_instance_stats(target_obj.id, target_obj.instance_stats)
-        await character.send(f"{{gSuccess! You disarm the trap.{{x")
+        await character.send(f"<g>Success! You disarm the trap.<x>")
     else:
-        await character.send(f"{{rYou fail to disarm the trap...{{x")
+        await character.send(f"<r>You fail to disarm the trap...<x>")
         # 25% chance to trigger the trap on failure!
         if random.random() < 0.25:
-            await character.send(f"{{R...and you've triggered it!{{x")
+            await character.send(f"<R>...and you've triggered it!<x>")
             # Here we would resolve the trap's effect, for now, we'll just log it.
             log.info(f"Trap {trap_id} triggered on failed disarm by {character.name}.")
             trap_data['is_active'] = False # Trap is used up
@@ -201,7 +201,7 @@ async def cmd_pickpocket(character: 'Character', world: 'World', args_str: str) 
             if isinstance(target, Character):
                 target.is_dirty = True
 
-            await character.send(f"{{gYou deftly lift {utils.format_coinage(amount_stolen)} from {target.name}!{{x")
+            await character.send(f"<g>You deftly lift {utils.format_coinage(amount_stolen)} from {target.name}!<x>")
             # The victim only gets a message if they are a player
             if isinstance(target, Character):
                 await target.send("{yYou feel a slight tug at your purse...{x")
@@ -209,9 +209,9 @@ async def cmd_pickpocket(character: 'Character', world: 'World', args_str: str) 
             await character.send(f"{target.name} has no coinage to steal.")
     else:
         # --- Failure ---
-        await character.send(f"{{rYou fail to pickpocket {target.name} and are noticed!{{x")
+        await character.send(f"<r>You fail to pickpocket {target.name} and are noticed!<x>")
         if isinstance(target, Character):
-            await target.send(f"{{R{character.name} just tried to pickpocket you!{{x")
+            await target.send(f"<R>{character.name} just tried to pickpocket you!<x>")
         
         # Make mobs aggressive on failure
         if isinstance(target, Mob):

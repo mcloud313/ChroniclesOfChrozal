@@ -436,7 +436,7 @@ class Character:
                     key not in self.known_abilities):
                 
                 self.known_abilities.add(key)
-                await self.send(f"{{gYou have learned a new {ability['ability_type'].lower()}: {ability['name']}!{{x")
+                await self.send(f"<g>You have learned a new {ability['ability_type'].lower()}: {ability['name']}!<x>")
                 log.info(f"Character {self.name} learned new ability: {ability['name']}")
                 new_abilities_learned = True
         if new_abilities_learned:

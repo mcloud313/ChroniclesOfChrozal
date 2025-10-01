@@ -148,7 +148,7 @@ async def cmd_look(character: 'Character', world: 'World', args_str: str) -> boo
                        character.location.get_item_instance_by_name(target_name, world))
     
     if item_to_examine:
-        uuid_str = f"{{i({item_to_examine.id}){{x"
+        uuid_str = f"<i>({item_to_examine.id})<x>"
         examine_output = [
             f"\n\r--- {item_to_examine.name} {uuid_str} ---",
             item_to_examine.description,
@@ -196,7 +196,7 @@ async def cmd_who(character: 'Character', world: 'World', args_str: str) -> bool
         return True
     
     header = f"--- Players Online ({len(active_chars)}) ---"
-    output = [f"\r\n{{C{header}{{x"]
+    output = [f"\r\n<c>{header}<x>"]
     
     for char in active_chars:
         race_name = world.get_race_name(char.race_id)
@@ -204,7 +204,7 @@ async def cmd_who(character: 'Character', world: 'World', args_str: str) -> bool
         title = ""
         output.append(f"[{char.level: >2}] {char.name:<25} {title:<15} ({race_name} {class_name})")
 
-    output.append(f"{{C{'-' * len(header)}{{x")
+    output.append(f"<C>{'-' * len(header)}<x>")
     await character.send("\r\n".join(output))
     return True
 
@@ -224,7 +224,7 @@ async def cmd_help(character: 'Character', world: 'World', args_str: str) -> boo
     # Case 2: Topic is a category, show all commands in it
     if topic.upper() in HELP_TOPICS:
         category_name = topic.upper()
-        output = [f"\r\n{{C--- Help: {category_name.title()} ---{{x"]
+        output = [f"\r\n<C>--- Help: {category_name.title()} ---<x>"]
         for command, description in HELP_TOPICS[category_name].items():
             # Show only the first line of the description for the category list
             summary = description.split('\n\r')[0]
@@ -236,7 +236,7 @@ async def cmd_help(character: 'Character', world: 'World', args_str: str) -> boo
     for category_data in HELP_TOPICS.values():
         if topic in category_data:
             full_description = category_data[topic]
-            output = [f"\r\n{{C--- Help: {topic.title()} ---{{x", f"  {full_description}"]
+            output = [f"\r\n<C>--- Help: {topic.title()} ---<x>", f"  {full_description}"]
             await character.send("\r\n".join(output))
             return True
 
@@ -354,8 +354,8 @@ async def cmd_abilities(character: 'Character', world: 'World', args_str: str) -
             continue
         
         line = (
-            f"{{c}}[{ability_data.get('cost', 0):>3} Ess]{{x}} {ability_data.get('name', key):<20} - "
-            f"{{i}}{ability_data.get('description', 'No description available.')}{{x}}"
+            f"<c>{ability_data.get('cost', 0):>3} Ess]<x> {ability_data.get('name', key):<20} - "
+            f"<i>{ability_data.get('description', 'No description available.')}<x>"
         )
         
         if ability_data.get('ability_type') == 'SPELL':
@@ -514,7 +514,7 @@ async def cmd_search(character: 'Character', world: 'World', args_str: str) -> b
                 trap_id = f"exit_{exit_name}"
                 if trap_id not in character.detected_traps:
                     if utils.skill_check(character, 'perception', dc=trap.get('perception_dc', 15))['success']:
-                        await character.send(f"{{yYou found a trap on the {exit_name}!{{x")
+                        await character.send(f"<y>You found a trap on the {exit_name}!<x>")
                         character.detected_traps.add(trap_id)
                         found_anything = True
     # Search items (chests, etc.) in the room for traps
@@ -524,7 +524,7 @@ async def cmd_search(character: 'Character', world: 'World', args_str: str) -> b
                 trap_id = f"item_{item_obj.id}"
                 if trap_id not in character.detected_traps:
                     if utils.skill_check(character, 'perception', dc=trap.get('perception_dc', 15))['success']:
-                        await character.send(f"{{yYou found a trap on the {item_obj.name}!{{x")
+                        await character.send(f"<y>You found a trap on the {item_obj.name}!<x>")
                         character.detected_traps.add(trap_id)
                         found_anything = True
     if not found_anything:
