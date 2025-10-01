@@ -296,11 +296,14 @@ class Mob:
 
         # --- Combat Logic ---
         if self.is_fighting and self.target:
+            # check if target is hidden and handle it
             if isinstance(self.target, Character) and self.target.is_hidden:
+                log.info(f"STEALTH DEBUG: Mob {self.name} lost target {self.target.name} (hidden)")
                 self.target = None
                 self.is_fighting = False
                 await self.location.broadcast(f"\r\n{self.name.capitalize()} looks around in confusion.\r\n")
 
+                # NEW: Check for new targets if aggressive
                 if self.has_flag("AGGRESSIVE"):
                     potential_targets = [
                         char for char in self.location.characters
@@ -310,6 +313,9 @@ class Mob:
                         self.target = random.choice(potential_targets)
                         self.is_fighting = True
                         await self.location.broadcast(f"\r\n{self.name.capitalize()} spots {self.target.name}!\r\n")
+
+                return
+            
             target_is_valid = (
                 self.target.is_alive() and
                 hasattr(self.target, 'location') and
