@@ -347,14 +347,21 @@ async def resolve_ability_effect(
 
     # --- 2. Find Target ---
     target: Optional[Union[Character, Mob]] = None
-    if target_type_str == "SELF":
+
+    # Normalize the type string to handle case variation
+    target_type_normalized = target_type_str.upper() if target_type_str else ""
+
+    if target_type_normalized == "SELF":
         target = caster
-    elif target_type_str in ("CHAR", "CHAR_OR_MOB") and isinstance(target_ref, int):
+        log.info(f"RESOLVE DEBUG: Self-cast, target = character")
+    elif target_type_normalized in ("CHAR", "CHARACTER") and isinstance(target_ref, int):
         target = world.get_active_character(target_ref)
-    
-    if not target and target_type_str in ("MOB", "CHAR_OR_MOB") and isinstance(target_ref, int):
+        log.info(f"RESOLVE DEBUG: Character lookup for ID {target_ref}: {target.name if target else 'NOT FOUND'}")
+    if not target and target_type_normalized in ("MOB", "CHAR_OR_MOB") and isinstance(target_ref, int):
         if caster.location:
             target = next((m for m in caster.location.mobs if m.instance_id == target_ref), None)
+            log.info(f"RESOLVE DEBUG: Mob lookup for instance_id {target_ref}: {target.name if target else 'NOT FOUND'}")
+
 
     # --- 3. Validate Target ---
     required_target_type = ability_data.get("target_type")
