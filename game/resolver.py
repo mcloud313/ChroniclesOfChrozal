@@ -861,11 +861,11 @@ def _get_weather_damage_modifier(room: 'Room', damage_type: str) -> float:
             modifier *= 0.9  # -10%
     
     # BLAZING conditions
-    if "BLAZING" in room.flags:
-        if damage_type == "fire":
-            modifier *= 1.25  # +25%
-        elif damage_type == "cold":
-            modifier *= 0.75  # -25%
+    # if "BLAZING" in room.flags:
+    #     if damage_type == "fire":
+    #         modifier *= 1.25  # +25%
+    #     elif damage_type == "cold":
+    #         modifier *= 0.75  # -25%
     
     # SANDSTORM (reduces all magic)
     if "SANDSTORM" in room.flags:
