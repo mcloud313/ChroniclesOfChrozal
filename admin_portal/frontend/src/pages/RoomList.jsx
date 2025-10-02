@@ -23,6 +23,9 @@ function RoomList() {
     return (
         <div className="room-list">
             <h2>Rooms</h2>
+            <Link to="/rooms/new">
+                <button>Create New Room</button>
+            </Link>
             <table>
                 <thead>
                     <tr>
@@ -48,3 +51,5 @@ function RoomList() {
         </div>
     );
 }
+
+export default RoomList;
