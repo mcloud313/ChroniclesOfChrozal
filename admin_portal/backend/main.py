@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import db
-from .routers import rooms, abilities, areas  # Add areas
+from .routers import rooms, abilities, areas, mobs
 
 
 app = FastAPI(
@@ -41,3 +41,4 @@ async def root():
 app.include_router(rooms.router)
 app.include_router(abilities.router)
 app.include_router(areas.router)
+app.include_router(mobs.router)
