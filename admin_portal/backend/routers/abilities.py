@@ -10,7 +10,7 @@ async def get_abilities():
     """Get all ability templates"""
     query = """
         SELECT id, internal_name, name, ability_type, class_req, level_req, cost,
-               target_type, effect_type, effect_details, cast_time, roundtime, messages, description
+            target_type, effect_type, effect_details, cast_time, roundtime, messages, description
         FROM ability_templates
         ORDER BY name
     """
@@ -22,7 +22,7 @@ async def get_ability(ability_id: int):
     """Get a specific ability by ID"""
     query = """
         SELECT id, internal_name, name, ability_type, class_req, level_req, cost,
-               target_type, effect_type, effect_details, cast_time, roundtime, messages, description
+            target_type, effect_type, effect_details, cast_time, roundtime, messages, description
         FROM ability_templates
         WHERE id = $1
     """
@@ -67,3 +67,42 @@ async def create_ability(
         description
     )
     return dict(row)
+
+@router.put("/{ability_id}")
+async def update_ability(ability_id: int, ability_data: dict):
+    """Update an ability template"""
+    current = await db.fetch_one("SELECT * FROM ability_templates WHERE id = $1", ability_id)
+    if not current:
+        raise HTTPException(status_code=404, detail="Ability not found")
+    
+    allowed_fields = {
+        'internal_name', 'name', 'ability_type', 'class_req', 'level_req', 'cost',
+        'target_type', 'effect_type', 'effect_details', 'cast_time', 'roundtime', 'messages', 'description'
+    }
+    updates = []
+    params =[ability_id]
+    param_idx = 2
+
+    for field, value in ability_data.items():
+        if field not in allowed_fields or value is None:
+            continue
+
+        if field in ['class_req', 'effect_details', 'messages']:
+            updates.append(f"{field} = ${param_idx}::jsonb")
+            params.append(json.dumps(value))
+        else:
+            updates.append(f"{field} = ${param_idx}")
+            params.append(value)
+        param_idx += 1
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No valid fields to update.")
+    
+    query = f"""
+        UPDATE ability_templates
+        SET {', '.join(updates)}
+        WHERE id = $1
+        RETURNING *
+        """
+    
+    row = await db.fetch_one(query, *params)

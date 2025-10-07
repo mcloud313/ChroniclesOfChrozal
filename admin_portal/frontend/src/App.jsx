@@ -3,6 +3,12 @@ import RoomList from './pages/RoomList';
 import RoomEdit from './pages/RoomEdit';
 import RoomCreate from './pages/RoomCreate';
 import AbilityList from './pages/AbilityList';
+import MobList from './pages/MobList';
+import MobCreate from './pages/MobCreate';
+import MobEdit from './pages/MobEdit';
+import ItemList from './pages/ItemList';
+import ItemCreate from './pages/ItemCreate';
+import ItemEdit from './pages/ItemEdit';
 import './App.css';
 
 function App() {
@@ -13,6 +19,8 @@ function App() {
           <h1>Chrozal Admin Portal</h1>
           <div className="nav-links">
             <Link to="/rooms">Rooms</Link>
+            <Link to="/mobs">Mobs</Link>
+            <Link to="/items">Items</Link>
             <Link to="/abilities">Abilities</Link>
           </div>
         </nav>
@@ -23,6 +31,12 @@ function App() {
             <Route path="/rooms" element={<RoomList />} />
             <Route path="/rooms/new" element={<RoomCreate />} />
             <Route path="/rooms/:id" element={<RoomEdit />} />
+            <Route path="/mobs" element={<MobList />} />
+            <Route path="/mobs/new" element={<MobCreate />} />
+            <Route path="/mobs/:id" element={<MobEdit />} />
+            <Route path="/items" element={<ItemList />} />
+            <Route path="/items/new" element={<ItemCreate />} />
+            <Route path="/items/:id" element={<ItemEdit />} />
             <Route path="/abilities" element={<AbilityList />} />
           </Routes>
         </div>
