@@ -106,3 +106,13 @@ async def update_ability(ability_id: int, ability_data: dict):
         """
     
     row = await db.fetch_one(query, *params)
+    return dict(row)
+
+@router.delete("/{ability_id}")
+async def delete_abilityy(ability_id: int):
+    """Delete an ability template"""
+    query = "DELETE FROM ability_templates WHERE id = $1 returning id"
+    row = await db.fetch_one(query, ability_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Ability not found")
+    return {"message": f"Ability {ability_id} deleted successfully."}

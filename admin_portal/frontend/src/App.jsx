@@ -3,6 +3,8 @@ import RoomList from './pages/RoomList';
 import RoomEdit from './pages/RoomEdit';
 import RoomCreate from './pages/RoomCreate';
 import AbilityList from './pages/AbilityList';
+import AbilityCreate from './pages/AbilityCreate';
+import AbilityEdit from './pages/AbilityEdit';
 import MobList from './pages/MobList';
 import MobCreate from './pages/MobCreate';
 import MobEdit from './pages/MobEdit';
@@ -38,6 +40,8 @@ function App() {
             <Route path="/items/new" element={<ItemCreate />} />
             <Route path="/items/:id" element={<ItemEdit />} />
             <Route path="/abilities" element={<AbilityList />} />
+            <Route path="/abilities/new" element={<AbilityCreate />} />
+            <Route path="/abilities/:id" element={<AbilityEdit />} />
           </Routes>
         </div>
       </div>
