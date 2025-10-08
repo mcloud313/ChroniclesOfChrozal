@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 from ..database import db
 
@@ -144,3 +144,116 @@ async def update_room(
 
     row = await db.fetch_one(query, *params)
     return dict(row)
+
+@router.get("/{room_id}/exits")
+async def get_room_exits(room_id: int):
+    """Get all exits from a specific room."""
+    query = """
+        SELECT id, source_room_id, direction, destination_room_id, is_hidden, details
+        FROM exits
+        WHERE source_room_id = $1
+        ORDER BY
+            CASE direction
+                WHEN 'north' THEN 1
+                WHEN 'northeast' THEN 2
+                WHEN 'east' THEN 3
+                WHEN 'southeast' THEN 4
+                WHEN 'south' THEN 5
+                WHEN 'southwest' THEN 6
+                WHEN 'west' THEN 7
+                WHEN 'northwest' THEN 8
+                WHEN 'up' THEN 9
+                WHEN 'down' THEN 10
+                ELSE 11
+            END
+    """
+    rows = await db.fetch_all(query, room_id)
+    return [dict(row) for row in rows]
+
+@router.post("/{room_id}/exits")
+async def create_exit(
+    room_id: int,
+    direction: str,
+    destination_room_id: int,
+    is_hidden: bool = False,
+    details: Dict[str, Any] = {},
+    create_reverse: bool = True
+):
+    """Create an exit from this room to another"""
+    #Verify both rooms exist
+    source_room = await db.fetch_one("SELECT id FROM rooms WHERe id = $1", room_id)
+    dest_room = await db.fetch_one("SELECT id FROM rooms WHERE id = $1", destination_room_id)
+
+    if not source_room or not dest_room:
+        raise HTTPException(status_code=404, detail="One or both rooms not found")
+    
+    # Check if exit already exists
+    existing = await db.fetch_one(
+        "SELECT id FROM exits WHERE source_room_id = $1 AND direction = $2",
+        room_id, direction
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Exit {direction} already exists from this room")
+    
+    #Create the exit
+    query = """
+        INSERT INTO exits (source_room_id, direction, destination_room_id, is_hidden, details)
+        VALUES ($1, $2, $3, $4, $5::jsonb)
+        RETURNING *
+    """
+    exit_row = await db.fetch_one(
+        query, room_id, direction, destination_room_id, is_hidden, json.dumps(details)
+    )
+
+    # Create reverse exit if requested
+    if create_reverse:
+        reverse_dir = get_reverse_direction(direction)
+        if reverse_dir:
+            reverse_exists = await db.fetch_one(
+                "SELECT id FROM exits WHERE source_room_id = $1 AND direction = $2",
+                destination_room_id, reverse_dir
+            )
+            if not reverse_exists:
+                await db.fetch_one(
+                    query, destination_room_id, reverse_dir, room_id, is_hidden, json.dumps(details)
+                )
+
+    return dict(exit_row)
+
+@router.delete("/exits/{exit_id}")
+async def delete_exit(exit_id: int, delete_reverse: bool = False):
+    """Delete an exit"""
+    # Get exit details before deleting
+    exit_data = await db.fetch_one("SELECT * FROM exits WHERE id = $1", exit_id)
+    if not exit_data:
+        raise HTTPException(status_code=404, detail="Exit not found")
+    
+    #Delete the exit
+    await db.fetch_one("DELETE FROM exits WHERE id = $1", exit_id)
+
+    #Optionally delete reverse exit
+    if delete_reverse:
+        reverse_dir = get_reverse_direction(exit_data['direction'])
+        if reverse_dir:
+            await db.fetch_one(
+                "DELETE FROM exits WHERE source_room_id = $1 AND direction = $2 AND destination_room_id = $3",
+                exit_data['destination_room_id'], reverse_dir, exit_data['source_room_id']
+            )
+
+        return {"message": "Exit deleted"}
+    
+def get_reverse_direction(direction: str) -> Optional[str]:
+    """Returns the opposite direction for creating reverse exits"""
+    opposites = {
+        'north': 'south',
+        'south': 'north',
+        'east': 'west',
+        'west': 'east',
+        'northeast': 'southwest',
+        'southwest': 'northeast',
+        'northwest': 'southeast',
+        'southeast': 'northwest',
+        'up': 'down',
+        'down': 'up'
+    }
+    return opposites.get(direction.lower())

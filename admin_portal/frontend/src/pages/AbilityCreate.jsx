@@ -113,7 +113,7 @@ function AbilityCreate() {
                     type="text"
                     value={ability.effect_type || ''}
                     onChange={(e) => setAbility({...ability, effect_type: e.target.value || null})}
-                    placeholder="damage, heal, buff, etc."
+                    placeholder="EFFECT_DAMAGE, EFFECT_HEAL, EFFECT_BUFF..."
                     />
                 </label>
 
