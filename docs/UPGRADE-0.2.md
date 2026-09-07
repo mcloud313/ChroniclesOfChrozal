@@ -66,6 +66,10 @@ For the new class, create a Tempest normally on the test account, or run `podman
 10. Test with an ordinary account: `/admin`, `/static/admin.html`, `/static/admin.js`, all `/api/admin/*` endpoints and build publication must be denied. Hiding a menu alone is not the access control.
 11. Inspect live players, GUID inventories, XP pools, conditions and metrics. Download the warning/error archive when reporting a bug. It is preserved in the existing log volume.
 
+### Playing from an actual phone
+
+The client supports mobile browsers. The default development port is bound to your desktop's loopback address, so a phone cannot reach it yet. For a private LAN test, replace `127.0.0.1:8000:8000` in Compose with your desktop's LAN address, set `PUBLIC_ORIGIN` to that exact `http://LAN_ADDRESS:8000` origin, recreate the game container, and open that address on a phone on the same network. Use the same address on the desktop during that test. A public host should use the documented HTTPS deployment. Phone browsers may suspend background tabs; reconnect within five minutes to resume the retained character.
+
 ## 5. Accounts and recovery
 
 Existing accounts remain verified for this upgrade. Leave `ALLOW_REGISTRATION=false` during local testing. To test password reset locally without email:
