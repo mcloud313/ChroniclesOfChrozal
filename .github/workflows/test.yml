@@ -24,3 +24,21 @@ jobs:
           cache: pip
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q
+      - name: Native PostgreSQL browser load
+        env:
+          DATABASE_URL: postgresql://postgres:test-only-password@localhost:5432/chrozal_qa_load
+        run: |
+          PGPASSWORD=test-only-password createdb -h localhost -U postgres chrozal_qa_load
+          python scripts/manage.py init
+          python scripts/manage.py seed
+          python server.py > server-load.log 2>&1 &
+          python -c "import urllib.request,time; time.sleep(5); urllib.request.urlopen('http://localhost:8000/healthz')"
+          timeout 180 python scripts/load_test.py --confirm-disposable-database --players 100 --rounds 30 --output native-load.json
+          if rg 'ERROR|CRITICAL|Traceback' server-load.log; then exit 1; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-results
+          path: |
+            native-load.json
+            server-load.log

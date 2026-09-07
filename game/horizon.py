@@ -5,7 +5,7 @@ from game.community import rule
 async def cmd_home(c,w,args):
     row=await w.db_manager.fetch_one_query('SELECT * FROM player_homes WHERE owner_id=$1',c.dbid)
     if not args:
-        await c.send(f"{row['name']}\n{row['description']}" if row else 'At the tavern, home buy purchases a room charter. home describe <text> decorates it.');return True
+        await c.send(f"{row['name']}\n{row['description']}\nUse home enter from the tavern, or out to leave." if row else 'At the tavern, home buy purchases a room charter. home describe <text> decorates it.');return True
     if 'BANK' not in c.location.flags:
         await c.send('Visit the Lantern & Tide to manage your room.');return True
     if args=='buy':
@@ -13,13 +13,24 @@ async def cmd_home(c,w,args):
         if row or c.coinage<price:await c.send(f'A room charter costs {price} coins; one per character.');return True
         async with w.db_manager.pool.acquire() as conn:
             async with conn.transaction():
-                await conn.execute('INSERT INTO player_homes(owner_id) VALUES($1)',c.dbid)
+                room=await conn.fetchrow("INSERT INTO rooms(area_id,name,description,flags) VALUES($1,$2,'A quiet room above the Lantern & Tide.','[\"NODE\",\"SAFE_ZONE\",\"HOME\",\"LIT\"]') RETURNING *",c.location.area_id,c.name+'’s room')
+                await conn.execute("INSERT INTO exits(source_room_id,destination_room_id,direction) VALUES($1,2,'out')",room['id'])
+                await conn.execute('INSERT INTO player_homes(owner_id,room_id) VALUES($1,$2)',c.dbid,room['id'])
                 await conn.execute('UPDATE characters SET coinage=$1 WHERE id=$2',c.coinage-price,c.dbid)
                 await conn.execute("INSERT INTO economy_ledger(character_id,reason,coin_delta) VALUES($1,'housing',$2)",c.dbid,-price)
-        c.coinage-=price;c.is_dirty=True;await c.send('Your room charter is recorded.');return True
+        from game.room import Room
+        live=Room(dict(room));live.exits['out']={'destination_room_id':2};w.rooms[live.dbid]=live
+        c.coinage-=price;c.is_dirty=True;await c.send('Your room charter is recorded. Use home enter.');return True
     if row and args.startswith('describe ') and len(args)<=2010:
-        await w.db_manager.execute_query('UPDATE player_homes SET description=$1 WHERE owner_id=$2',args[9:],c.dbid)
+        async with w.db_manager.pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute('UPDATE player_homes SET description=$1 WHERE owner_id=$2',args[9:],c.dbid)
+                await conn.execute('UPDATE rooms SET description=$1 WHERE id=$2',args[9:],row['room_id'])
+        if row['room_id'] in w.rooms:w.rooms[row['room_id']].description=args[9:]
         await c.send('Your room description is saved.');return True
+    if args=='enter' and row and row['room_id'] in w.rooms:
+        c.location.remove_character(c);c.update_location(w.rooms[row['room_id']]);c.location.add_character(c);c.roundtime=1;c.is_dirty=True
+        await c.send(c.location.get_look_string(c,w));return True
     if args.startswith('visit ') and args[6:].isdigit():
         other=await w.db_manager.fetch_one_query('SELECT * FROM player_homes WHERE owner_id=$1',int(args[6:]))
         await c.send(f"{other['name']}\n{other['description']}" if other else 'No room is registered.');return True

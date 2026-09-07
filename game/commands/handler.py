@@ -38,7 +38,7 @@ DEAD_ALLOWED_CMDS = {"quit", "release", "look", "who", "tell", "help"}
 
 # --- Command Map ---
 COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
-    "home": horizon.cmd_home, "market": horizon.cmd_market, "enchant": horizon.cmd_enchant, "tales": horizon.cmd_tales, "mail": community.cmd_mail, "reputation": community.cmd_reputation, "infuse": community.cmd_infuse, "tether": soul.cmd_tether, "skin": living.cmd_skin, "treat": adventure.cmd_treat, "quest": adventure.cmd_quest, "technique": adventure.cmd_technique, "brace": adventure.cmd_brace, "recover": adventure.cmd_recover,
+    "out": lambda c,w,a: movement.cmd_go(c,w,"out"), "home": horizon.cmd_home, "market": horizon.cmd_market, "enchant": horizon.cmd_enchant, "tales": horizon.cmd_tales, "mail": community.cmd_mail, "reputation": community.cmd_reputation, "infuse": community.cmd_infuse, "tether": soul.cmd_tether, "skin": living.cmd_skin, "treat": adventure.cmd_treat, "quest": adventure.cmd_quest, "technique": adventure.cmd_technique, "brace": adventure.cmd_brace, "recover": adventure.cmd_recover,
     "talk": living.cmd_talk, "gather": living.cmd_gather, "craft": living.cmd_craft,
     "relics": living.cmd_relics, "attune": living.cmd_attune, "journal": living.cmd_journal,
     # General Commands
