@@ -6,7 +6,7 @@ from game.database import db_manager
 from web.auth import admin_player
 
 router=APIRouter(prefix='/api/admin/builds',dependencies=[Depends(admin_player)])
-TABLES=['factions','balance_rules','areas','races','classes','damage_types','item_templates','mob_templates','ability_templates','rooms',
+TABLES=['class_kits','factions','balance_rules','areas','races','classes','damage_types','item_templates','mob_templates','ability_templates','rooms',
         'exits','mob_attacks','mob_loot_table','room_objects','ambient_scripts','loot_tables','loot_table_entries',
         'shop_inventories','resource_nodes','recipes','npc_schedules','relics','quests']
 RUNTIME={'resource_nodes':{'remaining','depleted_at'},'relics':{'claimed_by','claimed_at','instance_id'},'rooms':{'coinage'}}

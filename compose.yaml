@@ -19,15 +19,17 @@ services:
         max-size: 10m
         max-file: '3'
   game:
+    stop_grace_period: 120s
     build: .
     env_file: .env
+    volumes:
+      - game_logs:/app/logs
     ports:
       - 127.0.0.1:8000:8000
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
-    stop_grace_period: 40s
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
       interval: 30s
@@ -35,4 +37,5 @@ services:
       retries: 3
     logging: *logging
 volumes:
+  game_logs:
   postgres_data:

@@ -349,5 +349,43 @@ def test_mail_stalls_enchant_and_infusion_persist(client):
             await w.save_state()
             restored=Character(None,dict(await db.load_character_data(b.dbid)),w);restored.send=AsyncMock();await restored.load_related_data()
             assert next(iter(restored._inventory_items.values())).damage_base==6
+            await community.cmd_mail(b,w,f'send {a.dbid} | A gift | Keep it safe. | test dagger')
+            assert not b._inventory_items and any(i.name=='test dagger' for i in a._inventory_items.values())
             for c in chars:w.remove_active_character(c.dbid)
+    client.portal.call(scenario)
+
+
+def test_shop_and_housing_roundtrip(client):
+    from game.database import db_manager as db
+    from game.character import Character
+    from game.commands import trade,movement
+    from game import horizon
+    from unittest.mock import AsyncMock
+    async def scenario():
+        w=client.app.state.world
+        async with w.mutation_lock:
+            row=await db.fetch_one_query('SELECT c.* FROM characters c JOIN players p ON p.id=c.player_id WHERE p.username=$1',client.fixture_names[0])
+            c=Character(None,dict(row),w);c.send=AsyncMock();await c.load_related_data();c.coinage=10000;c.update_location(w.get_room(4));w.add_active_character(c)
+            await trade.cmd_buy(c,w,'wayfarer dagger')
+            item=next(i for i in c._inventory_items.values() if i.name=='wayfarer dagger')
+            assert item.speed==1.5
+            paid=10000-c.coinage;assert paid>0
+            await trade.cmd_sell(c,w,'wayfarer dagger')
+            assert 10000-paid<c.coinage<10000
+            c.update_location(w.get_room(2));c.location.add_character(c)
+            await horizon.cmd_home(c,w,'buy')
+            home=await db.fetch_one_query('SELECT * FROM player_homes WHERE owner_id=$1',c.dbid)
+            assert home['room_id'] in w.rooms
+            await horizon.cmd_home(c,w,'describe Books and a sturdy writing desk.')
+            await horizon.cmd_home(c,w,'enter')
+            assert c.location_id==home['room_id']
+            assert 'writing desk' in c.location.description
+            c.hunger=99.873;c.thirst=98.432
+            await w.save_state()
+            saved=await db.load_character_data(c.dbid)
+            assert saved['location_id']==home['room_id']
+            assert saved['hunger']==pytest.approx(99.873) and saved['thirst']==pytest.approx(98.432)
+            c.roundtime=0;await movement.cmd_go(c,w,'out')
+            assert c.location_id==2
+            c.location.remove_character(c);w.remove_active_character(c.dbid)
     client.portal.call(scenario)

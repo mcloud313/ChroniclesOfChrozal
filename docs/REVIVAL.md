@@ -37,3 +37,5 @@ NPC behavior includes schedules/dialogue, combat telegraphs and optional patrol/
 Account email is not verified. Password reset, OAuth, granular builder roles and moderation workflows are pending. Keep this trial invitation-only. The runtime log panel is bounded and temporary; audit records persist and container logs rotate.
 
 100 simultaneous players remains a hardware acceptance target. Keep one authoritative server worker. The included load harness measures browser-protocol speech/HUD traffic; it does not certify mixed combat, login bursts or a Droplet. See [verification](VERIFICATION.md) for actual evidence.
+
+The expanded scope and exact roadmap acceptance status are tracked in [ROADMAP_STATUS.md](ROADMAP_STATUS.md). Use [QA.md](QA.md) for the complete test procedure.

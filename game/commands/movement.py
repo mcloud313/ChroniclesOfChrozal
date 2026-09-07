@@ -3,6 +3,7 @@
 Movement commands.
 """
 import random
+import config
 import logging
 import json
 from typing import TYPE_CHECKING, Optional, Dict, Any
@@ -54,9 +55,9 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
         move_rt += weather_penalty
     
     if "MUD" in current_room.flags or "MUD" in target_room.flags:
-        move_rt += 1.5
+        move_rt += config.MUD_ROUNDTIME
     if "SNOWY" in target_room.flags:
-        move_rt += 1.0
+        move_rt += config.SNOW_ROUNDTIME
     final_rt = move_rt
     if is_group_move:
         slowest_member_rt = character.group.get_slowest_member_rt()

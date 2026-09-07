@@ -80,7 +80,20 @@ async def main(args, pool=None):
             if pool:await pool.release(conn)
             elif not conn.is_closed():await conn.close()
         # Let WebSocket cleanup persist before removing fixture accounts.
-        await asyncio.sleep(2)
+        # Wait for every fixture's logout save instead of deleting records while
+        # the server is still draining a mass disconnect.
+        deadline=time.monotonic()+120
+        while True:
+            probe=await pool.acquire() if pool else await asyncpg.connect(os.environ['DATABASE_URL'])
+            try:
+                pending=await probe.fetchval('SELECT count(*) FROM characters WHERE player_id=ANY($1::int[]) AND total_playtime_seconds=0',players)
+            finally:
+                if pool:await pool.release(probe)
+                else:await probe.close()
+            if not pending:break
+            if time.monotonic()>deadline:
+                raise RuntimeError('Fixture logout saves did not complete; fixture records retained for diagnosis')
+            await asyncio.sleep(.2)
         conn=await pool.acquire() if pool else await asyncpg.connect(os.environ['DATABASE_URL'])
         try:
             await conn.execute('DELETE FROM players WHERE id=ANY($1::int[])',players)

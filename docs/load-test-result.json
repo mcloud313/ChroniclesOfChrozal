@@ -1,16 +1,11 @@
 {
   "players_requested": 100,
   "peak_simultaneous_in_world": 100,
-  "command_samples": 496,
-  "elapsed_seconds": 65.79,
-  "p50_ms": 11.99,
-  "p95_ms": 436.48,
-  "max_ms": 521.14,
-  "failures": [
-    {
-      "player": 0,
-      "error": "ConnectionClosedOK: received 1000 (OK); then sent 1000 (OK)"
-    }
-  ],
+  "command_samples": 500,
+  "elapsed_seconds": 66.25,
+  "p50_ms": 7.62,
+  "p95_ms": 882.92,
+  "max_ms": 965.42,
+  "failures": [],
   "scope": "Authenticated session fixtures; same-room speech broadcast and HUD; excludes HTTP login, combat and mixed workloads."
 }

@@ -221,6 +221,8 @@ class World:
                         for _ in range(spawn_info.get("max_present", 1)):
                             room.add_mob(Mob(mob_template, room))
 
+            from game.balance import load as load_balance
+            await load_balance(self)
             from game.state import restore_runtime
             await restore_runtime(self)
             log.info("World build complete. %d rooms loaded and populated.", len(self.rooms))

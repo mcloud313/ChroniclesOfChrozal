@@ -52,14 +52,15 @@ def check_physical_hit(attacker: Union[Character, Mob], target: Union[Character,
 
     # target_dv = target.dv
     roll = random.randint(1, 20)
-    modified_roll = roll + hit_modifier
+    attacker_rating += hit_modifier
+    modified_roll = roll
 
     if modified_roll <= 1:
         is_hit, is_crit = False, False  # Critical miss
     elif modified_roll >= 20:
         is_hit, is_crit = True, True   # Critical hit
     else:
-        is_hit = (modified_roll + attacker_rating) > target_dv
+        is_hit = (modified_roll + attacker_rating) >= target_dv
         is_crit = False
 
     return HitResult(

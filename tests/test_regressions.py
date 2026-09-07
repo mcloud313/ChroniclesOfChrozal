@@ -91,3 +91,23 @@ def test_calendar_weather_seasons_match():
     from game.definitions.calendar import get_season
     from game.definitions.weather import WEATHER_TABLES
     assert all(get_season(month) in WEATHER_TABLES for month in range(1,13))
+
+
+def test_natural_attack_rolls_survive_modifiers(monkeypatch):
+    from game.combat.hit_resolver import check_physical_hit
+    attacker=SimpleNamespace(mar=0)
+    target=SimpleNamespace(dv=1000)
+    monkeypatch.setattr('game.combat.hit_resolver.random.randint',lambda a,b:20)
+    assert check_physical_hit(attacker,target,hit_modifier=-50).is_crit
+    monkeypatch.setattr('game.combat.hit_resolver.random.randint',lambda a,b:1)
+    assert not check_physical_hit(attacker,target,hit_modifier=10000).is_hit
+
+
+def test_weather_changes_spell_damage_and_nodes_protect_pvp():
+    from game.resolver import _get_weather_damage_modifier,protected_pvp
+    from game.character import Character
+    room=SimpleNamespace(flags={'WET','NODE'})
+    assert _get_weather_damage_modifier(room,'fire')==.75
+    assert _get_weather_damage_modifier(room,'lightning')==1.25
+    a=object.__new__(Character);b=object.__new__(Character);a.location=room;b.location=room
+    assert protected_pvp(a,b)

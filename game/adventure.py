@@ -1,5 +1,6 @@
 """Level 1–10 class kits, authored quest objectives, and tactical combat choices."""
 import json
+import config
 import random
 from game import utils
 from game.mob import Mob
@@ -77,7 +78,7 @@ async def cmd_quest(c,w,args):
     await c.send('Use quest, quest accept <number>, or quest complete.');return True
 
 async def cmd_technique(c,w,args):
-    name=w.get_class_name(c.class_id).lower();kit=KITS.get(name)
+    name=w.get_class_name(c.class_id).lower();kit=getattr(w,"class_kits",KITS).get(name)
     if not kit:await c.send('Choose a class before using techniques.');return True
     basic,stat,signature,multiplier,description=kit
     if not args:
@@ -88,7 +89,7 @@ async def cmd_technique(c,w,args):
     target=c.location.get_mob_by_name(target_name) if target_name else None
     if not target or 'CIVILIAN' in target.flags or not target.is_alive():
         await c.send('Choose a living hostile creature in this room.');return True
-    cost=0 if move==basic else 4 if move==signature else 8
+    cost=0 if move==basic else config.TECHNIQUE_SIGNATURE_COST if move==signature else config.TECHNIQUE_FINALE_COST
     if c.essence<cost:await c.send('You lack essence. Use your basic technique or retreat and recover.');return True
     if not c.can_see():await c.send('You cannot make out a target in the dark.');return True
     c.essence-=cost
@@ -102,10 +103,10 @@ async def cmd_technique(c,w,args):
     roll_text=f'[d20 {hit.roll} + attack {hit.attacker_rating} vs defense {hit.target_dv}; recovery {c.roundtime:.1f}s]'
     if not hit.is_hit:
         await c.send(f'Your {move} misses {target.name}. {roll_text}');return True
-    base=4+c.level*2+utils.calculate_modifier(c.stats.get(stat,10))
+    base=config.TECHNIQUE_BASE+c.level*config.TECHNIQUE_PER_LEVEL+utils.calculate_modifier(c.stats.get(stat,10))
     damage=max(1,round(base*multiplier*random.uniform(.85,1.15)))
     if move==signature:
-        damage=round(damage*1.45)
+        damage=round(damage*config.TECHNIQUE_SIGNATURE_MULTIPLIER)
         if name=='warrior':target.effects['exposed']={'amount':2,'ends_at':__import__('time').monotonic()+10}
         if name in ('cleric','druid'):c.hp=min(c.max_hp,c.hp+base//2)
         if name=='rogue' and target.hp<target.max_hp/2:damage+=base//2
@@ -113,7 +114,7 @@ async def cmd_technique(c,w,args):
         if name=='bard':c.essence=min(c.max_essence,c.essence+2)
         if name in ('paladin','runewarden'):c.effects['braced']={'amount':.5,'ends_at':__import__('time').monotonic()+10}
         if name=='monk':target.roundtime=max(target.roundtime,3)
-    if move=='finale':damage*=2
+    if move=='finale':damage*=config.TECHNIQUE_FINALE_MULTIPLIER
     if 'exposed' in target.effects:damage+=2
     c.is_dirty=True;c.is_fighting=True;c.target=target
     target.is_fighting=True;target.target=c

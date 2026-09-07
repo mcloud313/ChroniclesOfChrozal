@@ -10,7 +10,7 @@ async def cmd_tether(c,w,args):
     target=c if target_name.lower() in ('self',c.name.lower()) else c.location.get_character_by_name(target_name)
     if not target or target.status!='ALIVE' or not 0<target.spiritual_tether<10:
         await c.send('Choose a living soul here with fewer than ten tether points.');return True
-    cost=250*target.level+1000*(10-target.spiritual_tether)
+    cost=int(config.TETHER_XP_PER_LEVEL*target.level+config.TETHER_XP_PER_MISSING*(10-target.spiritual_tether))
     if c.xp_total<cost:
         await c.send(f'This rite costs the cleric {cost:,} absorbed XP. You have {int(c.xp_total):,}.');return True
     if not args.endswith(' confirm'):

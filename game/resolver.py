@@ -58,6 +58,9 @@ async def _check_and_break_concentration(target: Union['Character', 'Mob'], dama
         return True
     return False
 
+def protected_pvp(attacker,target):
+    return isinstance(attacker,Character) and isinstance(target,Character) and attacker is not target and attacker.location and bool(attacker.location.flags & {'NODE','SAFE_ZONE','SAFE'})
+
 async def resolve_physical_attack(
     attacker: Union[Character, Mob],
     target: Union[Character, Mob],
@@ -67,6 +70,8 @@ async def resolve_physical_attack(
     ability_mods: Optional[Dict[str, Any]] = None # <-- FIX 1: Add the missing argument here
 ):
     """Resolves a physical attack by coordinating hit, damage, and outcome modules."""
+    if protected_pvp(attacker,target):
+        await attacker.send("This is a sanctuary; hostile player combat is forbidden.");return
     # ---Initial Checks ---
     if not attacker.is_alive() or not target.is_alive() or attacker.location != target.location:
         return
@@ -163,6 +168,8 @@ async def resolve_ranged_attack(
     world: 'World'
 ):
     """Resolves a ranged attack by coordinating hit, damage, and outcome modules."""
+    if protected_pvp(attacker,target):
+        await attacker.send("This is a sanctuary; hostile player combat is forbidden.");return
     if not attacker.is_alive() or not target.is_alive() or attacker.location != target.location:
         return
 
@@ -233,6 +240,8 @@ async def resolve_magical_attack(
     effect_details = spell_data.get("effect_details", {})
     caster_name = caster.name.capitalize()
     target_name = target.name.capitalize()
+    if protected_pvp(caster,target):
+        await caster.send("This is a sanctuary; hostile player combat is forbidden.");return
     spell_name = spell_data.get("name", "a spell")
 
     if effect_details.get("always_hits"):
@@ -447,7 +456,7 @@ async def resolve_ability_effect(
 
         # Scale XP cost based on target's remaining tether (exponential scaling)
         base_xp_cost = effect_details.get("xp_cost", 5000)
-        tether_multiplier = 2 ** (10 - target.spiritual_tether) # Exponential 1x at 10. 2x at 9, 512x at 1
+        tether_multiplier = max(1, 11 - target.spiritual_tether) # Weaker tethers demand a greater sacrifice.
         xp_cost = base_xp_cost * tether_multiplier
 
         if caster.xp_total < xp_cost:
@@ -673,6 +682,10 @@ async def apply_effect(caster: Union[Character, Mob], target: Union[Character, M
                 # Use the resolver's own function to ensure messages are sent
                 await resolve_effect_expiration(target, effect_key, world)
 
+    # Refreshing the same HP buff must not repeatedly increase maximum HP.
+    previous=target.effects.get(effect_name)
+    if previous and previous.get('stat_affected')=='max_hp':
+        target.max_hp-=previous.get('amount',0);target.hp=min(target.hp,target.max_hp)
     # --- Store the final effect on the target ---
     target.effects[effect_name] = {
         "name": effect_name,

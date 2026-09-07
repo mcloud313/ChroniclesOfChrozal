@@ -77,10 +77,10 @@ These are explicit test-account commands, never production progression. They ret
 
 - Buy/sell at the Tideforge; verify coin, stock and item state together after reconnect/restart. Try zero/negative amounts and repeated requests. A purchase/sale cycle must lose coins, including high bartering skill.
 - Deposit/withdraw coins and items at the tavern bank. Test insufficient balances and containers. No item should exist in both bank and inventory.
-- Use `mail` to send to a character ID, including an offline recipient. Test reading somebody else's letter and sending an empty loose item attachment. Attachments transfer to recipient inventory; nested/full containers are rejected.
+- Use `mail` to send to a character ID, including an offline recipient. Use the character ID shown in the administrator’s character catalog. Test reading somebody else's letter and sending an empty loose item attachment. Attachments transfer to recipient inventory; nested/full containers are rejected.
 - Complete a chapter and inspect `reputation`. Configure a quest, shop entry or exit with a faction threshold; check both sides of the gate and repeat turn-in to ensure no duplicated rewards.
 - `market sell 100 <item>`, buy it using another account, and test cancellation. The seller receives proceeds minus tax, even offline. Two buyers must not receive the same item.
-- `home buy`, `home describe <text>`, and `home visit <character id>` test the first housing charter/description system. This is not yet a private furnished room simulation.
+- `home buy`, `home describe <text>`, and `home visit <character id>` test the first housing charter/description system. Use `home enter` to enter the persistent room and `out` to leave; drop and retrieve furnishings/items and check them after restart.
 - At a node with two PCs, alternate `tales <sentence>`. There is no XP/coin reward and one player cannot take consecutive turns.
 - `enchant <item>` at the Tideforge spends coins; check rank cap and persistent bonuses. At level 99, `infuse <item>` spends surplus XP above the cap threshold, with increasing cost and a rank cap. Reconnect and check the actual damage/armor bonus.
 

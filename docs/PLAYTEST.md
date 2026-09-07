@@ -14,8 +14,9 @@ Create a character and assign the shared stat array. Put your strongest value in
 | Bard | Persona | discord | crescendo: partial essence refund |
 | Paladin | Aura | judgment | oath: protection against next blow |
 | Monk | Agility | palm | flurry: delays the enemy |
+| Runewarden | Intellect | etch | aegis: wards the next blow |
 
-Use `technique <move> <enemy>`, for example `technique slash saltwind scavenger`. All classes unlock `technique finale <enemy>` at level 7. Basic techniques cost no essence. Signatures cost 4 and finales 8. Watch the enemy's announced wind-up and use `brace` to halve the next hit. Recovery cannot be bypassed by spamming commands. The original skills/spells remain available but are outside this focused balance pass.
+Use `technique <move> <enemy>`, for example `technique slash tide scavenger`. All classes unlock `technique finale <enemy>` at level 7. Basic techniques cost no essence. Signatures cost 4 and finales 8. Watch the enemy's announced wind-up and use `brace` to halve the next hit. Recovery cannot be bypassed by spamming commands. The original skills/spells remain available but are outside this focused balance pass.
 
 Mira visits the plaza by day and the Lantern & Tide tavern by night. `talk Mira` advances relevant chapters. Silverleaf is south of the plaza; the Tideforge is east. `gather silverleaf`, then `craft coast salve` at the forge; `treat` consumes a salve to heal up to 30 HP. Iron comes from Serpent Road. Type `craft` for recipes. `relics`, `attune starmap fragment`, and `journal` expose the observatory discovery.
 

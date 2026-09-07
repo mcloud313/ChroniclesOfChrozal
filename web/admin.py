@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from game.database import db_manager
 from web.auth import admin_player
 
-EDITABLE = {'factions','balance_rules','quests','areas','rooms','exits','room_objects','ambient_scripts','item_templates','mob_templates',
+EDITABLE = {'class_kits','factions','balance_rules','quests','areas','rooms','exits','room_objects','ambient_scripts','item_templates','mob_templates',
             'mob_attacks','mob_loot_table','loot_tables','loot_table_entries','ability_templates',
             'races','classes','damage_types','shop_inventories','resource_nodes','recipes','npc_schedules','relics'}
 READONLY = {'player_homes','market_listings','character_reputation','economy_ledger','game_mail','character_quests','characters','character_stats','character_skills','character_abilities','character_equipment',
@@ -67,6 +67,15 @@ async def _edit(table,body,request,player):
     for protected in ('id','created_at','updated_at','claimed_by','claimed_at','instance_id','remaining','depleted_at'):
         if protected in values:
             raise HTTPException(422, f'{protected} is managed by the server')
+    if table == 'balance_rules' and 'value' in values:
+        from game.balance import RULES
+        name=values.get('name') or (body.original or {}).get('name')
+        if name in RULES and not RULES[name][1]<=float(values['value'])<=RULES[name][2]:
+            raise HTTPException(422,'Balance value is outside its supported range')
+    if table == 'class_kits' and 'definition' in values:
+        definition=values['definition']
+        if not isinstance(definition,list) or len(definition)!=5 or not isinstance(definition[3],(float,int)) or not .1<=definition[3]<=5:
+            raise HTTPException(422,'Class kit requires [basic,attribute,signature,multiplier,description]')
     if table == 'quests' and 'objectives' in values:
         objectives=values['objectives']
         if not isinstance(objectives,list) or not objectives or any(not isinstance(o,dict) or o.get('kind') not in {'visit','talk','gather','craft','kill'} or 'target' not in o or not isinstance(o.get('label'),str) or type(o.get('count',1)) is not int or not 1<=o.get('count',1)<=100 for o in objectives):

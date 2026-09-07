@@ -259,6 +259,9 @@ class Character:
         from game.state import restore_effects
         runtime = db_data.get('runtime_state', {})
         if isinstance(runtime,str): runtime=json.loads(runtime)
+        for effect in runtime.get('effects',{}).values():
+            if effect.get('stat_affected')=='max_hp' and effect.get('ends_at',0)<=time.time():
+                self.max_hp-=effect.get('amount',0)
         self.effects=restore_effects(runtime.get('effects',{}))
         self.pose=runtime.get('pose')
         if runtime.get('death_at'):

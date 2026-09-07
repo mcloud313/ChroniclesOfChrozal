@@ -180,9 +180,9 @@ def xp_needed_for_level(current_level: int) -> int:
         return [0,150,400,800,1400,2200,3300,4700,6500,9000][current_level]
     target = current_level + 1
     if target <= 75:
-        return round(9000 + (10_800_000-9000)*((target-10)/65)**2.2)
-    final_step = 10_800_000 - xp_needed_for_level(73)
-    return 10_800_000 + sum(round(final_step * 1.18**n) for n in range(1,target-74))
+        return round(9000 + (config.XP_LEVEL_75_TOTAL-9000)*((target-10)/65)**2.2)
+    final_step = config.XP_LEVEL_75_TOTAL - xp_needed_for_level(73)
+    return config.XP_LEVEL_75_TOTAL + sum(round(final_step * config.XP_AFTER_75_GROWTH**n) for n in range(1,target-74))
 
 
 def get_pronouns(sex: Optional[str]) -> tuple[str, str, str, str, str]:

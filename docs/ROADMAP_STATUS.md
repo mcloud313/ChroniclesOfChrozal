@@ -20,13 +20,13 @@ Source: supplied **Roadmap to 1.0.pdf**, September 26, 2025. Its “completed Dj
 | Gathering/crafting | Resource depletion/regrowth, mining/herbalism, skinning claims, alchemy/blacksmithing rank gains, recipes and salves |
 | Rotating logs | Separate bounded server/error/public-speech logs plus persistent builder audit |
 | Integration tests | Startup/migration, auth, builder, persistence, class arc and economy/soul tests; see actual results |
-| Database-driven balancing | Existing templates plus balance_rules, recipes, factions/quest gates; full removal of legacy magic numbers is **not complete** |
+| Database-driven balancing | Existing ability/item/mob templates plus class_kits, validated progression/combat/terrain/tether balance_rules, recipes and faction/quest gates. A complete audit of every retained legacy subsystem remains a release task. |
 | Telnet to WebSocket | Active server starts only HTTP/WebSocket; authenticated sessions and exact Origin checks |
 | Web/mobile client | Responsive client with HUD and command history; desktop/mobile browser checks |
 | Endgame item infusion | Level-99 surplus-XP sink with permanent item damage/armor bonuses and capped escalating ranks |
 | Advanced NPC AI (aspirational) | Schedules, authored dialogue, telegraphs, optional patrol and low-health flee flags; not a general planning AI |
-| Player housing (aspirational) | Persistent purchasable room charter and description/visiting; **private furnished room simulation is not complete** |
-| Player-driven economy (aspirational) | Fixed-price escrow stalls with cancellation, offline proceeds and tax; timed bidding auctions are **not implemented** |
+| Player housing (aspirational) | Persistent purchasable home room, editable description, owner entry/exit and saved items; deeper furniture interactions remain an expansion |
+| Player-driven economy (aspirational) | Fixed-price escrow stalls with cancellation, offline proceeds and tax; timed bidding auctions remain an optional expansion |
 | Visual map editor (aspirational) | Room graph, draggable saved layout and click-to-edit; exit connections use the catalog form |
 | Enchanting (aspirational) | Coin-funded permanent equipment ranks at the Tideforge; deeper recipes/materials remain a design expansion |
 | Tavern games (aspirational) | Shared Tales alternating-player story game, no farming rewards |

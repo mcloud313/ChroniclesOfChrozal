@@ -1,6 +1,6 @@
 # Bazzite development first
 
-This checkout is ready to be tested on Andrew's Bazzite machine before any cloud deployment. These commands have not been executed on that machine.
+This development checkout is prepared for testing on Andrew's Bazzite machine before any cloud deployment. These commands have not been executed on that machine.
 
 ## Container-based local trial
 
@@ -9,14 +9,14 @@ Bazzite documents containers and Distrobox as development options. Use the host 
 ```sh
 mkdir -p ~/Projects
 cd ~/Projects
-git clone --branch revival/web-realm https://github.com/mcloud313/ChroniclesOfChrozal.git
-cd ChroniclesOfChrozal
+# Extract the delivered Chrozal-QA-Build.zip here first.
+cd Chrozal-QA/source
 podman --version
 podman compose version
-cp .env.example .env
+python3 scripts/configure_local.py
 ```
 
-Edit `.env`: replace both database-password placeholders with the same unique password, leave `PUBLIC_ORIGIN=http://localhost:8000`, keep `ALLOW_REGISTRATION=false`. Do not commit the file.
+The configuration script generates a unique database password and creates `.env` with private permissions. It retains an existing file. Leave `PUBLIC_ORIGIN=http://localhost:8000` and `ALLOW_REGISTRATION=false` for this trial.
 
 `podman compose` needs an installed Compose provider; it is a wrapper, not the provider itself. If the version check fails, set up Compose using the official Podman Desktop Compose instructions linked below, then repeat the check. Avoid layering unrelated packages onto Bazzite merely to run this project.
 

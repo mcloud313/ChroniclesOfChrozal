@@ -28,11 +28,11 @@ async def cmd_mail(c,w,args):
     if args.startswith('send '):
         parts=[p.strip() for p in args[5:].split('|')]
         if len(parts) not in (3,4) or not parts[0].isdigit() or not 1<=len(parts[1])<=100 or not 1<=len(parts[2])<=3000:
-            await c.send('mail send <character id> | subject | message [| loose item UUID]');return True
+            await c.send('mail send <character id> | subject | message [| loose item name or UUID]');return True
         recipient=int(parts[0]);fee=await rule(w,'mail_fee',2)
         if c.coinage<fee:await c.send(f'Postage costs {fee} coins.');return True
-        item=c._inventory_items.get(parts[3]) if len(parts)==4 else None
-        if len(parts)==4 and (not item or item.contents):await c.send('Attach an empty, loose item from your inventory by UUID.');return True
+        item=next((i for i in c._inventory_items.values() if str(i.id)==parts[3] or i.name.lower()==parts[3].lower()),None) if len(parts)==4 else None
+        if len(parts)==4 and (not item or item.contents):await c.send('Attach an empty, loose item from your inventory by name or UUID.');return True
         async with w.db_manager.pool.acquire() as conn:
             async with conn.transaction():
                 if not await conn.fetchval("SELECT id FROM characters WHERE id=$1 AND status<>'PERMADEAD'",recipient):

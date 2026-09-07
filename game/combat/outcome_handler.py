@@ -4,6 +4,7 @@ Handles the consequences of combat actions: applying damage, durability,
 messaging, and processing defeat.
 """
 import json
+import config
 import random
 import asyncio
 import math
@@ -262,7 +263,7 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
         else:
             dropped_coinage, dropped_item_ids = 0, []
 
-        base_xp = 25
+        base_xp = int(config.MOB_XP_BASE)
         xp_gain = max(1, target.level * base_xp + random.randint(-base_xp // 2, base_xp // 2))
         killer = attacker if isinstance(attacker, Character) else None
 

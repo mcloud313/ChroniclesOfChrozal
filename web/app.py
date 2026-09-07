@@ -225,7 +225,7 @@ async def websocket(ws: WebSocket):
                     task.cancel()
             if len(tasks) == 4:
                 try:
-                    await asyncio.wait_for(asyncio.shield(tasks[3]), timeout=20)
+                    await asyncio.wait_for(asyncio.shield(tasks[3]), timeout=90)
                 except (asyncio.TimeoutError, asyncio.CancelledError):
                     tasks[3].cancel()
             results = await asyncio.gather(*tasks, return_exceptions=True)
