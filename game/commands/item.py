@@ -58,6 +58,8 @@ async def cmd_get(character: 'Character', world: 'World', args_str: str) -> bool
             await character.location.add_coinage(-amount, world)
             # Add coinage to the character
             character.coinage += amount
+            character.is_dirty=True
+            await world.db_manager.execute_query("INSERT INTO economy_ledger(character_id,reason,coin_delta) VALUES($1,'coin pickup',$2)",character.dbid,amount)
             
             await character.send(f"You pick up {utils.format_coinage(amount)}.")
             await character.location.broadcast(
@@ -87,6 +89,8 @@ async def cmd_get(character: 'Character', world: 'World', args_str: str) -> bool
             await character.send(f"Tehre is no {item_name} in the {container_name}.")
             return True
         
+        if character.level<item_to_get.minimum_level:
+            await character.send(f'This item requires level {item_to_get.minimum_level}.');return True
         # Check the two-hand limit
         if len(character._inventory_items) >= 2:
             await character.send("Your hands are full.")
@@ -110,6 +114,8 @@ async def cmd_get(character: 'Character', world: 'World', args_str: str) -> bool
             await character.send("You don't see that here.")
             return True
         
+        if character.level<item_to_get.minimum_level:
+            await character.send(f'This item requires level {item_to_get.minimum_level}.');return True
         # Check the two hand limit
         if len(character._inventory_items) >= 2:
             await character.send("Your hands are full.")
@@ -129,6 +135,10 @@ async def cmd_get(character: 'Character', world: 'World', args_str: str) -> bool
 
 async def cmd_drop(character: 'Character', world: 'World', args_str: str) -> bool:
     """Drops a unique item instance onto the ground."""
+    if character.level<10:
+        await character.send("Dropping transferable belongings unlocks at level 10. Use your containers or bank to free your hands.")
+        return True
+
     if not args_str:
         await character.send("Drop what?")
         return True
@@ -164,7 +174,13 @@ async def cmd_wear(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send("You aren't carrying that.")
         return True
     
+    if character.level<item_to_equip.minimum_level:
+        await character.send(f'This item requires level {item_to_equip.minimum_level}.');return True
     target_slots = item_to_equip.wear_location
+    if item_to_equip.item_type in {item_defs.WEAPON,item_defs.TWO_HANDED_WEAPON,item_defs.RANGED_WEAPON}:
+        target_slots = target_slots or 'main_hand'
+    if item_to_equip.item_type in {item_defs.TWO_HANDED_WEAPON,item_defs.RANGED_WEAPON} and len(character._inventory_items)>1:
+        await character.send('Put away the item in your other hand first.');return True
     if not target_slots:
         await character.send("You can't equip that.")
         return True
@@ -215,91 +231,40 @@ async def cmd_wear(character: 'Character', world: 'World', args_str: str) -> boo
     await character.location.broadcast(f"\r\n{character.name} {verb}s {item_to_equip.name}.\r\n", exclude={character})
     return True
 
-async def cmd_sheathe(character: 'Character', world: 'World', args_str: str) -> bool:
-    """Sheathes all wielded weapons, freeing the character's hands."""
-    
-    main_hand_item = character._equipped_items.get("main_hand")
-    off_hand_item = character._equipped_items.get("off_hand")
-
-    if not main_hand_item and not off_hand_item:
-        await character.send("You are not wielding anything to sheathe.")
-        return True
-
-    sheathed_something = False
-    
-    if main_hand_item:
-        character._equipped_items["sheathed_main_hand"] = main_hand_item
-        del character._equipped_items["main_hand"]
-        
-        # Don't try to delete off_hand if wielding two-handed
-        # (it was never set in the first place with the new logic)
-        
-        await character.send(f"You sheathe your {main_hand_item.name}.")
-        await character.location.broadcast(f"\r\n{character.name} sheathes their {main_hand_item.name}.\r\n", exclude={character})
-        sheathed_something = True
-
-    # This handles a separate one-handed weapon in the off_hand
-    if off_hand_item and off_hand_item != main_hand_item:
-        character._equipped_items["sheathed_off_hand"] = off_hand_item
-        del character._equipped_items["off_hand"]
-        await character.send(f"You sheathe your {off_hand_item.name}.")
-        if not main_hand_item:
-            await character.location.broadcast(f"\r\n{character.name} sheathes their {off_hand_item.name}.\r\n", exclude={character})
-        sheathed_something = True
-
-    if sheathed_something:
-        character.is_dirty = True
-        
+async def cmd_sheathe(character,world,args_str):
+    """Store weapons in real, open carried containers."""
+    weapons=[i for slot,i in character._equipped_items.items() if slot in ('main_hand','off_hand') and i.item_type in {item_defs.WEAPON,item_defs.TWO_HANDED_WEAPON,item_defs.RANGED_WEAPON}]
+    containers=[i for i in list(character._inventory_items.values())+list(character._equipped_items.values()) if i.capacity>0 and i.is_open and (not args_str or args_str.lower() in i.name.lower())]
+    if not weapons:
+        await character.send('You have no wielded weapon to put away.');return True
+    for weapon in weapons:
+        container=next((i for i in containers if i!=weapon and i.get_total_contents_weight()+weapon.get_total_weight()<=i.capacity),None)
+        if not container:
+            await character.send('Carry or wear an open container with room for your weapon.');return True
+        await world.db_manager.update_item_location(weapon.id,container_id=container.id)
+        for slot in list(character._equipped_items):
+            if character._equipped_items[slot]==weapon:del character._equipped_items[slot]
+        weapon.container_id=container.id;container.contents[weapon.id]=weapon;character.is_dirty=True
+        await character.send(f'You stow {weapon.name} in {container.name}.')
     return True
 
-async def cmd_unsheathe(character: 'Character', world: 'World', args_str: str) -> bool:
-    """Draws sheathed weapons, readying them for combat."""
-
-    sheathed_main = character._equipped_items.get("sheathed_main_hand")
-    sheathed_off = character._equipped_items.get("sheathed_off_hand")
-
-    if not sheathed_main and not sheathed_off:
-        await character.send("You do not have any weapons sheathed.")
-        return True
-
-    main_hand_free = "main_hand" not in character._equipped_items
-    off_hand_free = "off_hand" not in character._equipped_items
-
-    if sheathed_main:
-        is_two_handed = sheathed_main.item_type == item_defs.TWO_HANDED_WEAPON
-        
-        if is_two_handed:
-            if not main_hand_free or not off_hand_free:
-                # FIX: Corrected the raw string to be an f-string
-                await character.send(f"You need both hands free to draw your {sheathed_main.name}.")
-                return True
-            character._equipped_items["main_hand"] = sheathed_main
-            character._equipped_items["off_hand"] = sheathed_main
-        else:
-            if not main_hand_free:
-                await character.send(f"Your main hand is not free to draw your {sheathed_main.name}.")
-                return True
-            character._equipped_items["main_hand"] = sheathed_main
-
-        del character._equipped_items["sheathed_main_hand"]
-        await character.send(f"You draw your {sheathed_main.name}.")
-        await character.location.broadcast(f"\\r\\n{character.name} draws their {sheathed_main.name}.\\r\\n", exclude={character})
-        character.is_dirty = True
-        
-        main_hand_free = False
-        if is_two_handed:
-            off_hand_free = False
-
-    if sheathed_off:
-        if not off_hand_free:
-            await character.send(f"Your off-hand is not free to draw your {sheathed_off.name}.")
-        else:
-            character._equipped_items["off_hand"] = sheathed_off
-            del character._equipped_items["sheathed_off_hand"]
-            await character.send(f"You draw your {sheathed_off.name}.")
-            character.is_dirty = True
-
-    return True
+async def cmd_unsheathe(character,world,args_str):
+    """Draw a weapon from an accessible container; preserve legacy sheathed items."""
+    if character.hands_are_full():
+        await character.send('Free your hands before drawing a weapon.');return True
+    for slot in ('sheathed_main_hand','sheathed_off_hand'):
+        weapon=character._equipped_items.get(slot)
+        if weapon and (not args_str or args_str.lower() in weapon.name.lower()):
+            del character._equipped_items[slot];character._inventory_items[weapon.id]=weapon
+            return await cmd_wear(character,world,weapon.name)
+    containers=[i for i in list(character._inventory_items.values())+list(character._equipped_items.values()) if i.capacity>0 and i.is_open]
+    for container in containers:
+        weapon=next((i for i in container.contents.values() if i.item_type in {item_defs.WEAPON,item_defs.TWO_HANDED_WEAPON,item_defs.RANGED_WEAPON} and (not args_str or args_str.lower() in i.name.lower())),None)
+        if weapon:
+            await cmd_get(character,world,weapon.name+' from '+container.name)
+            if weapon.id in character._inventory_items:return await cmd_wear(character,world,weapon.name)
+            return True
+    await character.send('No matching weapon is accessible in an open container.');return True
 
 async def cmd_remove(character: 'Character', world: 'World', args_str: str) -> bool:
     """Removes an equipped item, correctly handling multi-slot items."""
@@ -318,6 +283,8 @@ async def cmd_remove(character: 'Character', world: 'World', args_str: str) -> b
         if equipped_item and equipped_item.id == item_to_remove.id:
             slots_to_clear.append(slot)
     
+    if not any(slot in ('main_hand','off_hand') for slot in slots_to_clear) and character.hands_are_full():
+        await character.send('Free a hand before removing that item.');return True
     # Remove from all slots
     for slot in slots_to_clear:
         del character._equipped_items[slot]
@@ -470,7 +437,7 @@ async def _handle_consume(character: 'Character', world: 'World', args_str: str,
     if effect == "restore_hunger":
         if character.hunger >= 100:
             await character.send("You are too full to eat anything else.")
-            return False # Do not consume the item
+            return True # Do not consume the item
         
         character.hunger = min(100, character.hunger + amount)
         await character.send(f"You eat the {item_to_consume.name} and feel less hungry.")
@@ -479,7 +446,7 @@ async def _handle_consume(character: 'Character', world: 'World', args_str: str,
     elif effect == "restore_thirst":
         if character.thirst >= 100:
             await character.send("You are too full to drink anything else.")
-            return False
+            return True
             
         character.thirst = min(100, character.thirst + amount)
         await character.send(f"You drink the {item_to_consume.name} and feel refreshed.")
@@ -544,7 +511,7 @@ async def cmd_open(character: 'Character', world: 'World', args_str: str) -> boo
             
             # Apply damage or other effects from the trap
             if damage := trap_data.get("damage", 0):
-                await outcome_handler.apply_damage(character, damage)
+                outcome_handler.apply_damage(character, damage)
                 await character.send(f"<r>You take {damage} damage!<x>")
 
             # Deactivate the trap so it doesn't fire again

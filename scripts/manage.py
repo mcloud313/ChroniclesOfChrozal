@@ -25,12 +25,24 @@ async def main(args):
             if args.admin:
                 await db_manager.execute_query('UPDATE players SET is_admin=true WHERE id=$1',account)
             print('Account created.')
+        elif args.command=='recovery-code':
+            from web.recovery import issue
+            player=await db_manager.load_player_account(args.username)
+            if not player:raise ValueError('Unknown account')
+            print('Single-use recovery code (30 minutes): '+await issue(player['id'],'reset'))
         elif args.command=='qa-set':
             from scripts.qa_accounts import set_character
             await set_character(args)
+        elif args.command=='qa-add-missing':
+            from scripts.qa_accounts import add_missing
+            await add_missing()
         elif args.command=='qa-accounts':
             from scripts.qa_accounts import provision
             await provision()
+        elif args.command=='expand-slice':
+            from scripts.expand_slice import expand
+            async with db_manager.pool.acquire() as conn:
+                async with conn.transaction():await expand(conn)
         elif args.command=='seed':
             await seed()
         elif args.command=='disable-legacy-accounts':
@@ -57,7 +69,7 @@ async def seed():
                 (3,'Saltwind Strand','Grey-green waves wash the shore. Silverleaf grows between stones. Try gather silverleaf.', ['OUTDOORS']),
                 (4,'The Tideforge','A communal workbench stands beside a dwarven forge. Craft coast salve here with two silverleaf, or a wayfarer charm with two iron fragments.', []),
                 (5,'Serpent Road','An old road climbs toward the Serpent\'s Tooth Mountains. Iron fragments lie among the scree. Try gather iron fragments.', ['OUTDOORS']),
-                (6,'The Broken Observatory','Broken star-rings encircle an altar of Celestria. A quiet Echo answers the patient. Read relics, then attune starmap fragment.', [])]
+                (6,'The Broken Observatory','Broken star-rings encircle an altar of Celestria. A quiet Echo answers the patient. The dormant star-rings hint at mysteries reserved for much more experienced adventurers.', [])]
             for rid,name,desc,flags in rooms:
                 await c.execute('INSERT INTO rooms(id,area_id,name,description,flags) VALUES($1,1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,description=EXCLUDED.description,flags=EXCLUDED.flags',rid,name,desc,json.dumps(flags))
             for src,dst,d,back in [(1,2,'w','e'),(1,3,'s','n'),(1,4,'e','w'),(1,5,'n','s'),(5,6,'n','s')]:
@@ -89,11 +101,13 @@ async def seed():
             faction=await c.fetchval("INSERT INTO factions(name,description) VALUES('Valian Wayfinders','The coast’s guides, rescuers and keepers of shared roads.') RETURNING id")
             await c.execute('UPDATE quests SET faction_id=$1,reputation_reward=10',faction)
             await c.execute('UPDATE quests SET required_standing=10 WHERE min_level>1')
-            print('Seeded Port Valis: 15 rooms and nine level 1–10 chapters.')
+            await c.execute('INSERT INTO notice_boards(room_id) VALUES(1) ON CONFLICT DO NOTHING')
+            print('Seeded Port Valis: 15 rooms and opening notice-board templates. Use expand-slice for the 100-room world.')
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();sub=parser.add_subparsers(dest='command',required=True)
     account=sub.add_parser('account');account.add_argument('username');account.add_argument('email');account.add_argument('--admin',action='store_true')
+    recovery=sub.add_parser('recovery-code');recovery.add_argument('username')
     qa=sub.add_parser('qa-set');qa.add_argument('class_name');qa.add_argument('--level',type=int);qa.add_argument('--tether',type=int);qa.add_argument('--coins',type=int,default=10000);qa.add_argument('--surplus-xp',type=int,default=0);qa.add_argument('--dead',action='store_true')
-    sub.add_parser('qa-accounts');sub.add_parser('seed');sub.add_parser('init');sub.add_parser('disable-legacy-accounts')
+    sub.add_parser('qa-add-missing');sub.add_parser('expand-slice');sub.add_parser('qa-accounts');sub.add_parser('seed');sub.add_parser('init');sub.add_parser('disable-legacy-accounts')
     asyncio.run(main(parser.parse_args()))

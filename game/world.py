@@ -221,6 +221,8 @@ class World:
                         for _ in range(spawn_info.get("max_present", 1)):
                             room.add_mob(Mob(mob_template, room))
 
+            for relic in await self.db_manager.fetch_all_query('SELECT template_id,min_level FROM relics'):
+                if relic['template_id'] in self.item_templates:self.item_templates[relic['template_id']]['min_level']=relic['min_level']
             from game.balance import load as load_balance
             await load_balance(self)
             from game.state import restore_runtime
@@ -375,11 +377,17 @@ class World:
 
     async def update_mob_ai(self, dt: float):
         tasks = [room.mob_ai_tick(dt, self) for room in self.rooms.values()]
-        if tasks: await asyncio.gather(*tasks, return_exceptions=True)
+        if tasks:
+            results=await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result,Exception):log.error('Respawn failed',exc_info=(type(result),result,result.__traceback__))
 
     async def update_respawns(self, dt: float):
         tasks = [room.check_respawn(self) for room in self.rooms.values()]
-        if tasks: await asyncio.gather(*tasks, return_exceptions=True)
+        if tasks:
+            results=await asyncio.gather(*tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result,Exception):log.error('Respawn failed',exc_info=(type(result),result,result.__traceback__))
 
     async def update_bard_songs(self, dt: float):
         """Ticker: Manages upkeep and applies effects for active bard songs."""
@@ -815,6 +823,10 @@ class World:
             if not weather_table:
                 continue
 
+            # Heat extremes outside deserts are restricted to midsummer and <1%.
+            weather_table=[(condition, .5 if condition=='BLAZING' and climate!='arid' else weight)
+                           for condition,weight in weather_table
+                           if condition!='BLAZING' or climate=='arid' or self.game_month==7]
             conditions, weights = zip(*weather_table)
             new_condition = random.choices(conditions, weights=weights, k=1)[0]
 

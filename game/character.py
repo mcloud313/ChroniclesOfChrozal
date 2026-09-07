@@ -264,6 +264,7 @@ class Character:
                 self.max_hp-=effect.get('amount',0)
         self.effects=restore_effects(runtime.get('effects',{}))
         self.pose=runtime.get('pose')
+        self.is_hidden=bool(runtime.get('hidden',False))
         if runtime.get('death_at'):
             self.death_timer_ends_at=time.monotonic()+max(0,runtime['death_at']-time.time())
         elif self.status=='DYING':
@@ -321,12 +322,14 @@ class Character:
 
         if equipment_record:
             for slot, item_id in dict(equipment_record).items():
-                if slot != 'character_id' and item_id and item_id in all_owned_items:
+                if slot != 'character_id' and item_id and item_id in all_owned_items and not all_owned_items[item_id].container_id:
                     self._equipped_items[slot] = all_owned_items[item_id]
 
         for item in all_owned_items.values():
             if not item.is_equipped(self) and not item.is_in_container():
                 self._inventory_items[item.id] = item
+        from game.hands import assign
+        assign(self)
         await self.check_and_learn_new_abilities()
         # --------------------------------------------------------------------------
 
@@ -362,7 +365,7 @@ class Character:
         """
         from game.state import serialize_effects
         return {
-            "runtime_state": json.dumps({"effects":serialize_effects(self.effects),"pose":self.pose,"death_at":time.time()+max(0,self.death_timer_ends_at-time.monotonic()) if self.death_timer_ends_at else None}),
+            "runtime_state": json.dumps({"effects":serialize_effects(self.effects),"hidden":self.is_hidden,"pose":self.pose,"death_at":time.time()+max(0,self.death_timer_ends_at-time.monotonic()) if self.death_timer_ends_at else None}),
             "status": self.status,
             "stance": self.stance,
             "level": self.level,
@@ -375,7 +378,7 @@ class Character:
             "coinage": self.coinage,
             "spiritual_tether": self.spiritual_tether,
             "respawn_room_id": self.respawn_room_id,
-            "total_playtime_seconds": self.total_playtime_seconds,
+            "total_playtime_seconds": self.total_playtime_seconds + (int(time.monotonic()-self.login_timestamp) if self.login_timestamp else 0),
             "unspent_skill_points": self.unspent_skill_points,
             "unspent_attribute_points": self.unspent_attribute_points,
             # --- FIX: Add hunger and thirst to the save data ---
@@ -502,6 +505,9 @@ class Character:
         essence_regen_rate = (config.ESSENCE_REGEN_BASE_PER_SEC + (self.aura_mod * config.ESSENCE_REGEN_AURA_MULTIPLIER))
 
         # --- Apply Multipliers ---
+        resting = self.stance in {"Sitting", "Lying"} and not self.is_fighting
+        if not resting:
+            return
         if is_in_node:
             hp_regen_rate *= config.NODE_REGEN_MULTIPLIER
             essence_regen_rate *= config.NODE_REGEN_MULTIPLIER
@@ -511,7 +517,7 @@ class Character:
             essence_regen_rate *= config.MEDITATE_REGEN_MULTIPLIER
 
         # --- Apply Regeneration, Gated by Hunger/Thirst ---
-        if self.hp < self.max_hp and self.status != "MEDITATING": # Can't regen HP while meditating
+        if self.hp < self.max_hp:
             if self.hunger > 0:
                 self.hp = min(self.max_hp, self.hp + (hp_regen_rate * dt))
 
@@ -673,12 +679,13 @@ class Character:
 
     def hands_are_full(self) -> bool:
         """Checks if the character can pick up or receive another item."""
+        if any(i.instance_stats.get('held_hand')=='both' for i in self._inventory_items.values()):return True
         hand_slots_used = len(self._inventory_items)
         main_hand_item = self._equipped_items.get("main_hand")
         
         if main_hand_item:
             # A two-handed weapon instantly fills both "hand" slots.
-            if main_hand_item.item_type == item_defs.TWO_HANDED_WEAPON:
+            if main_hand_item.item_type in (item_defs.TWO_HANDED_WEAPON,item_defs.RANGED_WEAPON):
                 return True
             hand_slots_used += 1
 

@@ -40,3 +40,14 @@ async def set_character(args):
     if args.surplus_xp<0 or args.coins<0:raise ValueError('Use nonnegative XP/coins')
     await db.execute_query('UPDATE characters SET level=$1,xp_total=$2,xp_pool=0,spiritual_tether=$3,hp=$4,max_hp=$5,essence=$6,max_essence=$6,coinage=$7,status=$8,location_id=1,runtime_state=\'{}\' WHERE id=$9',level,xp+args.surplus_xp,tether,0 if args.dead else hp,hp,essence,args.coins,'DEAD' if args.dead else 'ALIVE',row['id'])
     print(f'{args.class_name} testing fixture updated. This command only changes chrozal_tester characters.')
+
+async def add_missing():
+    account=await db.fetch_one_query("SELECT id FROM players WHERE username='chrozal_tester'")
+    if not account:raise ValueError('Existing chrozal_tester account required.')
+    rows=await db.fetch_all_query('SELECT id,name FROM classes WHERE id NOT IN (SELECT class_id FROM characters WHERE player_id=$1)',account['id'])
+    for row in rows:
+        cid=row['id'];name=row['name'];stats=dict.fromkeys(['might','vitality','agility','intellect','aura','persona'],16)
+        hp=30+classes.CLASS_HP_DIE.get(cid,8)+utils.calculate_modifier(16)
+        essence=15+classes.CLASS_ESSENCE_DIE.get(cid,6)+2*utils.calculate_modifier(16)
+        await db.create_character(account['id'],name,'Playtest','They/Them',1,cid,name,stats,describe({'first_name':name,'race_name':'Chrozalin','sex':'They/Them'}),hp,hp,essence,essence,3)
+    print(f'Added {len(rows)} missing class characters; existing characters and account credentials retained.')

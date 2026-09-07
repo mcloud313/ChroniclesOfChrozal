@@ -734,3 +734,21 @@ ABILITIES_DATA['stone_memory']={
     'effect_type':EFFECT_DAMAGE,'effect_details':{'school':'Arcane','damage_type':'earth','damage_base':15,'damage_rng':6},
     'description':'Awaken a rune of stone beneath a foe; three-second cast, four-second recovery.',
     'messages':{'caster_self_complete':'You awaken the memory of stone.','room_complete':'Stone runes flare around {caster_name}.'}}
+
+# Journeys beyond the coast: class-appropriate invocations through level 20.
+for _class,_element,_names in [
+ ('mage','arcane',['Prismatic Lance','Astral Rupture']),
+ ('cleric','divine',['Dawn Verdict','Hymn of Judgment']),
+ ('druid','earth',['Rootquake','Wrath of the Oldwood']),
+ ('bard','sonic',['Fracturing Refrain','Anthem of the Lost']),
+ ('paladin','divine',['Radiant Challenge','Covenant of Dawn']),
+ ('runewarden','earth',['Granite Verdict','Mountain Remembrance']),
+ ('tempest','lightning',['Thunder Lance','Eye of the Tempest'])
+]:
+    for _level,_name in zip((12,18),_names):
+        _school='Arcane' if _class in ('mage','bard','runewarden','tempest') else 'Divine'
+        ABILITIES_DATA[_name.lower().replace(' ','_')]={'name':_name,'type':'SPELL','class_req':[_class],'level_req':_level,
+          'cost':12+_level//2,'target_type':TARGET_CHAR_OR_MOB,'cast_time':4.0,'roundtime':5.0,
+          'effect_type':EFFECT_DAMAGE,'effect_details':{'school':_school,'damage_type':_element,'damage_base':18+_level,'damage_rng':8},
+          'description':f'A powerful {_element} invocation; four seconds to cast and five seconds of roundtime.',
+          'messages':{'caster_self_complete':f'You release {_name}.','room_complete':f'{{caster_name}} releases {_name}.'}}

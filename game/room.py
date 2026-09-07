@@ -93,7 +93,7 @@ class Room:
         # Display other characters
         other_chars = []
         for c in self.characters:
-            if c != looker:
+            if c != looker and (not c.is_hidden or getattr(looker,'is_admin',False)):
                 display = c.name
                 if hasattr(c, 'pose') and c.pose:
                     display += f" ({c.pose})"
@@ -150,7 +150,7 @@ class Room:
         """Finds the first character in the room matching their first name (case-insensitive)."""
         name_lower = name.lower()
         for character in self.characters:
-            if name_lower == character.first_name.lower():
+            if not character.is_hidden and name_lower == character.first_name.lower():
                 return character
         return None
     
@@ -165,7 +165,7 @@ class Room:
         """Finds the first living mob instance in the room matching a partial name."""
         name_lower = name_target.lower()
         for mob in self.mobs:
-            if mob.is_alive() and name_lower in mob.name.lower():
+            if mob.is_alive() and not mob.is_hidden and name_lower in mob.name.lower():
                 return mob
         return None
     

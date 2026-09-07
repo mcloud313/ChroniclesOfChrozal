@@ -81,6 +81,10 @@ class ConnectionHandler:
             # -----------------------
 
             if decoded_data.lower() == 'quit':
+                c=self.active_character
+                if c and c.is_alive() and (c.is_fighting or not set(c.location.flags)&{'NODE','SAFE_ZONE','SAFE'}):
+                    await c.send('Reach a safe node and leave combat before disconnecting safely.')
+                    return ''
                 self.state = ConnectionState.DISCONNECTED
                 return None
             return decoded_data
@@ -249,7 +253,7 @@ class ConnectionHandler:
         self.world.add_active_character(self.active_character)
         self.active_character.login_timestamp = time.monotonic()
         
-        await self._send("Chronicles of Chrozal — The Valian Coast\nType help for commands, quest for chapters, and technique for your class.")
+        await self._send("Chronicles of Chrozal — The Valian Coast\nType help for commands, quest for notice boards, and technique for your class.")
         await self.send(f"Welcome back, {self.active_character.name}.")
         await command_handler.process_command(self.active_character, self.world, "look")
         await self.world.broadcast_to_all(f"<Y>** {self.active_character.name} has entered the realm. **<x>", exclude={self.active_character})
@@ -263,8 +267,7 @@ class ConnectionHandler:
             # The browser HUD displays resources and recovery.
             line = await self._read_line()
             if line is None: return
-            if not await command_handler.process_command(self.active_character, self.world, line):
-                self.state = ConnectionState.DISCONNECTED
+            await command_handler.process_command(self.active_character, self.world, line)
 
     async def _handle_character_creation(self):
         creator = CreationHandler(self.reader, self.writer, self.player_account, self.world, self.db_manager)
@@ -336,7 +339,7 @@ class ConnectionHandler:
                 try:
                     if character_to_remove.login_timestamp:
                         seconds = int(time.monotonic() - character_to_remove.login_timestamp)
-                        await self.db_manager.update_character_playtime(character_to_remove.dbid, seconds)
+                        await self.db_manager.execute_query('UPDATE characters SET total_playtime_seconds=$1 WHERE id=$2',character_to_remove.total_playtime_seconds+seconds,character_to_remove.dbid)
                 except Exception:
                     log.exception("Could not persist playtime")
 

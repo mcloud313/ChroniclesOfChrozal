@@ -120,3 +120,7 @@ def get_starting_skill_bonuses(class_name: Optional[str]) -> Dict[str, int]:
 CLASS_HP_DIE[11]=8
 CLASS_ESSENCE_DIE[11]=8
 CLASS_STARTING_SKILL_BONUSES['runewarden']={'runecraft':5,'bladed weapons':3,'armor training':3,'concentration':3}
+
+CLASS_HP_DIE[12]=6
+CLASS_ESSENCE_DIE[12]=10
+CLASS_STARTING_SKILL_BONUSES['tempest']={'spellcraft':5,'concentration':5,'swimming':5,'projectile weapons':3}

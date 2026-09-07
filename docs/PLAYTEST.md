@@ -1,6 +1,6 @@
-# Port Valis: levels 1–10
+# Port Valis and the five reaches: levels 1–20
 
-Create a character and assign the shared stat array. Put your strongest value in your class technique attribute; vitality helps survival. At Wayfinder's Plaza type `quest`, `quest accept 1`, and `technique`.
+Create a character, roll 4d6+1 scores, and assign them. Put your strongest value in your class technique attribute; vitality helps survival. At Wayfinder's Plaza type `quest`, `quest accept 1`, and `technique`.
 
 | Class | Attribute | Basic | Level 3 signature |
 |---|---|---|---|
@@ -18,12 +18,12 @@ Create a character and assign the shared stat array. Put your strongest value in
 
 Use `technique <move> <enemy>`, for example `technique slash tide scavenger`. All classes unlock `technique finale <enemy>` at level 7. Basic techniques cost no essence. Signatures cost 4 and finales 8. Watch the enemy's announced wind-up and use `brace` to halve the next hit. Recovery cannot be bypassed by spamming commands. The original skills/spells remain available but are outside this focused balance pass.
 
-Mira visits the plaza by day and the Lantern & Tide tavern by night. `talk Mira` advances relevant chapters. Silverleaf is south of the plaza; the Tideforge is east. `gather silverleaf`, then `craft coast salve` at the forge; `treat` consumes a salve to heal up to 30 HP. Iron comes from Serpent Road. Type `craft` for recipes. `relics`, `attune starmap fragment`, and `journal` expose the observatory discovery.
+Mira visits the plaza by day and the tavern by night and provides local lore. Contracts come from notice boards, not NPCs. At the plaza type `quest`, then `quest accept <id>`. Follow the listed objectives and return to the board with `quest complete`. One contract may be active per character; each board supplies ten shared notices per game day. Group notices require two or three adventurers as listed.
 
-The chapter route leads east from Serpent Road through Lantern Fields, Reedwater Crossing, Whispering Copse, Iron Claw Outpost, Pilgrim's Ascent, Deep-Vein Gate, Hall of Broken Oaths, Sunken Nave and Celestria's Starwell. Follow the actual objective names in `quest`. Return to the plaza to `quest complete`; wait at a node for XP absorption, then `advance`. `recover` at a peaceful node restores health, essence and needs between excursions.
+Silverleaf is south of the plaza; the Tideforge is east. Gather two leaves and craft coast salve at the forge; `treat` consumes a held salve. Buy rations and water at the tavern during shop hours. Eat/drink, then rest; node resting recovers faster. `stand` before travel. The old instant-heal shortcut is removed.
 
-## Human playtest record
+The optional expansion adds Reedwater March (levels 4+), Oldwood Verge (8+), Deep-Vein Foothills (11+), Ashen Pilgrim Road (14+) and Celestrian Reach (17–20). Start via the named Reedwater March exit at the plaza, then follow the eastern trails. Each area's far beacon links onward. Refuge rooms contain boards and safe places to rest. The western route remains available when a skill-check shortcut is too dangerous.
 
-For each class, record time to levels 3, 7 and 10; deaths/retreats; whether signature choices matter; resource shortages; unclear commands; and repetitive travel or waiting. Try both solo and with friends. Automated completion is not evidence of enjoyable pacing.
+Legendary relics are reserved for level 50+ and globally unique. The level-20 slice intentionally awards none. Existing journal records are retained.
 
-Also test reconnects, death/respawn, banking, contained items, world edits while connected, saved-build restore and server restarts. Check both laptop and phone layouts. Use a disposable world for forced shutdown tests, then compare state to the last completed checkpoint.
+See [the upgrade and current QA circuit](UPGRADE-0.2.md) for inventory, bow, trap, connection and builder checks.

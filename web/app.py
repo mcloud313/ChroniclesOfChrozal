@@ -8,7 +8,7 @@ import time
 from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import config
@@ -57,6 +57,7 @@ async def lifespan(app):
     logging.getLogger().addHandler(recent)
     app.state.logs = recent
     app.state.connections = {}
+    app.state.detached = {}
     app.state.join_lock = asyncio.Lock()
     app.state.started = time.monotonic()
     app.state.ready = False
@@ -84,6 +85,11 @@ async def lifespan(app):
         yield
     finally:
         app.state.ready = False
+        for detached in list(app.state.detached.values()):
+            detached['expiry'].cancel()
+            detached['reader'].feed_eof()
+            await detached['task']
+        app.state.detached.clear()
         await ticker.stop_ticker()
         ticker._callbacks.clear()
         for task in tasks:
@@ -100,12 +106,21 @@ async def lifespan(app):
 
 app = FastAPI(title='Chronicles of Chrozal', lifespan=lifespan, docs_url=None, redoc_url=None)
 app.include_router(auth.router)
+from web.recovery import router as recovery_router
+app.include_router(recovery_router)
 
 @app.middleware('http')
 async def headers(request, call_next):
     if int(request.headers.get('content-length','0') or 0) > 65536:
         from fastapi.responses import JSONResponse
         return JSONResponse({'detail':'Request too large'}, status_code=413)
+    if __import__('posixpath').normpath(request.scope['path']) in {'/static/admin.html','/static/admin.js','/static/map.js'}:
+        try:
+            player=await auth.current_player(request)
+            await auth.admin_player(request, player)
+        except __import__('fastapi').HTTPException as exc:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({'detail':exc.detail},status_code=exc.status_code)
     response = await call_next(request)
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'same-origin'
@@ -129,7 +144,7 @@ async def index():
     return FileResponse(ROOT/'web/static/index.html')
 
 @app.get('/admin')
-async def admin_page():
+async def admin_page(player=Depends(auth.admin_player)):
     return FileResponse(ROOT/'web/static/admin.html')
 
 app.mount('/static', StaticFiles(directory=ROOT/'web/static'), name='static')
@@ -146,20 +161,35 @@ async def websocket(ws: WebSocket):
         return
     player_id = player['id']
     # Reserve before the first await: one active connection per account.
-    if player_id in app.state.connections or len(app.state.connections) >= config.MAX_PLAYERS:
+    if player_id in app.state.connections or (player_id not in app.state.detached and len(app.state.connections)+len(app.state.detached) >= config.MAX_PLAYERS):
         await ws.close(code=1013)
         return
     app.state.connections[player_id] = ws
-    reader = asyncio.StreamReader(limit=config.MAX_INPUT_LENGTH+1)
-    writer = BrowserWriter(ws)
-    handler = ConnectionHandler(reader, writer, app.state.world, db_manager)
-    handler.player_account = Player(**dict(player))
-    handler.state = ConnectionState.SELECTING_CHARACTER
+    resumed=app.state.detached.pop(player_id,None)
+    if resumed:
+        resumed['expiry'].cancel()
+        reader,writer,handler=resumed['reader'],resumed['writer'],resumed['handler']
+        writer.websocket=ws;writer.closed=False
+        while not writer.queue.empty():writer.queue.get_nowait()
+        handler.player_account=Player(**dict(player))
+        if handler.active_character:handler.active_character.linkdead=False
+    else:
+        reader = asyncio.StreamReader(limit=config.MAX_INPUT_LENGTH+1)
+        writer = BrowserWriter(ws)
+        handler = ConnectionHandler(reader, writer, app.state.world, db_manager)
+        handler.player_account = Player(**dict(player))
+        handler.state = ConnectionState.SELECTING_CHARACTER
+    authenticated=True
+    last_heartbeat=time.monotonic()
+    warned=False
     tasks = []
     try:
         await ws.accept()
         writer.emit('session', {'username':player['username']})
+        await db_manager.execute_query("INSERT INTO connection_events(player_id,event) VALUES($1,$2)",player_id,'reconnected' if resumed else 'connected')
+        if resumed:writer.emit('text','Connection restored. Your character remained in the world.\n')
         async def receive():
+            nonlocal last_heartbeat,warned
             tokens, previous = 10.0, time.monotonic()
             while True:
                 raw = await asyncio.wait_for(ws.receive_text(), timeout=1800)
@@ -172,8 +202,12 @@ async def websocket(ws: WebSocket):
                 if len(raw.encode()) > 4096:
                     raise ValueError('Frame too large')
                 message = json.loads(raw)
+                if isinstance(message,dict) and message.get('type')=='heartbeat':
+                    last_heartbeat=now;warned=False
+                    continue
                 if not isinstance(message, dict) or message.get('type') != 'command':
                     raise ValueError('Invalid protocol')
+                last_heartbeat=now;warned=False
                 payload = message.get('payload')
                 if not isinstance(payload, str) or len(payload.encode()) > config.MAX_INPUT_LENGTH or any(ord(c)<32 for c in payload):
                     raise ValueError('Invalid command')
@@ -192,12 +226,18 @@ async def websocket(ws: WebSocket):
                     continue
                 reader.feed_data((payload+'\n').encode())
         async def updates():
+            nonlocal authenticated,warned
             last_check = 0
             while True:
                 await asyncio.sleep(1)
+                quiet=time.monotonic()-last_heartbeat
+                if quiet>240 and not warned:
+                    writer.emit('text','No client heartbeat. Connection expires in one minute; your character may be exposed outside a safe node.\n');warned=True
+                if quiet>300:return
                 if time.monotonic()-last_check > 15:
                     account = await auth.session_player(token)
                     if not account:
+                        authenticated=False
                         return
                     handler.player_account.is_admin = account['is_admin']
                     if handler.active_character:
@@ -211,12 +251,33 @@ async def websocket(ws: WebSocket):
             async with app.state.join_lock:
                 handler.world = app.state.world
             await handler.handle()
-        tasks = [asyncio.create_task(c()) for c in (receive, updates, writer.pump, run_handler)]
+        tasks = [asyncio.create_task(c()) for c in (receive, updates, writer.pump)]
+        tasks.append(resumed['task'] if resumed else asyncio.create_task(run_handler()))
         await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     except (WebSocketDisconnect, ConnectionError):
         pass
     finally:
         with anyio.CancelScope(shield=True):
+            # Abrupt disconnects retain the authoritative character for five minutes.
+            # No invulnerability or command automation is granted while detached.
+            if time.monotonic()-last_heartbeat<300 and app.state.ready and handler.active_character and handler.state != ConnectionState.DISCONNECTED and len(tasks)==4 and not tasks[3].done():
+                for task in tasks[:3]:task.cancel()
+                await asyncio.gather(*tasks[:3],return_exceptions=True)
+                writer.closed=True
+                handler.active_character.linkdead=True
+                async def expire():
+                    try:
+                        await asyncio.sleep(300)
+                        app.state.detached.pop(player_id,None)
+                        reader.feed_eof()
+                        await tasks[3]
+                        await db_manager.execute_query("INSERT INTO connection_events(player_id,event) VALUES($1,'grace_expired')",player_id)
+                    except asyncio.CancelledError:pass
+                app.state.detached[player_id]={'handler':handler,'reader':reader,'writer':writer,'task':tasks[3],'expiry':asyncio.create_task(expire())}
+                app.state.connections.pop(player_id,None)
+                await db_manager.execute_query("INSERT INTO connection_events(player_id,event) VALUES($1,'link_lost')",player_id)
+                with contextlib.suppress(Exception):await ws.close()
+                return
             reader.feed_eof()
             handler.state = ConnectionState.DISCONNECTED
             # Let the handler complete its save/cleanup; do not cancel an in-flight save.

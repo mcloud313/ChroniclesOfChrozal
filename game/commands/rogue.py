@@ -22,6 +22,8 @@ async def cmd_hide(character: 'Character', world: 'World', args_str: str) -> boo
         return True
 
     # Your stealth is checked against every observer's perception
+    character.roundtime=3
+    character.is_dirty=True
     stealth_mod = character.get_skill_modifier("stealth")
     observers = [c for c in character.location.characters if c != character] + \
                 [m for m in character.location.mobs if m.is_alive()]
@@ -148,8 +150,10 @@ async def cmd_disarm(character: 'Character', world: 'World', args_str: str) -> b
         if random.random() < 0.25:
             await character.send(f"<R>...and you've triggered it!<x>")
             # Here we would resolve the trap's effect, for now, we'll just log it.
-            log.info(f"Trap {trap_id} triggered on failed disarm by {character.name}.")
-            trap_data['is_active'] = False # Trap is used up
+            from game.doors import trigger
+            await trigger(character,world,trap_data)
+            if not isinstance(target_obj,dict):
+                await world.db_manager.update_item_instance_stats(target_obj.id,target_obj.instance_stats)
 
     return True
 
@@ -172,6 +176,8 @@ async def cmd_pickpocket(character: 'Character', world: 'World', args_str: str) 
         await character.send("You don't see them here.")
         return True
 
+    if isinstance(target,Character) and (character.level<10 or target.level<10):
+        await character.send('Both characters must reach level 10 before player theft is allowed.');return True
     if target == character:
         await character.send("You can't pickpocket yourself.")
         return True

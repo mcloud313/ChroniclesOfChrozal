@@ -7,7 +7,7 @@ Source: supplied **Roadmap to 1.0.pdf**, September 26, 2025. Its “completed Dj
 | Roadmap item | Branch implementation / remaining acceptance |
 |---|---|
 | Core engine, PostgreSQL, builder | One authoritative asyncio world; authenticated FastAPI builder and web client; versioned migrations |
-| First Valian Coast content | 15 seeded rooms, nine chapters, level 1–10 arc; human pacing review required |
+| First Valian Coast content | 100 rooms with the optional expansion, daily notice boards and level 1–20 opponents; human pacing review required |
 | New classes | Original ten classes repaired, Runewarden added; class kits and additional spells |
 | Ranged combat | Existing ranged weapon/ammunition resolver retained; Ranger class technique is a separate action; wider equipment QA required |
 | Light/dark, ambient scripts, needs | Retained; day/night, racial vision and needs shown/testable |

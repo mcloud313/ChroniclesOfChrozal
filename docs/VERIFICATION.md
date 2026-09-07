@@ -1,25 +1,26 @@
-# Verification record
+# Verification — 0.2.0-alpha
 
-This is a development QA build, not a signed-off public 1.0 release.
+This is a development QA build, not a signed-off 1.0 release.
 
-## Passed locally
+## Executed
 
-- Python 3.12 compilation; Compose YAML parsing with duplicate-key detection.
-- Full 21-test integration/regression suite: **21 passed in 206.80 seconds**. Includes all eleven class arcs from level 1 through 10, auth/admin boundaries, builder conflicts/audit, live publication, saved-build restore, NPC checkpoints, inventory/banking/salve persistence, zero-tether permadeath, cleric XP payment, mail, market settlement, enchanting, infusion, housing and fractional hunger/thirst checkpoints.
-- Focused regression suite after the final combat corrections: **11 passed**. Two additional checks cover natural d20 outcomes under modifiers and weather damage/sanctuary protection.
-- Real Chromium desktop and 390px mobile: **zero JavaScript errors, no horizontal overflow**. The visual map opens and clicking a room opens its editor.
-- Local browser-protocol load: **100 simultaneous players, 500 command samples, zero client failures**, median **7.62 ms**, p95 **882.92 ms**, maximum **965.42 ms**. Server logs contain no ERROR/CRITICAL/Traceback entries. See load-test-result.json. Logout fixtures were retained until saves completed.
+- Full integration/regression run: **35 passed in 131.97 seconds**. It covers database migration, authentication, administrator denial, build-state restore, hot publication, NPC checkpoints, item/bank/economy persistence, soul-tether permadeath, cleric payment, password reset, notice limits/rewards, movement, recovery supplies, ranged ammunition and class combat.
+- Updated content/account/party/combat suite: **5 passed in 79.01 seconds**, including a forced successful bow hit, rejection of ammunition access from a closed quiver, real-container sheathing and immediate nested bank withdrawal.
+- Additional party-notice regression: **1 passed**. Both leader and follower receive visit progress, must return together, and cannot duplicate completion rewards.
+- Class combat sample: **60 encounters**, covering all twelve classes at levels 1, 5, 10, 15 and 20 using ordinary stats and no mid-fight healing. All completed with surviving characters. This exercises the technique/AI loop; it does not simulate a complete natural level-1-to-20 campaign or establish enjoyable pacing.
+- Chromium desktop and 390-pixel mobile: **zero JavaScript errors and no horizontal overflow**. Browser checks cover the north exit button, typed south, character sheet, abrupt close/reconnect with resumed character, administrator map/room editing and creation-wizard navigation.
+- Python compilation, JavaScript syntax checks and Git whitespace checks passed.
 
-## Important limits
+The old chapter test used direct room assignment and instant healing. It was removed along with the obsolete chapter/recover handlers. Current movement and supply tests issue actual commands; the browser test clicks the actual north button. Combat samples still accelerate roundtime and set test levels deliberately.
 
-Database tests used embedded PGlite with an asyncpg wire-protocol adapter and one connection. They exercise PostgreSQL SQL semantics, but are not native PostgreSQL 16 or a Droplet benchmark. Earlier runs exposed an integer/fractional-needs schema bug, fixed by migration 011; the adapter also mishandled the resulting error responses. The failed runs are not counted as capacity success.
+## Environment and remaining acceptance
 
-The load harness measures authenticated speech broadcasts and HUD delivery, excluding HTTP login throughput and sustained mixed combat/crafting traffic. Its p95 exceeds the aspirational 250 ms target in this environment. Native PostgreSQL, CPU/memory/tick-lag measurement, sustained mixed-load and backup restore remain release gates.
+Database tests here use embedded PGlite with an asyncpg wire-protocol adapter and one connection. They test PostgreSQL SQL semantics but are not a native PostgreSQL 16 run. The adapter produces noisy protocol failures when SQL errors occur; those failures were diagnosed and corrected, not counted as passes. Test dependencies also emit two deprecation warnings unrelated to game behavior.
 
-The class test accelerates node time and moves characters directly for objective setup. It tests actual combat handlers, quest rewards and persistence; it does not prove enjoyable pacing, validate every retained legacy spell or simulate hundreds of real play hours.
+The previous build's 100-client speech/HUD benchmark remains in load-test-result.json as historical evidence. It was **not rerun as a mixed-workload capacity certification for 0.2**. Native PostgreSQL, 100-player sustained combat/crafting traffic, CPU/memory/tick-lag measurements, and a restored-backup trial on the intended host remain release gates. No Droplet was deployed.
 
-Bazzite/Firefox testing must be performed on the target desktop. Docker/Podman images and native PostgreSQL were not executed here. A PostgreSQL 16 CI workflow with a 100-client load stage is included but has not run: the GitHub connection denied repository writes, so the branch could not be published in this session.
+SMTP delivery, real-device mobile browser suspension, full party campaigns, economic pacing and player enjoyment require local testing. Email verification and command limits do not make a browser game automation-proof. Existing accounts are grandfathered as verified; fresh public registration requires SMTP verification. One account can have one active play session, with five minutes of vulnerable link-loss persistence.
 
-## Delivery provenance
+Warning/error records append to warnings-errors.log in the persistent log volume; informational records rotate. The archive has no automatic deletion policy. Include relevant excerpts with bug reports and manage its retention with backups as the game grows.
 
-The local branch `revival/web-realm` is based on the supplied repository's main commit `3c5c9bc`. The delivery contains current source and a Git bundle of the new commits. Uploaded source/PDF originals are retained. No previous world database was supplied or overwritten. No cloud service was deployed.
+The upgrade is additive and preserves the previous schema and records. The expansion is repeat-safe and adds 85 rooms to the 15-room starter, plus five boards/areas. Player housing and builder-created rooms can make the total exceed 100. Existing character stats are not rerolled. Existing low-level claimed relic records are retained; the new slice awards no relics below level 50.

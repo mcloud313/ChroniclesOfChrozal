@@ -11,4 +11,8 @@ def configure():
         h=RotatingFileHandler(root/name,maxBytes=5_000_000,backupCount=3,encoding='utf-8')
         h.setLevel(level);h.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s %(message)s'))
         logger.addHandler(h);handlers.append((logger,h))
+    archive=logging.FileHandler(root/'warnings-errors.log',encoding='utf-8')
+    archive.setLevel(logging.WARNING)
+    archive.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s %(message)s'))
+    logging.getLogger().addHandler(archive);handlers.append((logging.getLogger(),archive))
     return handlers

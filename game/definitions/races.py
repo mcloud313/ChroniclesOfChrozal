@@ -49,3 +49,4 @@ def format_racial_modifiers(race_name: str) -> str:
         sign = "+" if mod_val > 0 else ""
         parts.append(f"{sign}{mod_val} {stat.capitalize()}")
     return f"As a {race_name.capitalize()}, you have the following racial attribute modifiers: {', '.join(parts)}."
+RACIAL_STAT_MODIFIERS.update({'aelari':{'aura':6,'might':-3},'veskar':{'vitality':6,'persona':-3}})

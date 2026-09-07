@@ -139,7 +139,7 @@ async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Ch
     if isinstance(attacker, Character):
         verb = "hit" if not hit_result.is_crit else "CRITICALLY HIT"
         clean_weapon_name = utils.strip_article(attack_name)
-        msg = (f"Your {clean_weapon_name} {verb} {target_name}!\n\r"
+        msg = (f"<r>Your {clean_weapon_name} {verb} {target_name}!\n\r"
                f"You deal <y>{final_damage}<x> damage. {hit_details} {damage_details}")
         await attacker.send(msg)
 
@@ -187,7 +187,7 @@ async def send_magical_attack_messages(caster: Union[Character, Mob], target: Un
     # --- Message to Caster (if player) ---
     if isinstance(caster, Character):
         verb = "critically hit" if hit_result.is_crit else "hit"
-        msg = (f"Your {spell_name} {verb} {target_name}!\n\r"
+        msg = (f"<r>Your {spell_name} {verb} {target_name}!\n\r"
                f"You deal <y>{final_damage}<x> damage.{details_str}")
         await caster.send(msg)
 
@@ -219,7 +219,7 @@ async def send_ranged_attack_messages(attacker, target, hit_result, damage_info,
 
     # Attacker message
     if isinstance(attacker, Character):
-        msg = (f"Your {attack_name} {hit_desc.lower()}s {target.name} for <y>{final_damage}<x> damage! {roll_details_attacker}")
+        msg = (f"<r>Your {attack_name} {hit_desc.lower()}s {target.name} for <y>{final_damage}<x> damage! {roll_details_attacker}")
         await attacker.send(msg)
 
     # Target message
@@ -230,7 +230,7 @@ async def send_ranged_attack_messages(attacker, target, hit_result, damage_info,
     # Room message
     room_hit_desc = "critically strikes" if hit_result.is_crit else "strikes"
     if attacker.location:
-        msg = f"\r\n{attacker.name.capitalize()}'s {attack_name} {room_hit_desc} {target.name}!\r\n"
+        msg = f"\r\n<r>{attacker.name.capitalize()}'s {attack_name} {room_hit_desc} {target.name}!\r\n"
         await attacker.location.broadcast(msg, exclude={attacker, target})
 
 async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character, Mob], world: 'World'):
@@ -254,6 +254,7 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
             members=[m for m in attacker.group.members if m.location==target_loc and m.is_alive()] if attacker.group else [attacker]
             for member in members:
                 await event(member,world,"kill",target.name)
+                await world.db_manager.execute_query("INSERT INTO gameplay_metrics(character_id,metric,total) VALUES($1,'monsters_slain',1) ON CONFLICT(character_id,metric) DO UPDATE SET total=gameplay_metrics.total+1",member.dbid)
 
         dropped_coinage, dropped_item_ids = 0, []
         mob_template = world.get_mob_template(target.template_id)
@@ -287,8 +288,10 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
             for member in present_members:
                 await _award_xp_to_character(member, xp_per_member)
                 member.coinage += coins_per_member
+                await world.db_manager.execute_query("INSERT INTO economy_ledger(character_id,reason,coin_delta) VALUES($1,'group loot',$2)",member.dbid,coins_per_member)
             
-            killer.group.leader.coinage += remainder_coins
+            killer.coinage += remainder_coins
+            if remainder_coins:await world.db_manager.execute_query("INSERT INTO economy_ledger(character_id,reason,coin_delta) VALUES($1,'group loot remainder',$2)",killer.dbid,remainder_coins)
 
         # --- Solo Kill Logic ---
         elif killer:
@@ -348,7 +351,7 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
         target.death_timer_ends_at = time.monotonic() + timer_duration
         
         coinage_to_drop = int(target.coinage * 0.10)
-        if coinage_to_drop > 0 and target_loc:
+        if coinage_to_drop > 0 and target_loc and target.level>=10:
             target.coinage -= coinage_to_drop
             await target_loc.add_coinage(coinage_to_drop, world)
             await target_loc.broadcast(f"\r\nSome coins fall from {target.name} as they collapse!\r\n", exclude={target})

@@ -111,3 +111,29 @@ def test_weather_changes_spell_damage_and_nodes_protect_pvp():
     assert _get_weather_damage_modifier(room,'lightning')==1.25
     a=object.__new__(Character);b=object.__new__(Character);a.location=room;b.location=room
     assert protected_pvp(a,b)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('command', ['n','north','go n','go north'])
+@pytest.mark.parametrize('stored', ['n','north'])
+async def test_real_movement_dispatch_and_locked_door(command, stored, monkeypatch):
+    from game.commands import movement
+    source=SimpleNamespace(dbid=1,exits={stored:{'destination_room_id':2,'details':{'is_door':True,'is_open':True,'is_locked':True}}})
+    destination=object()
+    c=SimpleNamespace(status='ALIVE',stance='Standing',roundtime=0,location=source,location_id=1,
+                      name='Traveler',dbid=1,send=AsyncMock(),can_see=lambda:True)
+    w=SimpleNamespace(get_room=lambda id:destination,mutation_lock=asyncio.Lock())
+    move=AsyncMock();monkeypatch.setattr(movement,'_perform_move',move)
+    await process_command(c,w,command)
+    move.assert_not_awaited()
+    assert 'locked' in c.send.call_args.args[0]
+    source.exits[stored]['details']['is_locked']=False
+    await process_command(c,w,command)
+    move.assert_awaited_once_with(c,w,destination,stored)
+
+
+def test_browser_colors_preserve_plain_text_without_html_execution():
+    from web.transport import colored_text
+    spans=colored_text('{rDamage<x> <script>alert(1)</script>\x1b[32m healed\x1b[0m')
+    assert ''.join(x['text'] for x in spans)=='Damage <script>alert(1)</script> healed'
+    assert spans[0]['color']=='red'
+    assert spans[-1]['color']=='green'

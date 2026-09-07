@@ -38,6 +38,17 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
         if not await has_standing(member,world,gate):
             await character.send(f'{member.name} lacks the faction standing to enter.');return
     
+    from game.doors import details
+    check=details(gate).get('skill_check') if gate else None
+    if check and is_group_move:
+        for member in list(chars_to_move):
+            if member==character:continue
+            result=utils.skill_check(member,check['skill'],dc=check.get('dc',10))
+            if not result['success']:
+                chars_to_move.remove(member)
+                await combat_logic.apply_damage(member,check.get('fail_damage',0),'bludgeon',world)
+                member.stance='Lying';member.roundtime=2;member.is_dirty=True
+                await member.send('You fail the crossing and fall prone; the others continue without you.')
     # --- 2. Calculate Shared Roundtime ---
     base_rt = 1.0
     leader_penalty = character.total_av * 0.05
@@ -69,7 +80,7 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
     # Broadcast the departure message first.
     if is_group_move:
         await current_room.broadcast(f"\r\n{character.name}'s group leaves {exit_name}.\r\n", exclude=set(chars_to_move))
-    else:
+    elif not character.is_hidden:
         await current_room.broadcast(f"\r\n{character.name} {departure_message}.\r\n", exclude={character})
     
     for char in chars_to_move:
@@ -94,11 +105,15 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
         canonical_opp = utils.get_canonical_direction(opposite_direction) or opposite_direction
         arrival_msg = f"\r\n{character.name} arrives from the {canonical_opp}.\r\n"
     else:
-        arrival_msg = "f\r\n{character.name} arrives.\r\n"
-    await target_room.broadcast(arrival_msg, exclude=set(chars_to_move))
+        arrival_msg = f"\r\n{character.name} arrives.\r\n"
+    if is_group_move or not character.is_hidden:
+        await target_room.broadcast(arrival_msg, exclude=set(chars_to_move))
 
     # --- 6. Send Room Info to All Movers ---
     for char in chars_to_move:
+        if char!=character:
+            from game.adventure import event
+            await event(char,world,'visit',char.location_id)
         look_string = target_room.get_look_string(char, world)
         await char.send(look_string)
 
@@ -156,47 +171,17 @@ async def _perform_drag(dragger: 'Character', target_corpse: 'Character', target
     await dragger.send(look_string)
 
 async def cmd_move(character: 'Character', world: 'World', args_str: str, *, direction: str) -> bool:
-    """Handles all cardinal/ordinal directional movement commands."""
-    if not character.location:
-        await character.send("You cannot seem to move from the void.")
-        return True
-    if character.stance != "Standing":
-        await character.send("You must be standing to move.")
-        return True
-    if character.roundtime > 0:
-        await character.send(f"You are still recovering for {character.roundtime:.1f} seconds.")
-        return True
-    
-    if not character.can_see():
-        if random.random() < 0.25: # 25% chance to trip and fail
-            await character.send("{rYou stumble in the darkness and fall!<x>")
-            await combat_logic.apply_damage(character, 3, "bludgeon", world)
-            character.roundtime = 5.0
-            character.stance = "Lying"
-            if not character.is_alive():
-                await combat_logic.handle_defeat(character, character, world)
-            return True # Stop movement
+    """All movement shares door, obstacle and destination validation."""
+    return await cmd_go(character, world, direction)
 
-    exit_data = character.location.exits.get(direction.lower())
 
-    if not exit_data:
-        await character.send("You can't go that way.")
-        return True
-
-    # For now, cmd_move only handles simple, non-hidden exits.
-    # We can add checks for 'is_hidden' or door states here later.
-    target_room_id = exit_data.get('destination_room_id')
-
-    if target_room_id is None:
-        log.error("Exit '%s' in room %d is missing a destination_room_id!",
-                  direction, character.location.dbid)
-        await character.send("The path ahead seems to vanish into nothingness.")
-        return True
-
-    target_room = world.get_room(target_room_id)
-
-    await _perform_move(character, world, target_room, direction)
-    return True
+def resolve_exit(room, name):
+    name = name.strip().lower()
+    canonical = utils.get_canonical_direction(name) or name
+    for key, data in room.exits.items():
+        if (utils.get_canonical_direction(key) or key.lower()) == canonical:
+            return key, data
+    return name, None
 
 async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'go <target>' command for complex, named exits that may require skill checks."""
@@ -216,8 +201,6 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
             await combat_logic.apply_damage(character, 3, "bludgeon", world)
             character.roundtime = 5.0
             character.stance = "Lying"
-            if not character.is_alive():
-                await combat_logic.handle_defeat(character, character, world)
             return True # Stop movement
 
     exit_name = args_str.strip().lower()
@@ -225,10 +208,7 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
         await character.send("Go where? (e.g., go hole, go climb rope)")
         return True
 
-    exit_data = character.location.exits.get(exit_name)
-    if not exit_data:
-        # Also check cardinal directions in case the user types "go north"
-        exit_data = character.location.exits.get(utils.get_canonical_direction(exit_name))
+    exit_name, exit_data = resolve_exit(character.location, exit_name)
 
     if not exit_data:
         await character.send(f"You see no way to go '{exit_name}' here.")
@@ -261,6 +241,11 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
             await character.send("The door is locked.")
             return True
 
+    from game.doors import trigger, save
+    if await trigger(character,world,exit_details.get('trap')):
+        await save(world,character.location,exit_name,exit_data)
+        return True
+
     #  Get the skill check data *from* the exit details.
     skill_check_data: Optional[Dict[str, Any]] = exit_details.get("skill_check")
 
@@ -277,8 +262,8 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
         check_result = utils.skill_check(character, skill_name, dc=dc)
         
         feedback = (f"You attempt {skill_name.title()}... "
-                    f"<c>[Roll: {check_result['roll']} + Skill: {check_result['skill_value']} = {check_result['total_check']} vs DC: {check_result['dc']}]"
-                    f"<x> <g>Success!<x>" if check_result['success'] else f"<x> <r>Failure!<x>")
+                    f"<c>[Roll: {check_result['roll']} + Skill: {check_result['skill_value']} = {check_result['total_check']} vs DC: {check_result['dc']}]<x> "
+                    + ("<g>Success!<x>" if check_result['success'] else "<r>Failure!<x>"))
         await character.send(feedback)
 
         if not check_result['success']:
@@ -287,13 +272,13 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
             
             if (fail_damage := skill_check_data.get('fail_damage', 0)) > 0:
                 # Use the resolver to handle damage and concentration checks
-                await combat_logic.apply_damage(character, fail_damage)
+                await combat_logic.apply_damage(character, fail_damage, "bludgeon", world)
                 await character.send(f"<r>You take {int(fail_damage)} damage!<x>")
                 if not character.is_alive():
-                    # The resolver doesn't handle defeat, so we check here.
-                    await combat_logic.handle_defeat(character, character, world)
                     return True # Stop if defeated
             
+            character.stance = "Lying"
+            character.is_dirty = True
             character.roundtime = 2.0 # Apply failure roundtime
             return True # Stop movement
 

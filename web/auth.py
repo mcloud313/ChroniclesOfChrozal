@@ -82,10 +82,13 @@ async def authenticate(action: str, body: Credentials, request: Request, respons
                 raise HTTPException(403, 'Registration is currently invite-only; ask the host for an account')
             if len(body.password) < 12 or '@' not in body.email or '.' not in body.email.split('@')[-1]:
                 raise HTTPException(422, 'Use a 12-character password and valid email')
+            from web.recovery import configured
+            if not configured():raise HTTPException(503,'Public registration requires configured verification email delivery')
             hashed = await asyncio.to_thread(utils.hash_password, body.password)
-            result = await db_manager.create_player_account(body.username, hashed, body.email)
+            result = await db_manager.create_player_account(body.username, hashed, body.email, email_verified=False)
             if not result:
                 raise HTTPException(409, 'Account could not be created')
+            return {'verification_required':True}
         player = await db_manager.load_player_account(body.username)
         if not player:
             # Equalize expensive work for unknown usernames.
@@ -95,6 +98,8 @@ async def authenticate(action: str, body: Credentials, request: Request, respons
         valid, rehash = await asyncio.to_thread(account.check_password, body.password)
         if not valid:
             raise HTTPException(401, 'Invalid credentials')
+        if not player['email_verified']:
+            raise HTTPException(403,'Verify your email through Account recovery before signing in')
         if rehash:
             hashed = await asyncio.to_thread(utils.hash_password, body.password)
             await db_manager.execute_query('UPDATE players SET hashed_password=$1 WHERE id=$2', hashed, player['id'])

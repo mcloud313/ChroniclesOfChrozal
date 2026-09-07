@@ -171,10 +171,10 @@ class CreationHandler:
             await self._send("Invalid input. Please enter a number.")
 
     async def _handle_roll_stats(self):
-        self.creation_data["base_stats"] = [25,22,19,16,13,10]
+        self.creation_data["base_stats"] = sorted([sum(__import__("secrets").randbelow(6)+1 for _ in range(4))+1 for _ in range(6)], reverse=True)
         stats_str = ", ".join(map(str, self.creation_data["base_stats"]))
         await self._send(f"\r\nYour assignable stats: [ {stats_str} ]")
-        await self._prompt("Type 'keep' to assign this balanced array to your attributes")
+        await self._prompt("Type 'keep' to assign these scores, or 'reroll' for another roll (4d6+1; maximum 25 before racial modifiers)")
         self.state = CreationState.CONFIRM_STATS
 
     async def _handle_confirm_stats(self):
@@ -186,8 +186,11 @@ class CreationHandler:
             self._available_scores = list(self.creation_data["base_stats"])
             self._assigning_stat_index = 0
             self.state = CreationState.ASSIGN_STATS
+        elif choice.lower() == 'reroll':
+            await __import__('asyncio').sleep(2)
+            self.state = CreationState.ROLL_STATS
         else:
-            await self._send("Please type 'keep'. Everyone starts with the same assignable array.")
+            await self._send("Type 'keep' or 'reroll'.")
 
     async def _handle_assign_stats(self):
         if self._assigning_stat_index >= len(self._stat_order):

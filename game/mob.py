@@ -281,7 +281,7 @@ class Mob:
                 from .combat.outcome_handler import apply_damage,handle_defeat
                 damage=(2+self.level)*strength
                 apply_damage(target,damage)
-                await target.send(f'{self.name.capitalize()} strikes. You have {int(target.hp)} HP remaining.')
+                await target.send(f'<r>{self.name.capitalize()} strikes. You have {int(target.hp)} HP remaining.')
                 self.roundtime=2
                 if target.hp<=0:await handle_defeat(self,target,world)
             return

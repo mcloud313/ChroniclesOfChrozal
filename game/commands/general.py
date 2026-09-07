@@ -16,15 +16,15 @@ if TYPE_CHECKING:
 
 HELP_TOPICS = {
     "LIVING WORLD": {
-        "quest": "QUEST: list chapters. QUEST ACCEPT <number> and QUEST COMPLETE at the giver.",
+        "quest": "QUEST: read the local notice board. QUEST ACCEPT <number> reserves one daily contract; QUEST COMPLETE returns it.",
         "technique": "TECHNIQUE: class kit. TECHNIQUE <move> <enemy> uses a server-resolved move.",
         "brace": "BRACE: halve the next incoming blow. Watch enemy wind-ups.",
-        "recover": "RECOVER: tend wounds and eat at a peaceful node.",
+        "rest": "REST: sit to regenerate while fed and hydrated. Nodes accelerate recovery; EAT and DRINK consume held supplies.",
         "gather": "GATHER [resource name]: list or harvest local resources.",
         "craft": "CRAFT [recipe]: list recipes or craft at the required station.",
         "talk": "TALK <resident name>: hear a resident\'s story and local guidance.",
-        "relics": "RELICS: discover the lore of ancient relics.",
-        "attune": "ATTUNE <relic name>: claim an unclaimed relic in this room.",
+
+
         "journal": "JOURNAL: read your persistent discoveries."
     },
     "GENERAL": {
@@ -290,7 +290,7 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
         f"\r\n Barrier: {character.barrier_value:<28} "
         f"\r\n Essn : {int(character.essence):>4}/{int(character.max_essence):<31}"
         f"\r\n XP   : {int(character.xp_total):>4}/{xp_needed_str:<28} Pool: {int(character.xp_pool)}" # <-- USE THE FIXED STRING HERE
-        f"\r\n Tether: {character.spiritual_tether:<28} Playtime: {utils.format_playtime(character.total_playtime_seconds)}"
+        f"\r\n Tether: {character.spiritual_tether:<28} Playtime: {utils.format_playtime(character.total_playtime_seconds + (int(__import__('time').monotonic()-character.login_timestamp) if character.login_timestamp else 0))}"
         f"\r\n --- Attributes ---"
         f"\r\n{attributes_display[0]} {attributes_display[1]}"
         f"\r\n{attributes_display[2]} {attributes_display[3]}"
@@ -524,7 +524,7 @@ async def cmd_search(character: 'Character', world: 'World', args_str: str) -> b
     
     # Search exits for traps
     for exit_name, exit_data in character.location.exits.items():
-        if isinstance(exit_data, dict) and (trap := exit_data.get('trap')):
+        if isinstance(exit_data, dict) and (trap := __import__('game.doors',fromlist=['details']).details(exit_data).get('trap')):
             if trap.get('is_active'):
                 trap_id = f"exit_{exit_name}"
                 if trap_id not in character.detected_traps:
@@ -581,6 +581,11 @@ async def cmd_release(character: 'Character', world: 'World', args_str: str) -> 
         log.critical("PERMANENT DEATH: Character %s (ID: %s) has reached 0 spiritual tether!",
                      character.name, character.dbid)
         
+        if character.level<10:
+            # No starter estate transfers: retain belongings in the deceased's bank.
+            await world.db_manager.execute_query('UPDATE item_instances SET owner_char_id=NULL,bank_char_id=$1 WHERE owner_char_id=$1',character.dbid)
+            for item in character.get_all_owned_item_instances():world._all_item_instances.pop(item.id,None)
+            character._inventory_items.clear();character._equipped_items.clear();character.coinage=0
         # Drop all items and coinage at death location
         if character.location:
         # Drop coinage

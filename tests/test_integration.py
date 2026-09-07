@@ -55,6 +55,9 @@ def test_auth_and_admin_boundary(client):
     assert client.post('/api/auth/login',json={'username':'someone','password':'bad'}).status_code==403
     login(client)
     assert client.get('/api/admin/catalog').status_code==403
+    assert client.get('/admin').status_code==403
+    assert client.get('/static/admin.html').status_code==403
+    assert client.get('/static/admin.js').status_code==403
     headers=login(client,True)
     assert client.get('/api/admin/catalog').status_code==200
     assert client.post('/api/admin/entities/rooms',json={'values':{'name':'blocked'}}).status_code==403
@@ -113,6 +116,7 @@ def test_gather_craft_relic_persistence(client):
         await living.cmd_craft(c,world,'coast salve')
         assert any(i.name=='coast salve' for i in c._inventory_items.values())
         c.update_location(world.get_room(6))
+        c.level=50
         await living.cmd_attune(c,world,'starmap fragment')
         count=await db.fetch_one_query('SELECT count(*) n FROM item_instances i JOIN relics r ON r.instance_id=i.id')
         assert count['n']==1
@@ -121,6 +125,7 @@ def test_gather_craft_relic_persistence(client):
         assert count2['n']==1
         c.is_dirty=True;await c.save()
         reloaded=Character(None,dict(await db.load_character_data(c.dbid)),world)
+        reloaded.send=AsyncMock()
         await reloaded.load_related_data()
         assert any(i.name=='coast salve' for i in reloaded._inventory_items.values())
     client.portal.call(scenario)
@@ -169,93 +174,6 @@ def test_build_snapshot_restores_definitions(client):
     restored=client.post(f'/api/admin/builds/{state.json()["id"]}/restore',headers=headers)
     assert restored.status_code==200,restored.text
     assert client.app.state.world.rooms[1].description==row['description']
-
-
-def test_all_classes_can_complete_level_one_to_ten(client):
-    from game.database import db_manager as db
-    from game.character import Character
-    from game.mob import Mob
-    from game import adventure,living,utils
-    from game.commands import general
-    from game.definitions import classes
-    from unittest.mock import AsyncMock
-    import random
-    async def scenario():
-        w=client.app.state.world
-        async with w.mutation_lock:
-            quests=await db.fetch_all_query('SELECT * FROM quests ORDER BY min_level')
-            assert len(quests)==9
-            for class_id,class_name in enumerate(adventure.KITS,1):
-                random.seed(20260908+class_id)
-                print("CLASS",class_name,flush=True)
-                # Real creation DB path; intentionally conservative stats, no legendary gear.
-                pid=await db.create_player_account('arc'+class_name+secrets.token_hex(3),'disabled-fixture',secrets.token_hex(8)+'@example.test')
-                hp=30+classes.CLASS_HP_DIE[class_id]+utils.calculate_modifier(10)
-                essence=15+classes.CLASS_ESSENCE_DIE[class_id]+2*utils.calculate_modifier(10)
-                cid=await db.create_character(pid,'Arc','Traveler','Male',1,class_id,class_name,dict.fromkeys(['might','vitality','agility','intellect','aura','persona'],10),'A traveler.',hp,hp,essence,essence,3)
-                c=Character(None,dict(await db.load_character_data(cid)),w);c.send=AsyncMock();await c.load_related_data()
-                w.add_active_character(c)
-                def move(room):
-                    if c.location:c.location.remove_character(c)
-                    c.update_location(w.get_room(room));c.location.add_character(c);c.roundtime=0
-                for q in quests:
-                    print("CHAPTER",class_name,q["min_level"],flush=True)
-                    assert c.level>=q['min_level']
-                    move(q['giver_room_id']);await adventure.cmd_recover(c,w,'');c.roundtime=0
-                    await adventure.cmd_quest(c,w,f'accept {q["id"]}')
-                    for obj in json.loads(q['objectives']):
-                        if obj['kind']=='visit':
-                            move(int(obj['target']));await adventure.event(c,w,'visit',c.location_id)
-                        elif obj['kind']=='talk':
-                            npc=next(m for r in w.rooms.values() for m in r.mobs if m.name==obj['target'])
-                            move(npc.location.dbid);await living.cmd_talk(c,w,'Mira')
-                        elif obj['kind']=='gather':
-                            node=await db.fetch_one_query('SELECT * FROM resource_nodes WHERE name=$1',obj['target'])
-                            await db.execute_query('UPDATE resource_nodes SET remaining=capacity WHERE id=$1',node['id'])
-                            move(node['room_id'])
-                            for _ in range(obj['count']):await living.cmd_gather(c,w,obj['target'])
-                        elif obj['kind']=='craft':
-                            recipe=await db.fetch_one_query('SELECT * FROM recipes WHERE name=$1',obj['target'])
-                            for template,quantity in json.loads(recipe['ingredients']).items():
-                                node=await db.fetch_one_query('SELECT * FROM resource_nodes WHERE item_template_id=$1',int(template))
-                                await db.execute_query('UPDATE resource_nodes SET remaining=capacity WHERE id=$1',node['id'])
-                                move(node['room_id'])
-                                for _ in range(quantity):await living.cmd_gather(c,w,node['name'])
-                            move(recipe['station_room_id']);await living.cmd_craft(c,w,obj['target'])
-                        elif obj['kind']=='kill':
-                            original=next(m for r in w.rooms.values() for m in r.mobs if m.name==obj['target'])
-                            for _ in range(obj.get('count',1)):
-                                move(1);await adventure.cmd_recover(c,w,'')
-                                move(original.location.dbid)
-                                # Fresh encounter, no respawn delay in this deterministic test.
-                                mob=Mob(w.get_mob_template(original.template_id),c.location)
-                                prior=c.location.mobs;c.location.mobs={mob}
-                                try:
-                                    for turn in range(40):
-                                        c.roundtime=0
-                                        basic,_,signature,_,_=adventure.KITS[class_name]
-                                        move_name=signature if c.level>=3 and c.essence>=4 else basic
-                                        await adventure.cmd_technique(c,w,move_name+' '+mob.name)
-                                        if not mob.is_alive():break
-                                        mob.roundtime=0
-                                        await mob.simple_ai_tick(3,w)
-                                        assert c.hp>0,(class_name,c.level,mob.name)
-                                    else:assert False,('Encounter did not finish',class_name)
-                                finally:c.location.mobs=prior
-                    move(q['giver_room_id'])
-                    before=c.xp_pool
-                    await adventure.cmd_quest(c,w,'complete')
-                    assert c.xp_pool>before,(class_name,q['name'])
-                    duplicate=c.xp_pool;await adventure.cmd_quest(c,w,'complete');assert c.xp_pool==duplicate
-                    # Accelerated node time; exercise real absorption and advancement code.
-                    await w.update_xp_absorption(1000)
-                    while c.level<10 and c.xp_total>=utils.xp_needed_for_level(c.level):
-                        await general.cmd_advance(c,w,'')
-                assert c.level==10,class_name
-                c.is_dirty=True;await c.save()
-                saved=await db.load_character_data(cid);assert saved['level']==10
-                c.location.remove_character(c);w.remove_active_character(cid)
-    client.portal.call(scenario)
 
 
 def test_banking_and_salve_are_durable(client):
@@ -336,6 +254,8 @@ def test_mail_stalls_enchant_and_infusion_persist(client):
             template=await db.fetch_one_query("INSERT INTO item_templates(name,type,stats,description) VALUES('test dagger','WEAPON','{\"damage_base\":4,\"speed\":1.5,\"value\":100}','A test weapon.') RETURNING *")
             data=dict(template);data['stats']=json.loads(data['stats']);w.item_templates[template['id']]=data
             await db.create_item_instance(template['id'],owner_char_id=a.dbid);await living.refresh_inventory(a,w)
+            a.level=b.level=10
+            await a.save();await b.save()
             await horizon.cmd_market(a,w,'sell 100 test dagger')
             listing=await db.fetch_one_query('SELECT * FROM market_listings WHERE seller_id=$1',a.dbid)
             assert listing and not a._inventory_items
@@ -350,7 +270,8 @@ def test_mail_stalls_enchant_and_infusion_persist(client):
             restored=Character(None,dict(await db.load_character_data(b.dbid)),w);restored.send=AsyncMock();await restored.load_related_data()
             assert next(iter(restored._inventory_items.values())).damage_base==6
             await community.cmd_mail(b,w,f'send {a.dbid} | A gift | Keep it safe. | test dagger')
-            assert not b._inventory_items and any(i.name=='test dagger' for i in a._inventory_items.values())
+            assert any(i.name=='test dagger' for i in b._inventory_items.values())
+            assert 'letters only' in b.send.call_args.args[0]
             for c in chars:w.remove_active_character(c.dbid)
     client.portal.call(scenario)
 

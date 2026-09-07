@@ -1,8 +1,8 @@
 # Chronicles of Chrozal
 
-A persistent, roleplay-focused Python fantasy MUD. This revival branch restores browser play, a character HUD, an authenticated builder, and a level 1–10 Port Valis adventure for all eleven classes. PostgreSQL remains the authoritative store.
+A persistent, roleplay-focused Python fantasy MUD. This revival branch restores browser play, a character HUD, an authenticated builder, and an optional 100-room level 1–20 QA slice for twelve classes. PostgreSQL remains the authoritative store.
 
-**Alpha:** see [implementation, limitations and next milestones](docs/REVIVAL.md). The target is 100 concurrent players; hosting capacity must be measured on the intended Droplet. No existing database dump is included in this repository.
+**0.2.0-alpha:** Existing installations should start with [the database-preserving upgrade guide](docs/UPGRADE-0.2.md). See [implementation, limitations and next milestones](docs/REVIVAL.md). The target is 100 concurrent players; hosting capacity must be measured on the intended Droplet. No existing database dump is included in this repository.
 
 Review [roadmap status](docs/ROADMAP_STATUS.md) and the [whole-project QA guide](docs/QA.md). Start with the [Bazzite development guide](docs/BAZZITE.md) and [playtest guide](docs/PLAYTEST.md). Cloud deployment follows local testing.
 
@@ -16,13 +16,14 @@ Review [roadmap status](docs/ROADMAP_STATUS.md) and the [whole-project QA guide]
    docker compose up -d db
    docker compose run --rm game python scripts/manage.py init
    docker compose run --rm game python scripts/manage.py seed
+   docker compose run --rm game python scripts/manage.py expand-slice
    docker compose run --rm game python scripts/manage.py account andrew you@example.com --admin
    docker compose up -d game
    ```
 
 3. Open `http://localhost:8000`, sign in and follow character selection/creation. Open `/admin` for the builder. Creating the account prompts for a password rather than exposing it in shell history. Create friends' accounts with the same command without `--admin`.
 
-The optional seed refuses to replace an existing authored world. Start at Wayfinder's Plaza, talk to Mira during the day, gather silverleaf south of the plaza, and craft coast salve at the Tideforge east of the plaza. The old observatory lies two rooms north. Type `quest` to begin the nine-chapter arc, `technique` for your class kit, and `treat` to use a crafted salve.
+The optional seed refuses to replace an existing authored world. Start at Wayfinder's Plaza, talk to Mira during the day, gather silverleaf south of the plaza, and craft coast salve at the Tideforge east of the plaza. The old observatory lies two rooms north. Type `quest` at a notice board to reserve a daily contract, `technique` for your class kit, and `treat` to use a crafted salve.
 
 ## Existing database
 

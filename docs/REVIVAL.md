@@ -6,9 +6,9 @@ The supplied ZIP matches GitHub main at `3c5c9bc` (October 8, 2025). The PDFs de
 
 The retained asyncio engine now runs behind one FastAPI process with an authenticated browser client and builder. The active entry point starts no Telnet listener. The old React source remains only as reference.
 
-The optional fresh-world seed creates 15 connected rooms around Port Valis and the Valian Coast, nine chapters leading from level 1 to 10, eight hostile enemy templates, gathering, two recipes, a scheduled resident and a uniquely claimable starmap fragment. Mira and these chapters are proposed new content inspired by the supplied lore, not recovered database content.
+The optional fresh-world seed creates 15 connected rooms around Port Valis and the Valian Coast, notice templates for the opening levels, eight hostile enemy templates, gathering, two recipes, a scheduled resident and dormant endgame relic lore. Mira and these contracts are proposed new content inspired by the supplied lore, not recovered database content.
 
-All eleven classes receive a resource-free basic technique at level 1, a signature at 3 and a finale at 7. Enemy wind-ups support bracing and retreat; safe nodes restore resources. Crafted coast salve heals with `treat`. Quest rewards feed the XP pool, which absorbs at nodes before `advance`. A common assignable starting stat array replaces unlimited random rerolls; level gains are deterministic.
+All twelve classes receive a resource-free basic technique at level 1, a signature at 3 and a finale at 7. Enemy wind-ups support bracing and retreat; safe nodes restore resources. Crafted coast salve heals with `treat`. Quest rewards feed the XP pool, which absorbs at nodes before `advance`. Starting scores use rerollable 4d6+1 with a server delay; level gains remain deterministic.
 
 The browser HUD shows HP, essence, room/exits, recovery, level, XP pool, inventory, time, weather and needs. Social commands remain available during recovery. See [playtest guide](PLAYTEST.md) and [Bazzite setup](BAZZITE.md).
 
@@ -34,7 +34,7 @@ This is a development vertical slice, not a finished 1.0. The automated class te
 
 NPC behavior includes schedules/dialogue, combat telegraphs and optional patrol/flee flags. Faction standing, offline mail, stalls, enchanting and infusion are implemented. Deeper professions, seasonal resource quality, relic powers/provenance and communal projects remain future expansions. The starmap fragment currently provides discovery and ownership, not a complete legendary power tree. Database guards prevent duplicate creation for designated relic templates; legacy duplicates require an import audit.
 
-Account email is not verified. Password reset, OAuth, granular builder roles and moderation workflows are pending. Keep this trial invitation-only. The runtime log panel is bounded and temporary; audit records persist and container logs rotate.
+Existing accounts remain verified on upgrade; new public accounts require email verification. One-use password recovery is implemented. OAuth, granular builder roles and expanded moderation workflows remain future work. Keep this trial invitation-only. The runtime log panel is bounded and temporary; audit records persist and container logs rotate.
 
 100 simultaneous players remains a hardware acceptance target. Keep one authoritative server worker. The included load harness measures browser-protocol speech/HUD traffic; it does not certify mixed combat, login bursts or a Droplet. See [verification](VERIFICATION.md) for actual evidence.
 

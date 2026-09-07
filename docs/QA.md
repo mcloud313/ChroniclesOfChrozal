@@ -10,7 +10,7 @@ After initializing and seeding, run:
 podman compose run --rm game python scripts/manage.py qa-accounts
 ```
 
-Choose two different passwords when prompted. The command creates `chrozal_admin` with administrator privileges and `chrozal_tester` with a level-1 character for each of the eleven classes, including Runewarden. It refuses to overwrite existing accounts. No public default password is embedded in the project.
+Choose two different passwords when prompted. The command creates `chrozal_admin` with administrator privileges and `chrozal_tester` with a level-1 character for each of the twelve classes, including Runewarden and Tempest. It refuses to overwrite existing accounts. No public default password is embedded in the project.
 
 Sign in at `http://localhost:8000`. Use separate Firefox profiles or a private window to keep administrator and testing sessions separate. Only one play connection per account is allowed. Administrator and player pages share one origin.
 
@@ -37,15 +37,15 @@ If the container image does not include development requirements in a later rele
 
 Create additional characters using `new`. Try every race and pronoun option, especially fur, shell, scale, tail and beard traits. Inspect the resulting description with another character. Look for missing traits, contradictory hair choices and awkward grammar. The system describes appearance without assigning personality.
 
-Assign the common stat array differently across two characters. Rerolling should not offer a random-stat advantage. Verify descriptions, stats and equipment after reconnect and server restart. Test invitations, acceptance, group leadership transfer and movement with a member in another room or still recovering.
+Assign the rolled scores differently across two characters. Scores use 4d6+1 before racial modifiers; 25 is exceptionally rare. Verify descriptions, stats and equipment after reconnect and server restart. Test invitations, acceptance, group leadership transfer and movement with a member in another room or still recovering.
 
-## Levels 1–10 and combat
+## Levels 1–20 and combat
 
-Play every class through [PLAYTEST.md](PLAYTEST.md), including Runewarden (`etch`, `aegis`, then `finale`). Record elapsed time, deaths, retreats, waiting, travel and whether abilities create meaningful choices. The automated arc accelerates time/travel and does not establish that pacing is fun.
+Play every class through [PLAYTEST.md](PLAYTEST.md), including Runewarden and Tempest (`etch`, `aegis`, then `finale`). Record elapsed time, deaths, retreats, waiting, travel and whether abilities create meaningful choices. The automated arc accelerates time/travel and does not establish that pacing is fun.
 
 At the Tideforge, `list`, buy a wayfarer dagger, and compare `attack <enemy>` with a coast greatsword. Inspect the actual roll, attack rating, defense, damage and recovery. A miss or parry must retain weapon recovery. Check armor mitigation and armor movement penalties. Test bows/ammunition with authored ranged equipment; the Ranger technique is a separate resource-free class action.
 
-Spellcasters learn additional invocations at levels 5 and 9. Use `abilities`/the retained ability help to inspect their internal names and targeting syntax. Test interruption, insufficient essence, target leaving, death during a cast, and the full cast/recovery time. Compare fire and lightning damage outdoors in rain against clear weather. Do not infer full legacy spell balance from the class-kit test.
+Spellcasters learn additional invocations at levels 5, 9, 12 and 18 (depending on class). Use `abilities`/the retained ability help to inspect their internal names and targeting syntax. Test interruption, insufficient essence, target leaving, death during a cast, and the full cast/recovery time. Compare fire and lightning damage outdoors in rain against clear weather. Do not infer full legacy spell balance from the class-kit test.
 
 ## Soul tether and long progression
 
@@ -77,8 +77,8 @@ These are explicit test-account commands, never production progression. They ret
 
 - Buy/sell at the Tideforge; verify coin, stock and item state together after reconnect/restart. Try zero/negative amounts and repeated requests. A purchase/sale cycle must lose coins, including high bartering skill.
 - Deposit/withdraw coins and items at the tavern bank. Test insufficient balances and containers. No item should exist in both bank and inventory.
-- Use `mail` to send to a character ID, including an offline recipient. Use the character ID shown in the administrator’s character catalog. Test reading somebody else's letter and sending an empty loose item attachment. Attachments transfer to recipient inventory; nested/full containers are rejected.
-- Complete a chapter and inspect `reputation`. Configure a quest, shop entry or exit with a faction threshold; check both sides of the gate and repeat turn-in to ensure no duplicated rewards.
+- Use `mail` to send to a character ID, including an offline recipient. Use the character ID shown in the administrator’s character catalog. Test reading somebody else's letter and rejecting item attachments. Mail carries letters only.
+- Complete a notice-board contract and inspect `reputation`. Configure a quest, shop entry or exit with a faction threshold; check both sides of the gate and repeat turn-in to ensure no duplicated rewards.
 - `market sell 100 <item>`, buy it using another account, and test cancellation. The seller receives proceeds minus tax, even offline. Two buyers must not receive the same item.
 - `home buy`, `home describe <text>`, and `home visit <character id>` test the first housing charter/description system. Use `home enter` to enter the persistent room and `out` to leave; drop and retrieve furnishings/items and check them after restart.
 - At a node with two PCs, alternate `tales <sentence>`. There is no XP/coin reward and one player cannot take consecutive turns.

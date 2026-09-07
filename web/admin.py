@@ -7,10 +7,10 @@ from pydantic import BaseModel, Field
 from game.database import db_manager
 from web.auth import admin_player
 
-EDITABLE = {'class_kits','factions','balance_rules','quests','areas','rooms','exits','room_objects','ambient_scripts','item_templates','mob_templates',
+EDITABLE = {'shop_services','notice_boards','class_kits','factions','balance_rules','quests','areas','rooms','exits','room_objects','ambient_scripts','item_templates','mob_templates',
             'mob_attacks','mob_loot_table','loot_tables','loot_table_entries','ability_templates',
             'races','classes','damage_types','shop_inventories','resource_nodes','recipes','npc_schedules','relics'}
-READONLY = {'player_homes','market_listings','character_reputation','economy_ledger','game_mail','character_quests','characters','character_stats','character_skills','character_abilities','character_equipment',
+READONLY = {'board_notices','notice_claims','connection_events','gameplay_metrics','player_homes','market_listings','character_reputation','economy_ledger','game_mail','character_quests','characters','character_stats','character_skills','character_abilities','character_equipment',
             'item_instances','bank_accounts','banked_items','game_economy','room_traps','character_journal'}
 router = APIRouter(prefix='/api/admin', dependencies=[Depends(admin_player)])
 
@@ -36,8 +36,15 @@ async def status(request: Request):
     world=request.app.state.world
     return {'players':len(world.active_characters),'connections':len(request.app.state.connections),
         'rooms':len(world.rooms),'npcs':sum(len(r.mobs) for r in world.rooms.values()),
-        'online':[{'id':c.dbid,'name':c.name,'room':c.location_id,'hp':c.hp} for c in world.active_characters.values()],
+        'online':[{'id':c.dbid,'name':c.name,'room':c.location_id,'hp':c.hp,'link_lost':getattr(c,'linkdead',False),'level':c.level,'essence':c.essence,'stats':dict(c.stats),'conditions':c.effects,'stance':c.stance,'hidden':c.is_hidden,'xp_total':c.xp_total,'xp_pool':c.xp_pool,'coins':c.coinage,'inventory':[{'guid':str(i.id),'name':i.name,'hand':i.instance_stats.get('held_hand'),'equipment':[slot for slot,item in c._equipped_items.items() if item.id==i.id],'container':str(i.container_id) if i.container_id else None} for i in c.get_all_owned_item_instances()]} for c in world.active_characters.values()],
         'mobs':[{'id':m.instance_id,'name':m.name,'room':r.dbid,'hp':m.hp} for r in world.rooms.values() for m in r.mobs]}
+
+@router.get('/analytics')
+async def analytics():
+    connections=await db_manager.fetch_all_query("SELECT date_trunc('day',created_at) AS day,event,count(*) AS events,count(DISTINCT player_id) AS accounts FROM connection_events GROUP BY day,event ORDER BY day DESC LIMIT 100")
+    economy=await db_manager.fetch_all_query('SELECT reason,sum(coin_delta) AS coins,sum(xp_delta) AS xp,count(*) AS events FROM economy_ledger GROUP BY reason ORDER BY reason')
+    gameplay=await db_manager.fetch_all_query('SELECT metric,sum(total) AS total FROM gameplay_metrics GROUP BY metric')
+    return {'connections':[dict(r) for r in connections],'economy':[dict(r) for r in economy],'gameplay':[dict(r) for r in gameplay]}
 
 @router.get('/logs')
 async def logs(request: Request):
@@ -45,11 +52,12 @@ async def logs(request: Request):
     return {'runtime':list(request.app.state.logs.entries),'audit':[dict(a) for a in audit]}
 
 @router.get('/entities/{table}')
-async def entities(table: str, q: str = '', offset: int = Query(0,ge=0), limit: int = Query(50,ge=1,le=100)):
+async def entities(table: str, q: str = '', offset: int = Query(0,ge=0), limit: int = Query(50,ge=1,le=100), area_id: int | None = None):
     await columns(table)
     # Identifiers only come from the server allowlist. Values remain parameterized.
+    area_filter=f' AND t.area_id={int(area_id)}' if table=='rooms' and area_id is not None else f' AND t.source_room_id IN (SELECT id FROM rooms WHERE area_id={int(area_id)})' if table=='exits' and area_id is not None else ''
     rows=await db_manager.fetch_all_query(f'''SELECT to_jsonb(t) AS data FROM "{table}" t
-        WHERE to_jsonb(t)::text ILIKE $1 ORDER BY to_jsonb(t)::text LIMIT $2 OFFSET $3''', '%'+q[:100]+'%',limit,offset)
+        WHERE to_jsonb(t)::text ILIKE $1 {area_filter} ORDER BY to_jsonb(t)::text LIMIT $2 OFFSET $3''', '%'+q[:100]+'%',limit,offset)
     return [json.loads(r['data']) for r in rows]
 
 @router.post('/entities/{table}')
@@ -90,7 +98,9 @@ async def _edit(table,body,request,player):
         from game.utils import get_canonical_direction
         direction=get_canonical_direction(values['direction'])
         if not direction:
-            raise HTTPException(422,'Choose a compass direction')
+            direction=values['direction'].strip().lower()
+            if not direction or len(direction)>50 or not all(c.isalnum() or c in ' -' for c in direction):
+                raise HTTPException(422,'Use a compass direction or a short named path')
         values['direction']=direction
     params=[json.dumps(v) if cols[k]['data_type'] in ('json','jsonb') else v for k,v in values.items()]
     try:
@@ -127,7 +137,19 @@ async def publish(request: Request, player=Depends(admin_player)):
     return {'ok':True,'rooms':len(request.app.state.world.rooms)}
 
 @router.get('/map')
-async def world_map():
-    rooms=await db_manager.fetch_all_query('SELECT * FROM rooms ORDER BY id LIMIT 2000')
-    exits=await db_manager.fetch_all_query('SELECT * FROM exits ORDER BY id LIMIT 10000')
+async def world_map(area_id: int | None = None):
+    if area_id is None:
+        row=await db_manager.fetch_one_query('SELECT min(id) AS id FROM areas')
+        area_id=row['id']
+    rooms=await db_manager.fetch_all_query('SELECT * FROM rooms WHERE area_id=$1 ORDER BY id LIMIT 2000',area_id)
+    exits=await db_manager.fetch_all_query('SELECT e.* FROM exits e JOIN rooms r ON r.id=e.source_room_id WHERE r.area_id=$1 ORDER BY e.id LIMIT 10000',area_id)
     return {'rooms':[jsonable_encoder(dict(r)) for r in rooms],'exits':[jsonable_encoder(dict(r)) for r in exits]}
+
+@router.get('/warnings-file')
+async def warnings_file():
+    import os
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+    path=Path(os.getenv('LOG_DIR','logs'))/'warnings-errors.log'
+    if not path.exists():raise HTTPException(404,'No warning archive exists yet')
+    return FileResponse(path,filename='chrozal-warnings-errors.log',media_type='text/plain')

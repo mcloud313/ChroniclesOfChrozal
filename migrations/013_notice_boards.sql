@@ -1,0 +1,7 @@
+CREATE TABLE notice_boards(id SERIAL PRIMARY KEY,room_id INTEGER UNIQUE NOT NULL REFERENCES rooms(id),name TEXT NOT NULL DEFAULT 'Notice board',daily_limit INTEGER NOT NULL DEFAULT 10 CHECK(daily_limit BETWEEN 1 AND 10));
+CREATE TABLE board_notices(id BIGSERIAL PRIMARY KEY,board_id INTEGER NOT NULL REFERENCES notice_boards(id),game_date TEXT NOT NULL,slot INTEGER NOT NULL,name TEXT NOT NULL,description TEXT NOT NULL,min_level INTEGER NOT NULL,group_size INTEGER NOT NULL DEFAULT 1,objectives JSONB NOT NULL,reward_xp INTEGER NOT NULL,reward_coinage INTEGER NOT NULL,claimed BOOLEAN NOT NULL DEFAULT false,completed BOOLEAN NOT NULL DEFAULT false,UNIQUE(board_id,game_date,slot));
+CREATE TABLE notice_claims(notice_id BIGINT REFERENCES board_notices(id),character_id INTEGER REFERENCES characters(id),progress JSONB NOT NULL DEFAULT '{}',active BOOLEAN NOT NULL DEFAULT true,PRIMARY KEY(notice_id,character_id));
+CREATE UNIQUE INDEX one_active_notice_per_character ON notice_claims(character_id) WHERE active;
+CREATE TABLE connection_events(id BIGSERIAL PRIMARY KEY,player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,event TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE gameplay_metrics(character_id INTEGER REFERENCES characters(id) ON DELETE CASCADE,metric TEXT NOT NULL,total BIGINT NOT NULL DEFAULT 0,PRIMARY KEY(character_id,metric));
+INSERT INTO notice_boards(room_id) SELECT id FROM rooms WHERE name='Wayfinder''s Plaza' ON CONFLICT DO NOTHING;

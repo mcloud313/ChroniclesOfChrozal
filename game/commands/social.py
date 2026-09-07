@@ -135,6 +135,10 @@ async def cmd_accept(character: 'Character', world: 'World', args_str: str) -> b
     elif character.pending_give_offer:
         offer = character.pending_give_offer
         giver = offer["from_char"]
+        if character.level<10 or giver.level<10:
+            character.pending_give_offer=None
+            await character.send("Both characters must reach level 10 before trading.")
+            return True
         item_to_receive = offer["item"]
         coinage_to_receive = offer["coinage"]
 
@@ -146,8 +150,10 @@ async def cmd_accept(character: 'Character', world: 'World', args_str: str) -> b
             await character.send(f"{giver.name} is no longer here.")
             return True
         
+        if item_to_receive and character.level<item_to_receive.minimum_level:
+            await character.send('You are not experienced enough to receive that item.');return True
         if item_to_receive:
-            if len(character._inventory_items) >= 2:
+            if character.hands_are_full():
                 await character.send("Your hands are full. You cannot accept the item.")
                 await giver.send(f"{character.name}'s hands are now full; they could not accept your {item_to_receive.name}.")
                 return True
@@ -166,6 +172,7 @@ async def cmd_accept(character: 'Character', world: 'World', args_str: str) -> b
         elif coinage_to_receive > 0:
             if giver.coinage < coinage_to_receive:
                 await character.send("The coinage is no longer available.")
+                return True
 
             # Peform coin transfer
             giver.coinage -= coinage_to_receive

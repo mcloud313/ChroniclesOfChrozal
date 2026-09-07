@@ -58,6 +58,11 @@ async def restore_runtime(world):
             mob.time_of_death=time.monotonic()-(time.time()-saved['death_at'])
         room.add_mob(mob)
     world.area_weather={int(k):v for k,v in data.get('weather',{}).items() if int(k) in world.areas}
+    for area_id,weather in world.area_weather.items():
+        if weather.get('condition')=='BLAZING' and world.areas[area_id].get('climate')!='arid' and world.game_month!=7:
+            weather['condition']='CLEAR'
+            for room in world.rooms.values():
+                if room.area_id==area_id:room.flags.discard('BLAZING')
 
 async def checkpoint(world):
     """One atomic, set-based checkpoint avoids one transaction per player."""

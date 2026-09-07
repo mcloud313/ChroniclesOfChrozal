@@ -100,3 +100,11 @@ def get_trait_options(race_name: str) -> dict:
 def get_default_traits(race_name: str) -> dict:
     """Returns the default traits dictionary for a given race name (case-insensitive)."""
     return DEFAULT_TRAITS.get(race_name.lower(), {})
+
+TRAIT_OPTIONS.update({
+ 'aelari': {'Height':['Short','Average','Tall'],'Build':['Slender','Lean','Athletic'],'Skin Tone':['Pearl gray','Dusky blue','Bronze'],'Eye Color':['Silver','Sea green','Violet'],'Hair Style':['Cropped','Braided','Long'],'Hair Color':['White','Black','Silver'],'Ear Shape':['Fin-fringed','Swept back'],'Gills':['Faintly silver','Deep blue']},
+ 'veskar': {'Height':['Short','Average','Tall'],'Build':['Wiry','Broad','Muscular'],'Scale Color':['Copper','Jade','Obsidian'],'Eye Color':['Amber','Gold','Green'],'Horn Shape':['Swept back','Curved','Short'],'Tail Type':['Long tapered','Short thick']}
+})
+
+for _race in ('aelari','veskar'):
+    DEFAULT_TRAITS[_race]={key:values[0] for key,values in TRAIT_OPTIONS[_race].items()}

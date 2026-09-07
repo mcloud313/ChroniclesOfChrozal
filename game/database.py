@@ -605,9 +605,9 @@ class DatabaseManager:
         query = "SELECT * FROM players WHERE lower(username) = lower($1)"
         return await self.fetch_one_query(query, username)
     
-    async def create_player_account(self, username: str, hashed_password: str, email: str) -> Optional[int]:
-        query = "INSERT INTO players (username, hashed_password, email, last_login) VALUES ($1, $2, $3, NOW()) RETURNING id"
-        record = await self.fetch_one_query(query, username, hashed_password, email)
+    async def create_player_account(self, username: str, hashed_password: str, email: str, email_verified: bool = True) -> Optional[int]:
+        query = "INSERT INTO players (username, hashed_password, email, email_verified, last_login) VALUES ($1, $2, $3, $4, NOW()) RETURNING id"
+        record = await self.fetch_one_query(query, username, hashed_password, email, email_verified)
         return record['id'] if record else None
 
     # --- Character Functions ---
@@ -642,6 +642,7 @@ class DatabaseManager:
                 if not record:
                     return None
                 new_char_id = record['id']
+                await conn.execute("INSERT INTO economy_ledger(character_id,reason,coin_delta) VALUES($1,'starting wealth',$2)",new_char_id,config.STARTING_COINAGE)
 
                 # Step 2: Insert the initial stats record
                 stats_query = """

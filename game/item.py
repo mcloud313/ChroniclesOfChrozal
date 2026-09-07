@@ -55,6 +55,10 @@ class Item:
             log.warning("Item template %s has non-dict stats: %s", self._template.get('id'), type(self._template_stats))
             self._template_stats = {} # Default to empty dict to prevent errors
 
+    @property
+    def stats(self):
+        return {**self._template_stats, **self.instance_stats}
+
     def get_total_contents_weight(self) -> int:
         """Calculates the total weight of all items inside this container."""
         if not self.contents:
@@ -70,6 +74,10 @@ class Item:
     def template_id(self) -> int:
         return self._template.get('id', 0)
     
+    @property
+    def minimum_level(self):
+        return max([int(self._template.get('min_level',self.stats.get('min_level',1)))]+[item.minimum_level for item in self.contents.values()])
+
     @property
     def capacity(self) -> int:
         """The maximum weight this item can hold if it's a container."""
@@ -93,7 +101,7 @@ class Item:
 
     @property
     def damage_type(self) -> Optional[str]:
-        return self._template.get('damage_type')
+        return self._template.get('damage_type') or self._template_stats.get('damage_type') or ('pierce' if self.item_type=='RANGED_WEAPON' else 'bludgeon')
 
     @property
     def flags(self) -> Set[str]:

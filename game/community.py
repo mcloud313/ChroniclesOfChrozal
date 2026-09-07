@@ -29,6 +29,8 @@ async def cmd_mail(c,w,args):
         parts=[p.strip() for p in args[5:].split('|')]
         if len(parts) not in (3,4) or not parts[0].isdigit() or not 1<=len(parts[1])<=100 or not 1<=len(parts[2])<=3000:
             await c.send('mail send <character id> | subject | message [| loose item name or UUID]');return True
+        if len(parts)==4:
+            await c.send('Mail carries letters only. Exchange belongings in person at level 10.');return True
         recipient=int(parts[0]);fee=await rule(w,'mail_fee',2)
         if c.coinage<fee:await c.send(f'Postage costs {fee} coins.');return True
         item=next((i for i in c._inventory_items.values() if str(i.id)==parts[3] or i.name.lower()==parts[3].lower()),None) if len(parts)==4 else None

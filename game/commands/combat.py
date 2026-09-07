@@ -129,7 +129,7 @@ async def cmd_shoot(character: Character, world: World, args: str) -> bool:
             if not target.is_alive():
                 await character.send("They're already dead.")
                 return True
-            if "SAVE_ZONE" in character.location.flags:
+            if "SAFE_ZONE" in character.location.flags:
                 await character.send("{RThe guards intervene! You cannot attack other players here.{x")
                 return True
             if character.group and target in character.group.members:
@@ -141,6 +141,13 @@ async def cmd_shoot(character: Character, world: World, args: str) -> bool:
         return True
 
         
+    if resolver.protected_pvp(character, target):
+        await character.send("This sanctuary forbids combat between players.")
+        return True
+    if not target.is_alive():
+        await character.send("They are already dead.")
+        return True
+
     # 1. Check for Ranged Weapon
     weapon = character._equipped_items.get("main_hand")
     if not weapon or weapon.item_type != "RANGED_WEAPON":
@@ -174,14 +181,16 @@ async def cmd_shoot(character: Character, world: World, args: str) -> bool:
         await character.send(f"You need a quiver that holds {required_ammo_type}s.")
         return True
 
+    if not quiver.is_open:
+        await character.send('Open your quiver before loading ammunition.');return True
     # 3. Find ammunition in the quiver
     ammo_stack = None
     for item in quiver.contents.values():
-        if item.item_type == "AMMO" and item.instance_stats.get("ammo_type") == required_ammo_type:
+        if item.item_type == "AMMO" and item.stats.get("ammo_type") == required_ammo_type:
             ammo_stack = item
             break
 
-    if not ammo_stack or ammo_stack.instance_stats.get("quantity", 0) <= 0:
+    if not ammo_stack or ammo_stack.stats.get("quantity", 0) <= 0:
         await character.send(f"You don't have any {required_ammo_type}s in your {quiver.name}.")
         return True
     
@@ -196,7 +205,7 @@ async def cmd_shoot(character: Character, world: World, args: str) -> bool:
     await resolver.resolve_ranged_attack(character, target, weapon, ammo_stack, world)
 
     # 5. Consume ammunition
-    current_quantity = ammo_stack.instance_stats.get("quantity", 1)
+    current_quantity = ammo_stack.stats.get("quantity", 1)
     ammo_stack.instance_stats["quantity"] = current_quantity - 1
 
     if ammo_stack.instance_stats["quantity"] <= 0:

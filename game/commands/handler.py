@@ -28,7 +28,7 @@ from . import rogue as rogue_cmds
 from . import time as time_cmds
 from . import roleplay as roleplay_cmds
 
-from game import living, adventure
+from game import living, adventure, notices, hands
 
 log = logging.getLogger(__name__)
 
@@ -38,9 +38,10 @@ DEAD_ALLOWED_CMDS = {"quit", "release", "look", "who", "tell", "help"}
 
 # --- Command Map ---
 COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
-    "out": lambda c,w,a: movement.cmd_go(c,w,"out"), "home": horizon.cmd_home, "market": horizon.cmd_market, "enchant": horizon.cmd_enchant, "tales": horizon.cmd_tales, "mail": community.cmd_mail, "reputation": community.cmd_reputation, "infuse": community.cmd_infuse, "tether": soul.cmd_tether, "skin": living.cmd_skin, "treat": adventure.cmd_treat, "quest": adventure.cmd_quest, "technique": adventure.cmd_technique, "brace": adventure.cmd_brace, "recover": adventure.cmd_recover,
+    "hold":hands.command,
+    "out": lambda c,w,a: movement.cmd_go(c,w,"out"), "home": horizon.cmd_home, "market": horizon.cmd_market, "enchant": horizon.cmd_enchant, "tales": horizon.cmd_tales, "mail": community.cmd_mail, "reputation": community.cmd_reputation, "infuse": community.cmd_infuse, "tether": soul.cmd_tether, "skin": living.cmd_skin, "treat": adventure.cmd_treat, "quest": notices.command, "technique": adventure.cmd_technique, "brace": adventure.cmd_brace, "rest": general_cmds.cmd_sit,
     "talk": living.cmd_talk, "gather": living.cmd_gather, "craft": living.cmd_craft,
-    "relics": living.cmd_relics, "attune": living.cmd_attune, "journal": living.cmd_journal,
+    "journal": living.cmd_journal,
     # General Commands
     "look": general_cmds.cmd_look, "l": general_cmds.cmd_look,
     "say": general_cmds.cmd_say, "'": general_cmds.cmd_say,
@@ -192,6 +193,9 @@ async def _process_command(character: Character, world: World, raw_input: str) -
         await character.send(f"You are still recovering for {character.roundtime:.1f} seconds.")
         return True
 
+    if getattr(character,'is_wielding_two_handed',False) and command_verb in {'get','take','gather','craft','skin','lockpick','disarm','repair','pickpocket','open','close','light','snuff'}:
+        await character.send("Put away your two-handed weapon before using your hands for that work.")
+        return True
     # --- Find and Execute Command ---
     command_func = COMMAND_MAP.get(command_verb)
     if not command_func:
@@ -203,12 +207,16 @@ async def _process_command(character: Character, world: World, raw_input: str) -
         return True
 
     try:
-        log.debug("Command %s for character %s", command_verb, character.dbid)
+        log.info("Command %s character=%s room=%s", command_verb, character.dbid, getattr(character,"location_id",None))
         # REFACTOR: Call the command function with the new, shorter signature
+        if command_verb in {'open','close','lock','unlock','lockpick','disarm'}:
+            from game.doors import command as door_command
+            if await door_command(character,world,command_verb,args_str):return True
         previous_location = getattr(character,"location_id",None)
         result = await command_func(character, world, args_str)
         if world and previous_location != character.location_id:
             await adventure.event(character,world,"visit",character.location_id)
+        if hasattr(character,'_inventory_items'):hands.assign(character)
         return result
     except Exception:
         log.exception("Error executing command '%s' for %s:", command_verb, character.name)

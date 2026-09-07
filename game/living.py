@@ -152,6 +152,8 @@ async def cmd_relics(character, world, args):
     return True
 
 async def cmd_attune(character, world, args):
+    if character.level<50:
+        await character.send('Legendary relics require level 50 or above.');return True
     message='No unclaimed relic answers you here.'
     async with world.db_manager.pool.acquire() as conn:
         async with conn.transaction():

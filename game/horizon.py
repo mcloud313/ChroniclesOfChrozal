@@ -52,6 +52,8 @@ async def cmd_enchant(c,w,args):
     await c.send(f'{item.name} gains permanent enchantment rank {rank}.');return True
 
 async def cmd_market(c,w,args):
+    if args and c.level<10:
+        await c.send("Player trading unlocks at level 10.");return True
     if 'BANK' not in c.location.flags:
         await c.send('Visit the tavern’s player stalls.');return True
     if not args:
@@ -78,6 +80,10 @@ async def cmd_market(c,w,args):
             row=await conn.fetchrow('SELECT * FROM market_listings WHERE id=$1 FOR UPDATE',amount)
             if not row:await c.send('Listing not found.');return True
             buying=parts[0]=='buy'
+            if buying and not await conn.fetchval('SELECT 1 FROM characters WHERE id=$1 AND level>=10',row['seller_id']):
+                await c.send('This seller has not unlocked trading.');return True
+            if c.hands_are_full():
+                await c.send('Free a hand before collecting a stall item.');return True
             if (not buying and row['seller_id']!=c.dbid) or (buying and (row['seller_id']==c.dbid or c.coinage<row['price'])):
                 await c.send('You cannot complete this transaction.');return True
             if buying:

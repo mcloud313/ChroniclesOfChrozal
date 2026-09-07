@@ -48,13 +48,13 @@ See [QA.md](QA.md) for account details and the complete project acceptance check
 
 ## Suggested hands-on session
 
-1. Create one character from each class. Assign the common stat array to your preferred attributes. Confirm you can reconnect with the same character, location and equipment.
+1. Create one character from each class. Roll scores and assign them to your preferred attributes. Confirm you can reconnect with the same character, location and equipment.
 2. At the plaza: `quest`, `quest accept 1`, `technique`. Talk to Mira at the plaza by day or the tavern by night. Gather silverleaf south of the plaza, and explore east from Serpent Road.
-3. Complete chapters, return to the giver, then `quest complete`. Absorb experience at a node and `advance`. Use `recover` between trips.
+3. Accept contracts from a notice board, return there, then `quest complete`. Absorb experience at a node and `advance`. Eat, drink and rest between trips.
 4. Try the class basic technique, the level-3 signature, and the level-7 finale. Watch enemy wind-ups; `brace` can be used during recovery. Try a retreat rather than repeating the same attack.
 5. Craft a salve and charm. Test inventory, dropping/picking up, banking, and reconnecting. Log anything confusing or tedious.
 6. With a character still connected, save a named build state, edit a room description, and publish. Confirm the client stays connected and its HP/location/inventory remain intact. Restore the saved definitions and confirm the description returns.
-7. Wound an NPC, drop an item, complete a chapter, then stop and restart the game service. Check that runtime state reloads. Wait for the periodic checkpoint before a simulated hard interruption; graceful shutdown saves immediately.
+7. Wound an NPC, drop an item, complete a contract, then stop and restart the game service. Check that runtime state reloads. Wait for the periodic checkpoint before a simulated hard interruption; graceful shutdown saves immediately.
 8. Run the integration suite against a separate disposable database before importing any older data.
 
 The authored build-state restore is a merge: it restores rows represented in the saved state and preserves later-added entities. It never rolls player progress backward. Exact destructive world rollback is deliberately separate from this workflow.

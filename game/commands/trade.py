@@ -13,6 +13,9 @@ log = logging.getLogger(__name__)
 
 async def cmd_list(character: 'Character', world: 'World', args_str: str) -> bool:
     """Displays items for sale in the current room if it's a shop."""
+    from game.shops import available
+    if not await available(character,world):return True
+
     # 1. Check if the current room is a shop
     if "SHOP" not in character.location.flags:
         await character.send("This is not a shop.")
@@ -50,6 +53,9 @@ async def cmd_list(character: 'Character', world: 'World', args_str: str) -> boo
 
 async def cmd_buy(character: 'Character', world: 'World', args_str: str) -> bool:
     """Buys an item from a shop."""
+    from game.shops import available
+    if not await available(character,world):return True
+
     if not args_str:
         await character.send("Buy what?")
         return True
@@ -131,6 +137,9 @@ async def cmd_buy(character: 'Character', world: 'World', args_str: str) -> bool
 
 async def cmd_sell(character: 'Character', world: 'World', args_str: str) -> bool:
     """Sells an item from inventory to a shop."""
+    from game.shops import available
+    if not await available(character,world):return True
+
     if not character.location or 'SHOP' not in character.location.flags:
         await character.send('You must visit a shop.');return True
     # ... (initial checks for args_str and SHOP flag are the same) ...
@@ -322,16 +331,10 @@ async def cmd_withdraw(character: 'Character', world: 'World', args_str: str) ->
         await character.send("There was an error retrieving your item.")
         return True
     
-    template = world.get_item_template(instance_record['template_id'])
-    item_obj = Item(dict(instance_record), template)
-
-    # Add the item to the character's in-memory inventory
-    character._inventory_items[item_obj.id] = item_obj
-    
-    # FIX: Register the newly created item with the world's master list
-    world._all_item_instances[item_obj.id] = item_obj
-
-    await character.send(f"You withdraw {item_obj.name} from your bank box.")
+    from game.living import refresh_inventory
+    await refresh_inventory(character,world)
+    item_obj=character._inventory_items.get(instance_record['id'])
+    await character.send(f"You withdraw {item_obj.name if item_obj else 'your item'} from your bank box.")
     return True
 
 async def cmd_give(character: 'Character', world: 'World', args_str: str) -> bool:
@@ -345,6 +348,9 @@ async def cmd_give(character: 'Character', world: 'World', args_str: str) -> boo
     target_char = character.location.get_character_by_name(target_name)
     if not target_char:
         await character.send("You don't see them here.")
+        return True
+    if character.level<10 or target_char.level<10:
+        await character.send("Both characters must reach level 10 before exchanging coins or belongings.")
         return True
     if target_char == character:
         await character.send("You can't give things to yourself.")
@@ -380,7 +386,9 @@ async def cmd_give(character: 'Character', world: 'World', args_str: str) -> boo
     if not item_to_give:
         await character.send("You aren't carrying that.")
         return True
-    if len(target_char._inventory_items) >= 2:
+    if target_char.level<item_to_give.minimum_level:
+        await character.send('They are not experienced enough to receive that item.');return True
+    if target_char.hands_are_full():
         await character.send(f"{target_char.name}'s hands are full.")
         return True
     
