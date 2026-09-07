@@ -80,7 +80,7 @@ WEATHER_TABLES = {
             ("RAIN", 15)
         ]
     },
-    "fall": {
+    "autumn": {
         CLIMATE_TEMPERATE: [
             ("CLEAR", 35),
             ("RAIN", 25),

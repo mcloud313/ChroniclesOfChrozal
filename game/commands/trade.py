@@ -78,6 +78,10 @@ async def cmd_buy(character: 'Character', world: 'World', args_str: str) -> bool
         await character.send("That item is not for sale here.")
         return True
     
+    from game.community import has_standing
+    if not await has_standing(character,world,item_to_buy):
+        await character.send("The merchant requires better faction standing.");return True
+
     # 3. Check stock
     if item_to_buy['stock_quantity'] == 0:
         await character.send("That item is out of stock.")
@@ -91,11 +95,12 @@ async def cmd_buy(character: 'Character', world: 'World', args_str: str) -> bool
 
     # --- NEW: Apply Bartering Skill Discount ---
     bartering_rank = character.get_skill_rank("bartering")
-    discount_mod = bartering_rank // 25  # 1% discount per 25 ranks
+    discount_mod = min(20, max(0, bartering_rank // 25))  # 1% discount per 25 ranks
     if discount_mod > 0:
         price = int(price * (1.0 - (discount_mod / 100.0)))
     # ----------------------------------------
 
+    price=max(1,int(base_value*.6),price)
     if character.coinage < price:
         await character.send("You can't afford that.")
         return True
@@ -105,39 +110,29 @@ async def cmd_buy(character: 'Character', world: 'World', args_str: str) -> bool
         await character.send("Your hands are full. You must put something away to buy that.")
         return True
 
-    # 6. Perform the transaction
-    character.coinage -= price
+    import uuid
+    async with world.db_manager.pool.acquire() as conn:
+        async with conn.transaction():
+            stock=await conn.fetchrow('SELECT stock_quantity FROM shop_inventories WHERE id=$1 FOR UPDATE',item_to_buy['id'])
+            if not stock or stock['stock_quantity']==0:
+                await character.send('That item is out of stock.');return True
+            if stock['stock_quantity']>0:
+                await conn.execute('UPDATE shop_inventories SET stock_quantity=stock_quantity-1 WHERE id=$1',item_to_buy['id'])
+            new_instance_data=await conn.fetchrow('INSERT INTO item_instances(id,template_id,owner_char_id) VALUES($1,$2,$3) RETURNING *',uuid.uuid4(),item_template['id'],character.dbid)
+            await conn.execute('UPDATE characters SET coinage=$1 WHERE id=$2',character.coinage-price,character.dbid)
+            await conn.execute("INSERT INTO economy_ledger(character_id,reason,coin_delta) VALUES($1,'shop purchase',$2)",character.dbid,-price)
+    character.coinage-=price;character.is_dirty=True
+    new_item_obj=Item(dict(new_instance_data),item_template)
+    character._inventory_items[new_item_obj.id]=new_item_obj;world._all_item_instances[new_item_obj.id]=new_item_obj
+    if item_to_buy['stock_quantity']>0:item_to_buy['stock_quantity']-=1
 
-    # Create a new unique instance of the item for the player
-    new_instance_data = await world.db_manager.create_item_instance(
-        template_id=item_template['id'],
-        owner_char_id=character.dbid
-    )
-
-    # This should always succeed, but it's good practice to check
-    if not new_instance_data:
-        log.error(f"Failed to create item instance for template {item_template['id']} during purchase.")
-        character.coinage += price # Refund player
-        await character.send("An error occured with your purchase. You have been refunded.")
-        return True
-    
-    # Add the new item to the character's in memory inventory
-    new_item_obj = Item(new_instance_data, item_template)
-    character._inventory_items[new_item_obj.id] = new_item_obj
-    world._all_item_instances[new_item_obj.id] = new_item_obj
-
-    # 7. Update shop stock if it's not infinite
-    if item_to_buy['stock_quantity'] != -1:
-        item_to_buy['stock_quantity'] -= 1
-        # Here we would also update the stock in the database
-        # We'll add this helper function in the next section
-        await world.db_manager.update_shop_stock(item_to_buy['id'], -1)
-    
     await character.send(f"You buy {item_template['name']} for {utils.format_coinage(price)}.")
     return True
 
 async def cmd_sell(character: 'Character', world: 'World', args_str: str) -> bool:
     """Sells an item from inventory to a shop."""
+    if not character.location or 'SHOP' not in character.location.flags:
+        await character.send('You must visit a shop.');return True
     # ... (initial checks for args_str and SHOP flag are the same) ...
     
     item_to_sell = character.find_item_in_inventory_by_name(args_str)
@@ -145,7 +140,7 @@ async def cmd_sell(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send("You aren't carrying that.")
         return True
     
-    if item_to_sell.has_flag("NOSELL"):
+    if item_to_sell.contents or item_to_sell.has_flag("NOSELL"):
         await character.send("You cannot sell that.")
         return True
     
@@ -181,13 +176,19 @@ async def cmd_sell(character: 'Character', world: 'World', args_str: str) -> boo
     
     # Apply Bartering Skill Bonus
     bartering_rank = character.get_skill_rank("bartering")
-    profit_mod = bartering_rank // 25 # 1% profit bonus per 25 ranks
+    profit_mod = min(20, max(0, bartering_rank // 25)) # 1% profit bonus per 25 ranks
     if profit_mod > 0:
         price = int(price * (1.0 + (profit_mod / 100.0)))
     
-    # Perform the transaction
-    await world.db_manager.delete_item_instance(item_to_sell.id)
-
+    # A hard spread prevents buy/sell arbitrage even at maximum bartering.
+    price=min(price,max(1,int(base_value*.5)))
+    async with world.db_manager.pool.acquire() as conn:
+        async with conn.transaction():
+            sold=await conn.fetchval('DELETE FROM item_instances WHERE id=$1 AND owner_char_id=$2 RETURNING id',item_to_sell.id,character.dbid)
+            if not sold:return True
+            await conn.execute('UPDATE characters SET coinage=$1 WHERE id=$2',character.coinage+price,character.dbid)
+            await conn.execute("INSERT INTO economy_ledger(character_id,reason,coin_delta) VALUES($1,'shop sale',$2)",character.dbid,price)
+    character.is_dirty=True
     character.coinage += price
     del character._inventory_items[item_to_sell.id]
     if item_to_sell.id in world._all_item_instances:
@@ -227,8 +228,11 @@ async def cmd_deposit(character: 'Character', world: 'World', args_str: str) -> 
             return True
         
         # Perform transaction
+        if not await world.db_manager.transfer_bank_coins(character.dbid,character.coinage,amount):
+            await character.send("The deposit could not be completed.")
+            return True
         character.coinage -= amount
-        await world.db_manager.update_character_balance(character.dbid, amount)
+        character.is_dirty=True
 
         await character.send(f"You deposit {utils.format_coinage(amount)}.")
         return True
@@ -289,8 +293,11 @@ async def cmd_withdraw(character: 'Character', world: 'World', args_str: str) ->
             await character.send("You don't have that much in your account.")
             return True
         
+        if not await world.db_manager.transfer_bank_coins(character.dbid,character.coinage,-amount):
+            await character.send("The withdrawal could not be completed.")
+            return True
         character.coinage += amount
-        await world.db_manager.update_character_balance(character.dbid, -amount)
+        character.is_dirty=True
 
         await character.send(f"You withdraw {utils.format_coinage(amount)}.")
         return True

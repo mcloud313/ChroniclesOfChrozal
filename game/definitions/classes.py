@@ -106,23 +106,9 @@ CLASS_STARTING_SKILL_BONUSES: Dict[str, Dict[str, int]] = {
         "concentration": 3,
         "acrobatics": 3,
     },
-    "paladin": {
-        "name": "Paladin",
-        "skill_bonuses": {
-            "piety": 5,
-            "bludgeon_weapons": 5,
-            "shield_usage": 5,
-            "restoration": 5,
-        },
-    },
-    "monk": {
-        "name": "Monk",
-        "skill_bonuses": {
-            "martial_arts": 5,
-            "dodge": 5,
-            "concentration": 5,
-        },
-    }
+    "paladin": {"piety":5,"bludgeon weapons":5,"shield usage":5,"first aid":3},
+    "monk": {"martial arts":5,"acrobatics":5,"concentration":5},
+
 
 }
 
@@ -131,3 +117,6 @@ def get_starting_skill_bonuses(class_name: Optional[str]) -> Dict[str, int]:
     """Gets starting skill bonuses for a class."""
     if not class_name: return {}
     return CLASS_STARTING_SKILL_BONUSES.get(class_name.lower(), {})
+CLASS_HP_DIE[11]=8
+CLASS_ESSENCE_DIE[11]=8
+CLASS_STARTING_SKILL_BONUSES['runewarden']={'runecraft':5,'bladed weapons':3,'armor training':3,'concentration':3}

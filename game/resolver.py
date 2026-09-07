@@ -105,7 +105,7 @@ async def resolve_physical_attack(
             await attacker.send(f"You miss {target.name} with your {utils.strip_article(attack_name)}. {roll_details}")
         if isinstance(target, Character):
             await target.send(f"{attacker.name.capitalize()}'s {attack_name} misses you.")
-        attacker.roundtime = 1.0 + rt_penalty + attacker.slow_penalty
+        attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
         return
     
     # --- Resolve Parry ---
@@ -115,7 +115,7 @@ async def resolve_physical_attack(
         if random.random() < parry_chance:
             await attacker.send(f"<y>{target.name} parries your attack with their {weapon.name}!<x>")
             await target.send(f"<g>You parry {attacker.name}'s attack with your {weapon.name}!<x>")
-            attacker.roundtime = 1.0 + rt_penalty + attacker.slow_penalty
+            attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
             return
 
     # ---Resolve Block ---
@@ -456,6 +456,7 @@ async def resolve_ability_effect(
             return
     
         caster.xp_total -= xp_cost
+        caster.is_dirty = True
         await caster.send(f"<y> You sacrifice {xp_cost:,} of your stored experience to fuel the ritual...<x>")
 
         # Restore target

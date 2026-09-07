@@ -154,6 +154,7 @@ class Mob:
         self.target: Optional[Union['Character', 'Mob']] = None
         self.is_fighting: bool = False
         self.roundtime: float = 0.0
+        self.harvest_token = None
         self.time_of_death: Optional[float] = None
 
     def is_alive(self) -> bool:
@@ -197,6 +198,7 @@ class Mob:
         self.target = None
         self.is_fighting = False
         self.roundtime = 0.0
+        self.harvest_token=__import__("uuid").uuid4().hex
         self.time_of_death = time.monotonic()
 
     def respawn(self):
@@ -252,6 +254,38 @@ class Mob:
         if not self.is_alive() or self.roundtime > 0:
             return
         
+        # Authored flags enable roaming and morale without running every NPC.
+        retreat=self.has_flag('FLEES') and self.is_fighting and self.hp<self.max_hp*.2
+        patrol=self.has_flag('PATROL') and not self.is_fighting and random.random()<.05
+        if retreat or patrol:
+            choices=[world.get_room(e.get('destination_room_id')) for e in self.location.exits.values() if not e.get('is_hidden') and not e.get('faction_id')]
+            choices=[r for r in choices if r and r.area_id==self.location.area_id and 'NODE' not in r.flags]
+            if choices:
+                old=self.location;destination=random.choice(choices)
+                old.mobs.discard(self);self.location=destination;destination.add_mob(self)
+                self.is_fighting=False;self.target=None;self.roundtime=5
+                await old.broadcast(f'{self.name.capitalize()} '+('flees!' if retreat else 'continues a patrol.'))
+                return
+
+        if self.has_flag("TELEGRAPH") and self.is_fighting and self.target:
+            target=self.target
+            if not target.is_alive() or target.location != self.location:
+                self.is_fighting=False;self.target=None;self.effects.pop('windup',None)
+                return
+            if 'windup' not in self.effects:
+                self.effects['windup']={'amount':random.choice([1,1,2]),'ends_at':time.monotonic()+30}
+                self.roundtime=random.uniform(2.5,4.0)
+                await target.send(f"{self.name.capitalize()} draws back for a {'heavy' if self.effects['windup']['amount']==2 else 'measured'} blow. Brace or press your attack!")
+            else:
+                strength=self.effects.pop('windup')['amount']
+                from .combat.outcome_handler import apply_damage,handle_defeat
+                damage=(2+self.level)*strength
+                apply_damage(target,damage)
+                await target.send(f'{self.name.capitalize()} strikes. You have {int(target.hp)} HP remaining.')
+                self.roundtime=2
+                if target.hp<=0:await handle_defeat(self,target,world)
+            return
+
         if self.has_flag("CAN_FLY"):
             # 10% chance per tick to consider changing flight state
             if random.random() < 0.1:

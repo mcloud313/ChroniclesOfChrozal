@@ -20,7 +20,7 @@ from game.handlers.creation import CreationHandler
 
 log = logging.getLogger(__name__)
 
-MOTD = """
+MOTD = r"""
  ____ _   _ ____   ___  _   _ ___ ____ _     _____ ____   
  / ___| | | |  _ \ / _ \| \ | |_ _/ ___| |   | ____/ ___|  
 | |   | |_| | |_) | | | |  \| || | |   | |   |  _| \___ \  
@@ -123,7 +123,7 @@ class ConnectionHandler:
 
         if not username:
             await self.send("Invalid username.")
-            self.state = ConnectionState.GET_USERNAME # Prompt again
+            self.state = ConnectionState.GETTING_USERNAME # Prompt again
             return
 
         player_data = await self.db_manager.load_player_account(username)
@@ -224,6 +224,9 @@ class ConnectionHandler:
             char_id = char_map.get(int(selection))
             if char_id:
                 char_data = await self.db_manager.load_character_data(char_id)
+                if not char_data or char_data["status"] == "PERMADEAD":
+                    await self._send("That spirit has permanently departed.")
+                    return
                 self.active_character = Character(self.writer, dict(char_data), self.world, self.player_account.is_admin)
                 await self._handle_post_load()
             else:
@@ -232,6 +235,10 @@ class ConnectionHandler:
             await self._send("Invalid input.")
 
     async def _handle_post_load(self):
+        async with self.world.mutation_lock:
+            await self._post_load_locked()
+
+    async def _post_load_locked(self):
         # NEW: Call the character's method to load its unique item instances
         await self.active_character.load_related_data()
         room = self.world.get_room(self.active_character.location_id) or self.world.get_room(1)
@@ -242,7 +249,7 @@ class ConnectionHandler:
         self.world.add_active_character(self.active_character)
         self.active_character.login_timestamp = time.monotonic()
         
-        await self._send(MOTD)
+        await self._send("Chronicles of Chrozal — The Valian Coast\nType help for commands, quest for chapters, and technique for your class.")
         await self.send(f"Welcome back, {self.active_character.name}.")
         await command_handler.process_command(self.active_character, self.world, "look")
         await self.world.broadcast_to_all(f"<Y>** {self.active_character.name} has entered the realm. **<x>", exclude={self.active_character})
@@ -253,7 +260,7 @@ class ConnectionHandler:
             prompt = (f"<{int(self.active_character.hp)}/{int(self.active_character.max_hp)}hp "
                       f"{int(self.active_character.essence)}/{int(self.active_character.max_essence)}e | "
                       f"{self.active_character.stance}> ")
-            await self._send(prompt, add_newline=False)
+            # The browser HUD displays resources and recovery.
             line = await self._read_line()
             if line is None: return
             if not await command_handler.process_command(self.active_character, self.world, line):
@@ -300,6 +307,10 @@ class ConnectionHandler:
             await self.cleanup()
 
     async def cleanup(self):
+        async with self.world.mutation_lock:
+            await self._cleanup_locked()
+
+    async def _cleanup_locked(self):
         """
         Cleans up the connection and ensures the character is removed from the world,
         even if the save operation fails.
@@ -312,6 +323,7 @@ class ConnectionHandler:
         try:
             # First, attempt to save the character. This might fail.
             if character_to_remove:
+                character_to_remove.is_dirty = True
                 await character_to_remove.save()
         except Exception:
             # If saving fails, log the error but do not stop the cleanup process.
@@ -321,16 +333,23 @@ class ConnectionHandler:
             # This block is GUARANTEED to run, even if save() crashes.
             if character_to_remove:
 
-                if character_to_remove.login_timestamp:
-                    session_seconds = int(time.monotonic() - character_to_remove.login_timestamp)
-                    if session_seconds > 0:
-                        await self.db_manager.update_character_playtime(
-                            character_to_remove.dbid,
-                            session_seconds
-                        )
+                try:
+                    if character_to_remove.login_timestamp:
+                        seconds = int(time.monotonic() - character_to_remove.login_timestamp)
+                        await self.db_manager.update_character_playtime(character_to_remove.dbid, seconds)
+                except Exception:
+                    log.exception("Could not persist playtime")
 
                 # Clean up group invites and remove character from the world.
                 self.world.pending_invites.pop(character_to_remove.dbid, None)
+                for invited, inviter in list(self.world.pending_invites.items()):
+                    if inviter == character_to_remove.dbid:
+                        self.world.pending_invites.pop(invited, None)
+                if character_to_remove.group:
+                    group = character_to_remove.group
+                    group.remove_member(character_to_remove)
+                    if not group.members:
+                        self.world.remove_active_group(group.id)
                 if character_to_remove.location:
                     character_to_remove.location.remove_character(character_to_remove)
                     # Announce departure after removal to prevent the ghost from being seen.

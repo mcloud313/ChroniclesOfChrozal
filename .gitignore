@@ -18,3 +18,10 @@ chrozal.db-wal
 chrozal.db-shm
 
 worldpainter/worldpainter_config/local_settings.py
+.venv/
+.env
+**/.env
+*.log
+.pytest_cache/
+node_modules/
+backups/

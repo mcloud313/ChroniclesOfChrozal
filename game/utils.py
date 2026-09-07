@@ -167,63 +167,23 @@ def calculate_modifier(stat_value: int) -> int:
     return math.floor(stat_value / 3)
 
 def xp_needed_for_level(current_level: int) -> int:
-    """
-    Calculates the total XP required to reach the *next* level using a
-    tiered exponential formula.
-    """
-    max_level = getattr(config, 'MAX_LEVEL', 100)
-    if current_level >= max_level:
-        return float('inf')
+    """Cumulative XP to advance; level 75 needs 600 hours of node soaking.
 
-    target_level = current_level + 1
-    if target_level <= 1:
+    Hunting/travel add time. After 75 the per-level cost grows 18% each level.
+    QA accelerates elapsed time in tests, never the production curve.
+    """
+    if current_level >= config.MAX_LEVEL:
+        return float('inf')
+    if current_level < 1:
         return 0
+    if current_level <= 9:
+        return [0,150,400,800,1400,2200,3300,4700,6500,9000][current_level]
+    target = current_level + 1
+    if target <= 75:
+        return round(9000 + (10_800_000-9000)*((target-10)/65)**2.2)
+    final_step = 10_800_000 - xp_needed_for_level(73)
+    return 10_800_000 + sum(round(final_step * 1.18**n) for n in range(1,target-74))
 
-    base = getattr(config, 'XP_BASE', 1000)
-    exponent = getattr(config, 'XP_EXPONENT', 1.5) # Lowered for a smoother base curve
-
-    # --- NEW: Tier multiplier makes it harder at higher levels ---
-    # Multiplier increases by 0.5 every 10 levels (e.g., 1.5x at 10, 2.0x at 20)
-    tier_multiplier = 1.0 + (math.floor((target_level - 1) / 10) * 0.5)
-
-    try:
-        required = math.floor(base * ((target_level - 1) ** exponent))
-        return int(required * tier_multiplier)
-    except (OverflowError, ValueError):
-        log.error("XP calculation overflow for target level %d", target_level)
-        return float('inf')
-    """
-    Calculates the total XP required to reach the *next* level.
-    Using simple linear formula for V1.
-
-    Args:
-        level: The character's current level.
-
-    Returns:
-        The total XP needed to attain level (level + 1).
-        Returns a very large number for max level to prevent overflow issues.
-    """
-    max_level = getattr(config, 'MAX_LEVEL', 100)
-    if current_level >= max_level:
-        return float('inf') # Cannot advance further
-
-    target_level = current_level + 1
-    if target_level <= 1: # Should not happen if current_level starts at 1
-        return 0 # Level 1 requires 0 XP
-
-    base = getattr(config, 'XP_BASE', 1000)
-    exponent = getattr(config, 'XP_EXPONENT', 2.5)
-
-    try:
-        # Calculate threshold needed TO REACH target_level
-        required = math.floor(base * ((target_level - 1) ** exponent))
-        return required
-    except OverflowError:
-        log.error("XP calculation overflow for target level %d", target_level)
-        return float('inf')
-    except Exception:
-        log.exception("Error calculating XP for target level %d", target_level, exc_info=True)
-        return float('inf')
 
 def get_pronouns(sex: Optional[str]) -> tuple[str, str, str, str, str]:
     """

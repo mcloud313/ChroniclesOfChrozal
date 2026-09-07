@@ -5,7 +5,7 @@ Commands related to character skills and attributes.
 import logging
 import re
 from typing import TYPE_CHECKING
-import aiosqlite  # <-- FIX: Added missing import
+
 
 from .. import utils
 from ..definitions import skills as skill_defs

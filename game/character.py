@@ -7,6 +7,7 @@ from __future__ import annotations
 import time
 import random
 import asyncio
+import json
 import logging
 import config
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Tuple, Union, Set
@@ -227,7 +228,7 @@ class Character:
         self.unspent_skill_points: int = db_data['unspent_skill_points']
         self.unspent_attribute_points: int = db_data['unspent_attribute_points']
         self.spiritual_tether: int = db_data.get('spiritual_tether', 10) # Default if not in db
-        self.respawn_room_id: int = db_data.get('respawn_room_id', 44)
+        self.respawn_room_id: int = db_data.get('respawn_room_id', config.DEFAULT_RESPAWN_ROOM_ID)
         self.coinage: int = db_data['coinage']
         self.location_id: int = db_data['location_id']
         self.total_playtime_seconds: int = db_data['total_playtime_seconds']
@@ -255,6 +256,16 @@ class Character:
         self.active_song: Optional[str] = None
         self.active_song_name: Optional[str] = None
         self.pose: Optional[str] = None
+        from game.state import restore_effects
+        runtime = db_data.get('runtime_state', {})
+        if isinstance(runtime,str): runtime=json.loads(runtime)
+        self.effects=restore_effects(runtime.get('effects',{}))
+        self.pose=runtime.get('pose')
+        if runtime.get('death_at'):
+            self.death_timer_ends_at=time.monotonic()+max(0,runtime['death_at']-time.time())
+        elif self.status=='DYING':
+            self.status='DEAD'
+
 
         # --- Data Structures to be populated by load_related_data() ---
         self.stats: Dict[str, int] = {}
@@ -290,6 +301,8 @@ class Character:
 
         self.known_abilities = ability_set if ability_set else set()
 
+        self._inventory_items.clear()
+        self._equipped_items.clear()
         all_owned_items: Dict[str, Item] = {}
         if instance_records:
             for inst_record in instance_records:
@@ -297,6 +310,7 @@ class Character:
                 if template_data:
                     item_obj = Item(dict(inst_record), template_data)
                     all_owned_items[item_obj.id] = item_obj
+                    self.world._all_item_instances[item_obj.id] = item_obj
 
         for item in all_owned_items.values():
             if item.container_id and (container := all_owned_items.get(item.container_id)):
@@ -343,7 +357,11 @@ class Character:
         """
         Gathers the character's core attributes into a dictionary for saving.
         """
+        from game.state import serialize_effects
         return {
+            "runtime_state": json.dumps({"effects":serialize_effects(self.effects),"pose":self.pose,"death_at":time.time()+max(0,self.death_timer_ends_at-time.monotonic()) if self.death_timer_ends_at else None}),
+            "status": self.status,
+            "stance": self.stance,
             "level": self.level,
             "hp": self.hp,
             "max_hp": self.max_hp,
@@ -431,7 +449,7 @@ class Character:
         for key, ability in self.world.abilities.items():
             # Character learns any ability they meet the level for that they don't already know.
             if (self.level >= ability['level_req'] and
-                    char_class_name in ability['class_req'] and
+                    (not ability['class_req'] or char_class_name in ability['class_req']) and
                     key not in self.known_abilities):
                 
                 self.known_abilities.add(key)
@@ -515,8 +533,8 @@ class Character:
         ess_die = class_defs.CLASS_ESSENCE_DIE.get(self.class_id, class_defs.DEFAULT_ESSENCE_DIE)
         
         # A simple formula: a base amount + (level-1) * average roll per level + stat mods per level
-        base_hp = hp_die + ((self.level - 1) * (hp_die / 2 + 0.5))
-        base_essence = ess_die + ((self.level - 1) * (ess_die / 2 + 0.5))
+        base_hp = 30 + hp_die + ((self.level - 1) * (hp_die / 2 + 0.5))
+        base_essence = 15 + ess_die + ((self.level - 1) * (ess_die / 2 + 0.5))
 
         self.max_hp = float(max(1, base_hp + (self.level * self.vit_mod)))
         self.max_essence = float(max(0, base_essence + (self.level * (self.aura_mod + self.pers_mod))))
@@ -532,8 +550,8 @@ class Character:
         hp_die_size = class_defs.CLASS_HP_DIE.get(self.class_id, class_defs.DEFAULT_HP_DIE)
         essence_die_size = class_defs.CLASS_ESSENCE_DIE.get(self.class_id, class_defs.DEFAULT_ESSENCE_DIE)
 
-        hp_roll = random.randint(1, hp_die_size)
-        essence_roll = random.randint(1, essence_die_size)
+        hp_roll = hp_die_size // 2 + 1
+        essence_roll = essence_die_size // 2 + 1
 
         hp_increase = float(max(1, hp_roll + self.vit_mod))
         essence_increase = float(max(0, essence_roll + self.aura_mod + self.pers_mod))

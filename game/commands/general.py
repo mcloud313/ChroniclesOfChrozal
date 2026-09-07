@@ -15,6 +15,18 @@ if TYPE_CHECKING:
     from ..world import World
 
 HELP_TOPICS = {
+    "LIVING WORLD": {
+        "quest": "QUEST: list chapters. QUEST ACCEPT <number> and QUEST COMPLETE at the giver.",
+        "technique": "TECHNIQUE: class kit. TECHNIQUE <move> <enemy> uses a server-resolved move.",
+        "brace": "BRACE: halve the next incoming blow. Watch enemy wind-ups.",
+        "recover": "RECOVER: tend wounds and eat at a peaceful node.",
+        "gather": "GATHER [resource name]: list or harvest local resources.",
+        "craft": "CRAFT [recipe]: list recipes or craft at the required station.",
+        "talk": "TALK <resident name>: hear a resident\'s story and local guidance.",
+        "relics": "RELICS: discover the lore of ancient relics.",
+        "attune": "ATTUNE <relic name>: claim an unclaimed relic in this room.",
+        "journal": "JOURNAL: read your persistent discoveries."
+    },
     "GENERAL": {
         "look": "LOOK [target|in container]\n\r  Look at your surroundings, a person, an item, or inside a container.",
         "score": "SCORE\n\r  Display your character's vital statistics, attributes, and status.",
@@ -177,6 +189,7 @@ async def cmd_say(character: 'Character', world: 'World', args_str: str) -> bool
     
     message = args_str.strip()
     await character.send(f"You say, \"{message}\"")
+    logging.getLogger("chrozal.public_chat").info("room=%s character=%s says %s",character.location_id,character.dbid,message)
     await character.location.broadcast(f"\r\n{character.first_name} says, \"{message}\"", exclude={character})
     return True
 
@@ -272,6 +285,7 @@ async def cmd_score(character: 'Character', world: 'World', args_str: str) -> bo
         f"\r\n Hunger: {hunger_status}   Thirst: {thirst_status}"
         f"\r\n=================================================="
         f"\r\n HP   : {int(character.hp):>4}/{int(character.max_hp):<28} Carry: {character.get_current_weight():>2}/{character.get_max_weight():<3} stones"
+        f"\r\n Attack ratings: melee {character.mar}, ranged {character.rar}, arcane {character.apr}, divine {character.dpr}; defense {character.dv}"
         f"\r\n Armor: {effective_av:>4}/{base_av_for_display:<28} (Effective/Total)"
         f"\r\n Barrier: {character.barrier_value:<28} "
         f"\r\n Essn : {int(character.essence):>4}/{int(character.max_essence):<31}"
@@ -310,7 +324,7 @@ async def cmd_advance(character: 'Character', world: 'World', args_str: str) -> 
     character.unspent_attribute_points += ap_gain
 
     tether_gain = 1 if character.level % 5 == 0 else 0
-    character.spiritual_tether += tether_gain
+    character.spiritual_tether = min(10, character.spiritual_tether + tether_gain)
 
     hp_gain, essence_gain = character.apply_level_up_gains()
 
@@ -558,7 +572,7 @@ async def cmd_release(character: 'Character', world: 'World', args_str: str) -> 
     character.spiritual_tether -= 1
     character.is_dirty = True
 
-    if character.spiritual_tether < 0:
+    if character.spiritual_tether <= 0:
         await character.send("\r\n<R>═══════════════════════════════════════════════════════<x>")
         await character.send("<R>        Your spirit has been severed from Chrozal.        <x>")
         await character.send("<R>             This character has been lost.                <x>")
@@ -597,12 +611,14 @@ async def cmd_release(character: 'Character', world: 'World', args_str: str) -> 
         # TODO: Transfer bank contents to auction house for estate sale
 
 
+        # Persist root item transfers immediately; contained children retain their links.
+        if character.location:
+            await world.db_manager.execute_query('UPDATE item_instances SET owner_char_id=NULL,room_id=$1 WHERE owner_char_id=$2',character.location_id,character.dbid)
         # Mark character as permanently dead
         character.status = "PERMADEAD"
         await character.save()
 
         #Disconnect the player after a delay
-        await asyncio.sleep(5.0)
         if character.writer and not character.writer.is_closing():
             character.writer.close()
             await character.writer.wait_closed()

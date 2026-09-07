@@ -1,0 +1,5 @@
+services:
+  game:
+    volumes:
+      - .:/app
+    command: [sleep, infinity]

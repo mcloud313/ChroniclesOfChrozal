@@ -37,7 +37,12 @@ def apply_damage(target: Union[Character, Mob], final_damage: int):
             asyncio.create_task(target.send(f"<R>The pain causes you to lose concentration on {spell_name}!<x>"))
     # ----------------------------
     
+    if 'CIVILIAN' in getattr(target,'flags',set()):return
+    brace=target.effects.pop('braced',None)
+    if brace and brace.get('ends_at',0)>time.monotonic():
+        final_damage=max(1,round(final_damage*.5))
     target.hp = max(0.0, target.hp - final_damage)
+    if isinstance(target,Character):target.is_dirty=True
 
 def _determine_loot(mob_template: Dict[str, Any]) -> Tuple[int, List[int]]:
     """Calculates loot from a normalized mob template."""
@@ -243,6 +248,11 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
             await target_loc.broadcast(f"\r\n{attacker_name} has slain {target_name}!\r\n", exclude={attacker})
         
         target.die()
+        if isinstance(attacker,Character):
+            from game.adventure import event
+            members=[m for m in attacker.group.members if m.location==target_loc and m.is_alive()] if attacker.group else [attacker]
+            for member in members:
+                await event(member,world,"kill",target.name)
 
         dropped_coinage, dropped_item_ids = 0, []
         mob_template = world.get_mob_template(target.template_id)

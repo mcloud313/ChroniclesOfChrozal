@@ -108,7 +108,7 @@ async def cmd_accept(character: 'Character', world: 'World', args_str: str) -> b
         inviter = world.get_active_character(inviter_id)
 
         #Clear the invite immediately
-        del world.pending_invites[character.dibd]
+        del world.pending_invites[character.dbid]
 
         # Validate inviter is still available
         if not inviter or not inviter.is_alive() or inviter.location != character.location:

@@ -171,10 +171,10 @@ class CreationHandler:
             await self._send("Invalid input. Please enter a number.")
 
     async def _handle_roll_stats(self):
-        self.creation_data["base_stats"] = utils.generate_stat_set()
+        self.creation_data["base_stats"] = [25,22,19,16,13,10]
         stats_str = ", ".join(map(str, self.creation_data["base_stats"]))
-        await self._send(f"\r\nYour generated stats: [ {stats_str} ]")
-        await self._prompt("Type 'keep' to accept these scores, or 'reroll' to try again")
+        await self._send(f"\r\nYour assignable stats: [ {stats_str} ]")
+        await self._prompt("Type 'keep' to assign this balanced array to your attributes")
         self.state = CreationState.CONFIRM_STATS
 
     async def _handle_confirm_stats(self):
@@ -186,10 +186,8 @@ class CreationHandler:
             self._available_scores = list(self.creation_data["base_stats"])
             self._assigning_stat_index = 0
             self.state = CreationState.ASSIGN_STATS
-        elif choice.lower() == 'reroll':
-            self.state = CreationState.ROLL_STATS
         else:
-            await self._send("Please type 'keep' or 'reroll'.")
+            await self._send("Please type 'keep'. Everyone starts with the same assignable array.")
 
     async def _handle_assign_stats(self):
         if self._assigning_stat_index >= len(self._stat_order):
@@ -270,54 +268,8 @@ class CreationHandler:
             await self._send("Invalid input. Please enter a number.")
 
     def _build_description_string(self) -> str:
-        """Builds a detailed character description paragraph from selected traits."""
-        traits = self.creation_data.get("description_traits", {})
-        race_name = self.creation_data.get("race_name", "Unknown")
-        sex = self.creation_data.get("sex", "They/Them")
-        defaults = trait_defs.get_default_traits(race_name)
-        subj, obj, poss, verb_is, verb_has = utils.get_pronouns(sex)
-
-        # Helper to get a trait or its default value
-        def get_trait(key):
-            return traits.get(key, defaults.get(key, "")).lower()
-
-        # --- Build Sentences ---
-        # Sentence 1: Core identity
-        height = get_trait("Height")
-        build = get_trait("Build")
-        s1 = f"You see {self.creation_data['first_name']}, a {height} {race_name} with a {build} build."
-
-        # Sentence 2: Skin/Shell/Fur
-        s2_parts = []
-        if skin_tone := get_trait("Skin Tone"): s2_parts.append(f"{skin_tone} skin")
-        if fur_pattern := get_trait("Fur Pattern"): s2_parts.append(f"a coat of {get_trait('Fur Color')} fur with a {fur_pattern} pattern")
-        if skin_pattern := get_trait("Skin Pattern"): s2_parts.append(f"a {skin_pattern} pattern")
-        if shell_color := get_trait("Shell Color"): s2_parts.append(f"a {shell_color} shell")
-        if s2_parts:
-            s2 = f"{subj} {verb_has} " + " and ".join(s2_parts) + "."
-        else:
-            s2 = ""
-
-        # Sentence 3: Head and Face
-        s3_parts = []
-        if head_shape := get_trait("Head Shape"): s3_parts.append(f"a {head_shape} head")
-        if hair_style := get_trait("Hair Style"): s3_parts.append(f"{hair_style} {get_trait('Hair Color')} hair")
-        if eye_color := get_trait("Eye Color"): s3_parts.append(f"{eye_color} eyes")
-        if ear_shape := get_trait("Ear Shape"): s3_parts.append(f"{poss.lower()} ears are {ear_shape}")
-        if nose_type := get_trait("Nose Type"): s3_parts.append(f"a {nose_type} nose")
-        if beard_style := get_trait("Beard Style"): s3_parts.append(f"a {beard_style} beard")
-        if tail_type := get_trait("Tail Type"): s3_parts.append(f"a {tail_type} tail")
-        
-        if s3_parts:
-            s3 = f"{poss} face is framed by " + ", ".join(s3_parts) + "." if "hair" in " ".join(s3_parts) else \
-                 f"{poss} features include " + ", ".join(s3_parts) + "."
-            s3 = s3.replace("  ", " ").capitalize()
-        else:
-            s3 = ""
-            
-        # Combine all parts into a single paragraph
-        full_description = " ".join(filter(None, [s1, s2, s3]))
-        return full_description
+        from game.appearance import describe
+        return describe(self.creation_data)
 
     async def _handle_finalize(self):
         class_name = self.creation_data.get('class_name', '')
@@ -327,8 +279,8 @@ class CreationHandler:
         pers_mod = utils.calculate_modifier(stats_dict.get("persona", 10))
         
         hp_die = class_defs.CLASS_HP_DIE.get(self.creation_data.get("class_id"), 6)
-        max_hp = float(hp_die + vit_mod)
-        max_essence = float(aura_mod + pers_mod)
+        max_hp = float(30 + hp_die + vit_mod)
+        max_essence = 15.0 + float(aura_mod + pers_mod)
 
         initial_tether = max(3, aura_mod + pers_mod)
 

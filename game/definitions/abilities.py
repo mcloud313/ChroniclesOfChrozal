@@ -274,6 +274,7 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "messages": {
             "caster_self_complete": "{YYou call down a column of divine light to strike {target_name}!{x",
             "room_complete": "{Y{caster_name} calls down a column of divine light to strike {target_name}!{x"
+        }
     },
      "bless": {
         "name": "Bless",
@@ -357,7 +358,7 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
     "backstab": {
       "name": "Backstab",
       "type": "ABILITY",
-      "class": "Rogue",
+      "class_req": ["rogue"],
       "level_req": 3,
       "cost": 15,
       "roundtime": 3.0,
@@ -693,10 +694,43 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
     }
 }
 }
-}
 
 
 # Helper function to get data safely
 def get_ability_data(world: 'World', name: str) -> Optional[Dict[str, Any]]:
     """Gets ability data from the world cache."""
     return world.abilities.get(name.lower())
+# Normalize the three legacy Monk entries to the common ability schema.
+for _key,_level,_cost in [('stunning_palm',1,4),('inner_peace',3,4),('chi_blast',5,6)]:
+    _ability=ABILITIES_DATA[_key]
+    _ability.update(type='ABILITY',class_req=['monk'],level_req=_level,cost=_cost,
+                    target_type='SELF' if _key=='inner_peace' else 'CHAR_OR_MOB',
+                    effect_type='BUFF' if _key=='inner_peace' else 'DAMAGE',cast_time=0,roundtime=3)
+
+# Additional authored progression spells. These use the existing cast/recovery,
+# effect, mitigation and weather pipeline, and are editable as DB templates.
+for _key,_name,_class,_level,_element,_power,_cost,_cast in [
+ ('cinder_lance','Cinder Lance','mage',5,'fire',14,7,2.5),
+ ('storm_spear','Storm Spear','mage',9,'lightning',24,12,4.0),
+ ('dawn_lance','Dawn Lance','cleric',5,'divine',12,6,2.5),
+ ('judicators_light','Judicator’s Light','cleric',9,'divine',22,11,4.0),
+ ('winter_briar','Winter Briar','druid',5,'cold',13,7,3.0),
+ ('faultline','Faultline','druid',9,'earth',23,12,4.0),
+ ('shattering_note','Shattering Note','bard',5,'sonic',12,6,2.0),
+ ('dirge_of_echoes','Dirge of Echoes','bard',9,'sonic',21,11,3.5),
+ ('consecrated_flame','Consecrated Flame','paladin',5,'fire',13,7,3.0),
+ ('oath_of_dawn','Oath of Dawn','paladin',9,'divine',22,12,4.0),
+]:
+    ABILITIES_DATA[_key]={'name':_name,'type':'SPELL','class_req':[_class],'level_req':_level,
+        'cost':_cost,'target_type':TARGET_CHAR_OR_MOB,'cast_time':_cast,'roundtime':_cast+1,
+        'effect_type':EFFECT_DAMAGE,'school':'Arcane' if _class in ('mage','bard') else 'Divine',
+        'effect_details':{'school':'Arcane' if _class in ('mage','bard') else 'Divine','damage_type':_element,'damage_base':_power,'damage_rng':6},
+        'description':f'A focused {_element} invocation. Cast {_cast}s; recovery {_cast+1}s.',
+        'messages':{'caster_self_complete':f'You release {_name}.','room_complete':f'{{caster_name}} releases {_name}.'}}
+
+ABILITIES_DATA['stone_memory']={
+    'name':'Stone Memory','type':'SPELL','class_req':['runewarden'],'level_req':5,
+    'cost':7,'target_type':TARGET_CHAR_OR_MOB,'cast_time':3.0,'roundtime':4.0,
+    'effect_type':EFFECT_DAMAGE,'effect_details':{'school':'Arcane','damage_type':'earth','damage_base':15,'damage_rng':6},
+    'description':'Awaken a rune of stone beneath a foe; three-second cast, four-second recovery.',
+    'messages':{'caster_self_complete':'You awaken the memory of stone.','room_complete':'Stone runes flare around {caster_name}.'}}

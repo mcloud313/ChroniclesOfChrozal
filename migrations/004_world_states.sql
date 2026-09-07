@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS runtime_checkpoints (
+ key TEXT PRIMARY KEY, payload JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS build_states (
+ id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, payload JSONB NOT NULL,
+ created_by INTEGER REFERENCES players(id), created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS runtime_state JSONB NOT NULL DEFAULT '{}';

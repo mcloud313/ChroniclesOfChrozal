@@ -21,12 +21,6 @@ from .definitions import slots
 
 log = logging.getLogger(__name__)
 
-DB_CONFIG = {
-    "user": "chrozal",
-    "password": "timcp313", 
-    "database": "chrozaldb",
-    "host": "localhost"
-}
 
 class DatabaseManager:
     """A class to manage the application's PostgreSQL connection pool and queries."""
@@ -37,7 +31,7 @@ class DatabaseManager:
     async def connect(self):
         """Creates the connection pool."""
         try:
-            self.pool = await asyncpg.create_pool(**DB_CONFIG)
+            self.pool = await asyncpg.create_pool(dsn=config.DATABASE_URL, min_size=min(2,config.DB_POOL_SIZE), max_size=config.DB_POOL_SIZE, command_timeout=30)
             log.info("Successfully connected to PostgreSQL and created connection pool.")
         except Exception:
             log.exception("!!! Failed to connect to PostgreSQL database. Server cannot start.")
@@ -439,9 +433,6 @@ class DatabaseManager:
                 # Areas & Rooms
                 await conn.execute("INSERT INTO areas (id, name, description) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING", 1, "The Void", "...")
                 await conn.execute("INSERT INTO rooms (id, area_id, name, description, flags) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING", 1, 1, "The Void", "...", json.dumps(["NODE", "RESPAWN"]))
-                # Test Players
-                await conn.execute("INSERT INTO players (username, hashed_password, email, is_admin) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING", "tester", utils.hash_password("password"), "tester@example.com", False)
-                await conn.execute("INSERT INTO players (username, hashed_password, email, is_admin) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING", "admin", utils.hash_password("password"), "admin@example.com", True)
                 # Seed Damage Types
                 damage_types_to_seed = [
                     ('slash', False), ('pierce', False), ('bludgeon', False),
@@ -476,19 +467,7 @@ class DatabaseManager:
                         target_type, effect_type, effect_details, cast_time, roundtime,
                         messages, description
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-                    ON CONFLICT (internal_name) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        ability_type = EXCLUDED.ability_type,
-                        class_req = EXCLUDED.class_req,
-                        level_req = EXCLUDED.level_req,
-                        cost = EXCLUDED.cost,
-                        target_type = EXCLUDED.target_type,
-                        effect_type = EXCLUDED.effect_type,
-                        effect_details = EXCLUDED.effect_details,
-                        cast_time = EXCLUDED.cast_time,
-                        roundtime = EXCLUDED.roundtime,
-                        messages = EXCLUDED.messages,
-                        description = EXCLUDED.description;
+                    ON CONFLICT (internal_name) DO NOTHING;
                 """, ability_records)
                 
         log.info("--- PostgreSQL schema check complete ---")
@@ -564,7 +543,7 @@ class DatabaseManager:
     
     async def get_instances_in_room(self, room_id: int) -> List[asyncpg.Record]:
         """Fetches all item instances on the ground in a room."""
-        query ="SELECT * FROM item_instances WHERE room_id = $1"
+        query ="WITH RECURSIVE ground AS (SELECT * FROM item_instances WHERE room_id=$1 UNION SELECT i.* FROM item_instances i JOIN ground g ON i.container_id=g.id) SELECT * FROM ground"
         return await self.fetch_all_query(query, room_id)
     
     async def get_instances_for_character(self, character_id: int) -> List[asyncpg.Record]:
@@ -579,7 +558,7 @@ class DatabaseManager:
                 FROM item_instances
                 WHERE owner_char_id = $1
 
-                UNION ALL
+                UNION
 
                 -- 2. Recursive Step: Find all items inside containers we've already found
                 SELECT i.*
@@ -633,7 +612,7 @@ class DatabaseManager:
 
     # --- Character Functions ---
     async def load_characters_for_account(self, player_id: int) -> List[asyncpg.Record]:
-        query = "SELECT id, first_name, last_name, level, race_id, class_id FROM characters WHERE player_id = $1 ORDER BY last_saved DESC NULLS LAST, id ASC"
+        query = "SELECT id, first_name, last_name, level, race_id, class_id FROM characters WHERE player_id = $1 AND status <> 'PERMADEAD' ORDER BY last_saved DESC NULLS LAST, id ASC"
         return await self.fetch_all_query(query, player_id)
     
     async def load_character_data(self, character_id: int) -> Optional[asyncpg.Record]:
@@ -687,11 +666,7 @@ class DatabaseManager:
                 ]
                 
                 if initial_skill_data:
-                    await conn.copy_records_to_table(
-                    'character_skills',
-                    columns=['character_id', 'skill_name', 'rank'],
-                    records=initial_skill_data
-                )
+                    await conn.executemany('INSERT INTO character_skills(character_id,skill_name,rank) VALUES($1,$2,$3)', initial_skill_data)
                 
                 return new_char_id
     
@@ -733,11 +708,7 @@ class DatabaseManager:
                     return "DELETE" # No new skills to add
                 
                 skill_records = [(character_id, name, rank) for name, rank in skills.items()]
-                await conn.copy_records_to_table(
-                    'character_skills',
-                    columns=['character_id', 'skill_name', 'rank'],
-                    records=skill_records
-                )
+                await conn.executemany('INSERT INTO character_skills(character_id,skill_name,rank) VALUES($1,$2,$3)', skill_records)
         return "COPY"
 
     async def save_character_equipment(self, character_id: int, equipment: dict) -> str:
@@ -802,9 +773,7 @@ class DatabaseManager:
                         await conn.execute("DELETE FROM character_skills WHERE character_id = $1", char_id)
                         if skills:
                             skill_records = [(char_id, name, rank) for name, rank in skills.items()]
-                            await conn.copy_records_to_table('character_skills',
-                                                            columns=['character_id', 'skill_name', 'rank'],
-                                                            records=skill_records)
+                            await conn.executemany('INSERT INTO character_skills(character_id,skill_name,rank) VALUES($1,$2,$3)', skill_records)
 
                     # 4. Save Equipment (No changes needed)
                     if equipment:
@@ -825,9 +794,7 @@ class DatabaseManager:
                         await conn.execute("DELETE FROM character_abilities WHERE character_id = $1", char_id)
                         if abilities:
                             ability_records = [(char_id, name) for name in abilities]
-                            await conn.copy_records_to_table('character_abilities',
-                                                            columns=['character_id', 'ability_internal_name'],
-                                                            records=ability_records)
+                            await conn.executemany('INSERT INTO character_abilities(character_id,ability_internal_name) VALUES($1,$2)', ability_records)
                             
                     # --- 6. FINAL FIX: Save Item Container State ---
                     if items is not None:
@@ -851,7 +818,7 @@ class DatabaseManager:
                     return True
                 except Exception:
                     log.exception(f"Transaction failed for saving character {char_id}. Rolling back.")
-                    return False
+                    raise
     
     async def get_character_stats(self, character_id: int) -> Optional[asyncpg.Record]:
         """Fetches the core stats for a character."""
@@ -891,11 +858,7 @@ class DatabaseManager:
                     return "DELETE"
                 
                 ability_records = [(character_id, name) for name in abilities]
-                await conn.copy_records_to_table(
-                    'character_abilities',
-                    columns=['character_id', 'ability_internal_name'],
-                    records=ability_records
-                )
+                await conn.executemany('INSERT INTO character_abilities(character_id,ability_internal_name) VALUES($1,$2)', ability_records)
 
     async def update_character_playtime(self, character_id: int, session_seconds: int) -> str:
         """Adds the session duration to the character's total playtime."""
@@ -928,14 +891,25 @@ class DatabaseManager:
         """
         return await self.execute_query(query, character_id, amount_change)
     
+    async def transfer_bank_coins(self, character_id, carried, amount):
+        """Positive amount deposits; negative amount withdraws, atomically."""
+        async with self.pool.acquire() as c:
+            async with c.transaction():
+                await c.execute('INSERT INTO bank_accounts(character_id,balance) VALUES($1,0) ON CONFLICT DO NOTHING',character_id)
+                balance=await c.fetchval('SELECT balance FROM bank_accounts WHERE character_id=$1 FOR UPDATE',character_id)
+                if carried-amount<0 or balance+amount<0:return False
+                await c.execute('UPDATE bank_accounts SET balance=balance+$1 WHERE character_id=$2',amount,character_id)
+                await c.execute('UPDATE characters SET coinage=$1 WHERE id=$2',carried-amount,character_id)
+                return True
+
     async def bank_item(self, character_id: int, item_instance_id: str) -> bool:
         """Moves an item from a character's inventory into their bank box."""
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 # Remove the item from any in-world location
                 status = await conn.execute(
-                    "UPDATE item_instances SET owner_char_id = NULL WHERE id = $1",
-                    item_instance_id
+                    "UPDATE item_instances SET owner_char_id = NULL,bank_char_id=$2 WHERE id = $1 AND owner_char_id=$2",
+                    item_instance_id,character_id
                 )
                 if "UPDATE 1" not in status:
                     # Rollback the transaction
@@ -976,7 +950,7 @@ class DatabaseManager:
                 
                 # Assign the item to the character
                 await conn.execute(
-                    "UPDATE item_instances SET owner_char_id = $1 WHERE id = $2",
+                    "UPDATE item_instances SET owner_char_id = $1,bank_char_id=NULL WHERE id = $2",
                     character_id, item_instance_id
                 )
                 return True

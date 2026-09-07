@@ -3,20 +3,27 @@
 Server configuration settings.
 """
 
-HOST = "0.0.0.0"  # Listen on all available network interfaces
-PORT = 4000       # Port for clients to connect to
-DB_NAME = "chrozal.db" # Name for our SQLite database file
+import os
+
+HOST = os.getenv("HOST", "127.0.0.1")
+PORT = int(os.getenv("PORT", "8000"))
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/chrozaldb")
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
+PUBLIC_ORIGIN = os.getenv("PUBLIC_ORIGIN", "http://localhost:8000").rstrip("/")
+COOKIE_SECURE = PUBLIC_ORIGIN.startswith("https://")
+MAX_PLAYERS = int(os.getenv("MAX_PLAYERS", "100"))
+ALLOW_REGISTRATION = os.getenv("ALLOW_REGISTRATION", "false").lower() == "true"
 ENCODING = "utf-8" # Encoding for network communication
 
 # --- Game Loop & Save ---
 TICKER_INTERVAL_SECONDS = 1.0     # How often the main game loop runs.
-AUTOSAVE_INTERVAL_SECONDS = 300   # 300 seconds = 5 minutes
+AUTOSAVE_INTERVAL_SECONDS = int(os.getenv("AUTOSAVE_INTERVAL_SECONDS", "30"))
 
 # --- Leveling & XP ---
-MAX_LEVEL = 100
+MAX_LEVEL = 99
 XP_BASE = 1000
 XP_EXPONENT = 2.2
-XP_ABSORB_RATE_PER_SEC = 2.5 # Increased for better feel
+XP_ABSORB_RATE_PER_SEC = 5.0 # 600 hours of node absorption to reach level 75
 SKILL_POINTS_PER_LEVEL = 5
 
 # --- Regen Rates (Points per Second) ---
@@ -31,7 +38,7 @@ BASE_CARRY_WEIGHT = 20.0
 CARRY_WEIGHT_MIGHT_MULTIPLIER = 1.5
 
 # --- Gameplay ---
-DEFAULT_RESPAWN_ROOM_ID = 44  # FIX: Changed to 1 to match the default created room.
+DEFAULT_RESPAWN_ROOM_ID = 1
 FALLBACK_RESPAWN_ROOM_ID = 1
 STARTING_COINAGE = 125
 

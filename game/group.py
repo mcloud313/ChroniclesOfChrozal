@@ -15,6 +15,7 @@ class Group:
         self.id: int = uuid.uuid4().int & (1<<64)-1 # Unique Id for the group
         self.leader: Character = leader
         self.members: Set[Character] = {leader}
+        leader.group = self
 
     def add_member(self, character: Character):
         """Adds a character to the group."""

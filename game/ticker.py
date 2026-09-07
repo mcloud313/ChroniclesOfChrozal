@@ -97,7 +97,8 @@ async def _run_ticker():
 
             # Create tasks for all subscribed callbacks for this tick
             # Copy the set in case callbacks modify it during execution
-            tasks = [asyncio.create_task(cb(delta_time)) for cb in list(_callbacks)]
+            callbacks = list(_callbacks)
+            tasks = [asyncio.create_task(cb(delta_time)) for cb in callbacks]
 
             if tasks:
                 # Run callbacks concurrently and gather results/exceptions
@@ -105,7 +106,7 @@ async def _run_ticker():
                 for i, result in enumerate(results):
                     if isinstance(result, Exception):
                         # Log exceptions from individual callbacks but don't stop the ticker
-                        callback_name = getattr(list(_callbacks)[i], '__name__', 'unknown callback')
+                        callback_name = getattr(callbacks[i], '__name__', 'unknown callback')
                         log.exception("Ticker: Exception in callback '%s': %s", callback_name, result, exc_info=result)
         except asyncio.CancelledError:
             log.info("Ticker loop cancelled.")

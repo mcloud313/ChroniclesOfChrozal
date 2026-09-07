@@ -36,6 +36,8 @@ class World:
     Holds the currently loaded game world data and a reference to the database manager.
     """
     def __init__(self, db_manager: "DatabaseManager"):
+        from game.state import ReentrantLock
+        self.mutation_lock = ReentrantLock()
         self.db_manager = db_manager
         self.areas: Dict[int, Dict] = {}
         self.rooms: Dict[int, Room] = {}
@@ -202,9 +204,14 @@ class World:
                     if template_data:
                         item_obj = Item(dict(record), template_data)
                         item_obj.room = room
-                        room.item_instance_ids.append(item_obj.id)
+                        if not item_obj.container_id:
+                            room.item_instance_ids.append(item_obj.id)
                         self._all_item_instances[item_obj.id] = item_obj
                         
+                for record in instance_records:
+                    item=self._all_item_instances.get(record["id"])
+                    parent=self._all_item_instances.get(record["container_id"])
+                    if item and parent:parent.contents[item.id]=item
                 object_rows = await self.db_manager.fetch_all_query("SELECT * FROM room_objects WHERE room_id = $1", room.dbid)
                 room.objects = [dict(r) for r in object_rows]
                 
@@ -214,6 +221,8 @@ class World:
                         for _ in range(spawn_info.get("max_present", 1)):
                             room.add_mob(Mob(mob_template, room))
 
+            from game.state import restore_runtime
+            await restore_runtime(self)
             log.info("World build complete. %d rooms loaded and populated.", len(self.rooms))
             return True
 
@@ -233,24 +242,9 @@ class World:
         self.dirty_rooms.add(room.dbid)
 
     async def save_state(self):
-        log.info("Saving world state...")
-        active_chars = self.get_active_characters_list()
-        if active_chars:
-            char_save_tasks = [char.save() for char in active_chars]
-            await asyncio.gather(*char_save_tasks, return_exceptions=True)
-            log.info(f"Saved {len(active_chars)} active characters.")
-
-        if self.dirty_rooms:
-            rooms_to_save_ids = list(self.dirty_rooms)
-            self.dirty_rooms.clear() 
-
-            room_save_tasks = [self.get_room(room_id).save(self.db_manager) for room_id in rooms_to_save_ids if self.get_room(room_id)]
-            if room_save_tasks:
-                await asyncio.gather(*room_save_tasks, return_exceptions=True)
-
-                log.info(f"Saved {len(room_save_tasks)} dirty rooms.")
-        await self.db_manager.save_game_time(self.game_year, self.game_month, self.game_day, self.game_hour, self.game_minute)
-        log.info("World state save complete.")
+        from game.state import checkpoint
+        async with self.mutation_lock:
+            await checkpoint(self)
 
     def get_shop_inventory(self, room_id: int) -> Optional[List[Dict]]:
         return self.shop_inventories.get(room_id)
@@ -301,20 +295,25 @@ class World:
     def subscribe_to_ticker(self):
         """Subscribes all world update methods to the global ticker."""
         log.info("Subscribing world systems to the game ticker...")
-        ticker.subscribe(self.update_roundtimes)
-        ticker.subscribe(self.update_mob_ai)
-        ticker.subscribe(self.update_respawns) 
-        ticker.subscribe(self.update_death_timers)
-        ticker.subscribe(self.update_effects)
-        ticker.subscribe(self.update_xp_absorption)
-        ticker.subscribe(self.update_regen)
-        ticker.subscribe(self.update_stealth_checks)
-        ticker.subscribe(self.update_room_effects)
-        ticker.subscribe(self.update_item_decay)
-        ticker.subscribe(self.update_ambient_scripts)
-        ticker.subscribe(self.update_hunger_thirst)
-        ticker.subscribe(self.update_game_time)
-        ticker.subscribe(self.update_bard_songs)
+        def guarded(callback):
+            async def run(dt):
+                async with self.mutation_lock:
+                    await callback(dt)
+            ticker.subscribe(run)
+        guarded(self.update_roundtimes)
+        guarded(self.update_mob_ai)
+        guarded(self.update_respawns)
+        guarded(self.update_death_timers)
+        guarded(self.update_effects)
+        guarded(self.update_xp_absorption)
+        guarded(self.update_regen)
+        guarded(self.update_stealth_checks)
+        guarded(self.update_room_effects)
+        guarded(self.update_item_decay)
+        guarded(self.update_ambient_scripts)
+        guarded(self.update_hunger_thirst)
+        guarded(self.update_game_time)
+        guarded(self.update_bard_songs)
 
     # --- Ticker Callback Functions ---
     async def update_roundtimes(self, dt: float):
@@ -439,8 +438,8 @@ class World:
         respawn_room = self.get_room(respawn_room_id)
         if not respawn_room:
             log.critical("!!! Respawn Room ID %d not found! Cannot respawn %s.", respawn_room_id, character.name)
-            respawn_room = self.get_room(44)
-            return
+            respawn_room = self.get_room(config.FALLBACK_RESPAWN_ROOM_ID)
+            if not respawn_room:raise RuntimeError("No valid respawn room exists")
 
         if old_room := character.location:
              if old_room != respawn_room:

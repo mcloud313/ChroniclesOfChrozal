@@ -126,7 +126,7 @@ class Item:
 
     @property
     def damage_base(self) -> int:
-        return self._template_stats.get("damage_base", 0)
+        return self._template_stats.get("damage_base", 0) + self.instance_stats.get("infusion_rank",0) + self.instance_stats.get("enchantment_rank",0)
 
     @property
     def damage_rng(self) -> int:
@@ -134,7 +134,7 @@ class Item:
 
     @property
     def armor(self) -> int:
-        return self._template_stats.get("armor", 0)
+        return self._template_stats.get("armor", 0) + self.instance_stats.get("infusion_rank",0) + self.instance_stats.get("enchantment_rank",0)
     
     @property
     def spell_failure(self) -> int:

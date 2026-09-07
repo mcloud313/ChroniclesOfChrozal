@@ -28,9 +28,14 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
     chars_to_move = [character]
     is_group_move = character.group and character.group.leader == character
     if is_group_move:
-        chars_to_move = list(character.group.members)
+        chars_to_move = [member for member in character.group.members if member.location == character.location and member.roundtime <= 0 and member.is_alive() and member.dbid in world.active_characters]
 
     current_room = character.location
+    from game.community import has_standing
+    gate=current_room.exits.get(exit_name,{})
+    for member in chars_to_move:
+        if not await has_standing(member,world,gate):
+            await character.send(f'{member.name} lacks the faction standing to enter.');return
     
     # --- 2. Calculate Shared Roundtime ---
     base_rt = 1.0
@@ -40,7 +45,7 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
     if "ROUGH_TERRAIN" in current_room.flags:
         move_rt *= 2
 
-    if character.location:
+    if character.location and "OUTDOORS" in character.location.flags:
         from ..definitions import weather as weather_defs
         area_weather = world.area_weather.get(character.location.area_id, {})
         condition = area_weather.get("condition", "CLEAR")
@@ -48,6 +53,10 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
         weather_penalty = weather_effect.get("movement_penalty", 0.0)
         move_rt += weather_penalty
     
+    if "MUD" in current_room.flags or "MUD" in target_room.flags:
+        move_rt += 1.5
+    if "SNOWY" in target_room.flags:
+        move_rt += 1.0
     final_rt = move_rt
     if is_group_move:
         slowest_member_rt = character.group.get_slowest_member_rt()

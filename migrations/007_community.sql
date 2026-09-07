@@ -1,0 +1,14 @@
+CREATE TABLE factions(id SERIAL PRIMARY KEY,name TEXT UNIQUE NOT NULL,description TEXT NOT NULL DEFAULT '');
+CREATE TABLE character_reputation(character_id INTEGER REFERENCES characters(id) ON DELETE CASCADE,faction_id INTEGER REFERENCES factions(id),standing INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(character_id,faction_id));
+ALTER TABLE quests ADD COLUMN faction_id INTEGER REFERENCES factions(id);
+ALTER TABLE quests ADD COLUMN required_standing INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE quests ADD COLUMN reputation_reward INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE shop_inventories ADD COLUMN faction_id INTEGER REFERENCES factions(id);
+ALTER TABLE shop_inventories ADD COLUMN required_standing INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE exits ADD COLUMN faction_id INTEGER REFERENCES factions(id);
+ALTER TABLE exits ADD COLUMN required_standing INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE game_mail(id SERIAL PRIMARY KEY,sender_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,recipient_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,subject TEXT NOT NULL CHECK(length(subject)<=100),body TEXT NOT NULL CHECK(length(body)<=3000),created_at TIMESTAMPTZ NOT NULL DEFAULT now(),read_at TIMESTAMPTZ);
+CREATE INDEX mail_recipient ON game_mail(recipient_id,id);
+CREATE TABLE balance_rules(id SERIAL PRIMARY KEY,name TEXT UNIQUE NOT NULL,value NUMERIC NOT NULL CHECK(value>=0),description TEXT NOT NULL DEFAULT '');
+INSERT INTO balance_rules(name,value,description) VALUES('infusion_base_xp',100000,'XP cost times next infusion rank squared'),('infusion_max_rank',10,'Maximum permanent item infusion rank'),('mail_fee',2,'Coin sink for a delivered letter');
+CREATE TABLE economy_ledger(id BIGSERIAL PRIMARY KEY,character_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,reason TEXT NOT NULL,coin_delta BIGINT NOT NULL DEFAULT 0,xp_delta BIGINT NOT NULL DEFAULT 0,created_at TIMESTAMPTZ NOT NULL DEFAULT now());

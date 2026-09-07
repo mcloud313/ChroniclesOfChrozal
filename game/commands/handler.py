@@ -1,3 +1,6 @@
+from game import horizon
+from game import community
+from game import soul
 # game/commands/handler.py
 """
 Handles parsing player input and dispatching commands.
@@ -25,6 +28,8 @@ from . import rogue as rogue_cmds
 from . import time as time_cmds
 from . import roleplay as roleplay_cmds
 
+from game import living, adventure
+
 log = logging.getLogger(__name__)
 
 # REFACTOR: Removed the database connection from the function signature type
@@ -33,6 +38,9 @@ DEAD_ALLOWED_CMDS = {"quit", "release", "look", "who", "tell", "help"}
 
 # --- Command Map ---
 COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
+    "home": horizon.cmd_home, "market": horizon.cmd_market, "enchant": horizon.cmd_enchant, "tales": horizon.cmd_tales, "mail": community.cmd_mail, "reputation": community.cmd_reputation, "infuse": community.cmd_infuse, "tether": soul.cmd_tether, "skin": living.cmd_skin, "treat": adventure.cmd_treat, "quest": adventure.cmd_quest, "technique": adventure.cmd_technique, "brace": adventure.cmd_brace, "recover": adventure.cmd_recover,
+    "talk": living.cmd_talk, "gather": living.cmd_gather, "craft": living.cmd_craft,
+    "relics": living.cmd_relics, "attune": living.cmd_attune, "journal": living.cmd_journal,
     # General Commands
     "look": general_cmds.cmd_look, "l": general_cmds.cmd_look,
     "say": general_cmds.cmd_say, "'": general_cmds.cmd_say,
@@ -98,7 +106,7 @@ COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "pickpocket": rogue_cmds.cmd_pickpocket,
 
     #Roleplay commands
-    "/me": roleplay_cmds.cmd_me,
+    "/me": roleplay_cmds.cmd_me, "emote": roleplay_cmds.cmd_me,
     "pose": roleplay_cmds.cmd_pose,
     "whisper": roleplay_cmds.cmd_whisper,
     "wave": roleplay_cmds.cmd_wave,
@@ -155,6 +163,12 @@ def _parse_input(raw_input: str) -> Tuple[str, str]:
     return parts[0].lower(), parts[1] if len(parts) > 1 else ""
 
 async def process_command(character: Character, world: World, raw_input: str) -> bool:
+    if world is None:  # Isolated command tests.
+        return await _process_command(character,world,raw_input)
+    async with world.mutation_lock:
+        return await _process_command(character,world,raw_input)
+
+async def _process_command(character: Character, world: World, raw_input: str) -> bool:
     """Parses raw player input and executes the corresponding command function."""
     command_verb, args_str = _parse_input(raw_input)
     if not command_verb:
@@ -174,7 +188,7 @@ async def process_command(character: Character, world: World, raw_input: str) ->
         character.status = "ALIVE"
         await character.send("You stop meditating as you act.")
 
-    if character.roundtime > 0:
+    if character.roundtime > 0 and command_verb not in {"say", "whisper", "/me", "emote", "pose", "look", "l", "score", "stats", "who", "help", "quit", "brace", "quest"}:
         await character.send(f"You are still recovering for {character.roundtime:.1f} seconds.")
         return True
 
@@ -189,9 +203,13 @@ async def process_command(character: Character, world: World, raw_input: str) ->
         return True
 
     try:
-        log.info("Executing command '%s' for %s (args: '%s')", command_verb, character.name, args_str)
+        log.debug("Command %s for character %s", command_verb, character.dbid)
         # REFACTOR: Call the command function with the new, shorter signature
-        return await command_func(character, world, args_str)
+        previous_location = getattr(character,"location_id",None)
+        result = await command_func(character, world, args_str)
+        if world and previous_location != character.location_id:
+            await adventure.event(character,world,"visit",character.location_id)
+        return result
     except Exception:
         log.exception("Error executing command '%s' for %s:", command_verb, character.name)
         await character.send("Ope! Something went wrong with your command.")
