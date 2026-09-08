@@ -115,7 +115,7 @@ async def headers(request, call_next):
     if int(request.headers.get('content-length','0') or 0) > 65536:
         from fastapi.responses import JSONResponse
         return JSONResponse({'detail':'Request too large'}, status_code=413)
-    if __import__('posixpath').normpath(request.scope['path']) in {'/static/admin.html','/static/admin.js','/static/map.js'}:
+    if __import__('posixpath').normpath(request.scope['path']) in {'/static/admin.html','/static/admin.js','/static/map.js','/static/builder-forms.js'}:
         try:
             player=await auth.current_player(request)
             await auth.admin_player(request, player)

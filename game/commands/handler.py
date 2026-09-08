@@ -1,4 +1,4 @@
-from game import horizon, lore
+from game import horizon, lore, tavern
 from game.commands import reclaim
 from game import community
 from game import soul
@@ -39,6 +39,8 @@ DEAD_ALLOWED_CMDS = {"quit", "release", "look", "who", "tell", "help"}
 
 # --- Command Map ---
 COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
+    "cards":tavern.command, "dice":tavern.dice,
+    "ammo":combat_cmds.cmd_ammo,
     "hold":hands.command,
     "destroy": reclaim.destroy, "administer": reclaim.administer, "lore": lore.command,
     "out": lambda c,w,a: movement.cmd_go(c,w,"out"), "home": horizon.cmd_home, "market": horizon.cmd_market, "enchant": horizon.cmd_enchant, "tales": horizon.cmd_tales, "mail": community.cmd_mail, "reputation": community.cmd_reputation, "infuse": community.cmd_infuse, "tether": soul.cmd_tether, "skin": living.cmd_skin, "treat": adventure.cmd_treat, "quest": notices.command, "technique": adventure.cmd_technique, "rest": general_cmds.cmd_sit,
@@ -196,7 +198,7 @@ async def _process_command(character: Character, world: World, raw_input: str) -
         character.status = "ALIVE"
         await character.send("You stop meditating as you act.")
 
-    if character.roundtime > 0 and command_verb not in {"say", "whisper", "/me", "emote", "pose", "look", "l", "score", "stats", "who", "help", "quit", "quest"}:
+    if character.roundtime > 0 and command_verb not in {"say", "whisper", "/me", "emote", "pose", "look", "l", "score", "stats", "who", "help", "quit", "quest", "ammo"}:
         await character.send(f"You are still recovering for {character.roundtime:.1f} seconds.")
         return True
 
@@ -208,6 +210,9 @@ async def _process_command(character: Character, world: World, raw_input: str) -
     if not command_func and getattr(character,'location',None):
         _, exit_data=movement_cmds.resolve_exit(character.location,raw_input)
         if exit_data:
+            from game.doors import details
+            if details(exit_data).get('is_complex'):
+                await character.send('Use GO '+raw_input+' to attempt this passage.');return True
             command_func=movement_cmds.cmd_go
             args_str=raw_input
     if not command_func:

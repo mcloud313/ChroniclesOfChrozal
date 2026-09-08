@@ -20,7 +20,11 @@ HELP_TOPICS = {
         "technique": "TECHNIQUE: class kit. TECHNIQUE <move> <enemy> uses a server-resolved move.",
         "rest": "REST: sit to regenerate while fed and hydrated. Nodes accelerate recovery; EAT and DRINK consume held supplies.",
         "gather": "GATHER [resource name]: list or harvest local resources.",
-        "craft": "CRAFT [recipe]: list recipes or craft at the required station.",
+        "ammo": "AMMO: count ammunition in each quiver, including closed quivers. Available during roundtime. Shots consume one projectile and provoke retaliation even on misses.",
+        "craft": "CRAFT [recipe]: requires a profession station flag and a held tool. Materials may be in open containers. Skill failure consumes the ingredients. Keep a hand free for output.",
+        "gather": "GATHER [node]: requires a matching room node flag, held profession tool and a free output hand. Skill failure exhausts a node. Successful harvests increase exhaustion risk. Recovery is rare; explore elsewhere. Tools are sold at the Tideforge.",
+        "cards": "CARDS BET <1-10>, CARDS DRAW 1,3 or CARDS STAND: five-card draw versus the house. Level 10, peaceful tavern. CARDS shows rules and your saved hand.",
+        "dice": "DICE <1-10>: two dice. Totals 7 or 11 return three times your stake; otherwise lose it. Level 10, peaceful tavern. Stakes use Talons.",
         "talk": "TALK <resident name>: hear a resident\'s story and local guidance.",
 
 

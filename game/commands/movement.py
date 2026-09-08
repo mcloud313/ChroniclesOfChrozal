@@ -47,7 +47,7 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
             if not result['success']:
                 chars_to_move.remove(member)
                 await combat_logic.apply_damage(member,check.get('fail_damage',0),'bludgeon',world)
-                member.stance='Lying';member.roundtime=2;member.is_dirty=True
+                member.stance='Lying' if check.get('fail_prone',True) else member.stance;member.roundtime=check.get('fail_roundtime',2);member.is_dirty=True
                 await member.send('You fail the crossing and fall prone; the others continue without you.')
     # --- 2. Calculate Shared Roundtime ---
     base_rt = 1.0
@@ -282,9 +282,9 @@ async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
                 if not character.is_alive():
                     return True # Stop if defeated
             
-            character.stance = "Lying"
+            character.stance = "Lying" if skill_check_data.get("fail_prone",True) else character.stance
             character.is_dirty = True
-            character.roundtime = 2.0 # Apply failure roundtime
+            character.roundtime = skill_check_data.get("fail_roundtime",2.0) # Apply failure roundtime
             return True # Stop movement
 
     # --- Perform Movement ---

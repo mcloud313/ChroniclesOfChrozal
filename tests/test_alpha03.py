@@ -69,7 +69,9 @@ def test_hands_destroy_recovery_and_persistence(client):
                 assert not c._inventory_items
                 dagger=next(t for t in w.item_templates.values() if t['name']=='wayfarer dagger')
                 await db.execute_query('INSERT INTO item_instances(template_id,owner_char_id) VALUES($1,$2)',dagger['id'],cid);await refresh_inventory(c,w)
-                await command('wield wayfarer dagger');await command('gather silverleaf')
+                await command('wield wayfarer dagger')
+                leaf_template=next(t for t in w.item_templates.values() if t['name']=='silverleaf')
+                await db.execute_query('INSERT INTO item_instances(template_id,owner_char_id) VALUES($1,$2)',leaf_template['id'],cid);await refresh_inventory(c,w)
                 assert len(c._inventory_items)==1 and c.hands_are_full()
                 leaf=next(iter(c._inventory_items.values()))
                 await command('gather silverleaf');assert len(c._inventory_items)==1
@@ -87,7 +89,9 @@ def test_hands_destroy_recovery_and_persistence(client):
                 await command('destroy confirm');assert not await db.fetch_one_query('SELECT id FROM item_instances WHERE id=$1',leaf.id)
                 await command('sheathe');assert not c._equipped_items.get('main_hand')
                 await command('unsheathe wayfarer dagger');assert c._equipped_items['main_hand'].name=='wayfarer dagger'
-                await command('sheathe');await command('gather silverleaf');await command('drop silverleaf');assert len(c._inventory_items)==1
+                await command('sheathe')
+                await db.execute_query('INSERT INTO item_instances(template_id,owner_char_id) VALUES($1,$2)',leaf_template['id'],cid);await refresh_inventory(c,w)
+                await command('drop silverleaf');assert len(c._inventory_items)==1
                 c.level=10;await command('drop silverleaf');assert not c._inventory_items
                 await command('get silverleaf');assert len(c._inventory_items)==1
                 # Simulate the old exploit and ensure recovery retains every GUID.
@@ -134,7 +138,8 @@ def test_dying_potion_healing_drag_and_enemy_rolls(client):
                 await process_command(healer,w,'drag Fallen north')
                 assert healer.location_id==fallen.location_id==5
                 fallen.hp=100;fallen.status='ALIVE'
-                watcher.location.remove_character(watcher);watcher.update_location(w.rooms[5]);watcher.location.add_character(watcher)
+                for c in chars:
+                    c.location.remove_character(c);c.update_location(w.rooms[7]);c.location.add_character(c)
                 mob=Mob(next(t for t in w.mob_templates.values() if t['name']=='tide scavenger'),healer.location);healer.location.add_mob(mob);mob.target=healer;mob.is_fighting=True
                 for c in chars:c.send.reset_mock()
                 with patch('game.combat.hit_resolver.random.randint',return_value=20):await mob.simple_ai_tick(1,w)
@@ -146,6 +151,10 @@ def test_dying_potion_healing_drag_and_enemy_rolls(client):
                 with patch('game.combat.hit_resolver.random.randint',return_value=10):await mob.simple_ai_tick(1,w)
                 assert healer.hp<100 and mob.roundtime>=5
                 assert any('dragon breath' in call.args[0] and 'Roll:' in call.args[0] for call in healer.send.call_args_list)
+                mob.roundtime=0;healer.hp=100;watcher.hp=100
+                mob.attacks[0]['effect_details']='{"school":"Arcane","damage_type":"fire","area_attack":true}'
+                with patch('game.combat.hit_resolver.random.randint',return_value=10):await mob.simple_ai_tick(1,w)
+                assert healer.hp<100 and watcher.hp<100
                 mob.attacks=[{'name':'claw','attack_type':'physical','damage_base':5,'damage_rng':0,'speed':2}]
 
                 healer.hp=100;mob.roundtime=0

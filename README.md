@@ -25,7 +25,7 @@ Review [roadmap status](docs/ROADMAP_STATUS.md) and the [whole-project QA guide]
 
 3. Open `http://localhost:8000`, sign in and follow character selection/creation. Open `/admin` for the builder. Creating the account prompts for a password rather than exposing it in shell history. Create friends' accounts with the same command without `--admin`.
 
-The optional seed refuses to replace an existing authored world. Start at Wayfinder's Plaza, talk to Mira during the day, gather silverleaf south of the plaza, and craft coast salve at the Tideforge east of the plaza. The old observatory lies two rooms north. Type `quest` at a notice board to reserve a daily contract, `technique` for your class kit, and `treat` to use a crafted salve.
+The optional seed refuses to replace an existing authored world. Start at Wayfinder's Plaza, talk to Mira during the day, buy an herbalism tool at the Tideforge, gather silverleaf south of the plaza, then use an alchemy tool and open-container materials to craft coast salve at the Tideforge. See docs/UPGRADE-0.4.md for depletion, crafting and tavern rules. The old observatory lies two rooms north. Type `quest` at a notice board to reserve a daily contract, `technique` for your class kit, and `treat` to use a crafted salve.
 
 ## Existing database
 

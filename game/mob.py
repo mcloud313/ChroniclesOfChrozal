@@ -98,6 +98,7 @@ class Mob:
         self.name: str = template_data['name']
         self.description: str = template_data['description']
         self.level: int = template_data['level']
+        self.max_coinage=max(0,int(template_data.get('max_coinage',0)))
         self.location: 'Room' = current_room
         self.mob_type: Optional[str] = template_data.get('mob_type')
         self.effects: Dict[str, Dict[str, Any]] = {}
@@ -156,6 +157,14 @@ class Mob:
         self.roundtime: float = 0.0
         self.harvest_token = None
         self.time_of_death: Optional[float] = None
+
+    @property
+    def coinage(self):
+        if '_coinage' not in self.stats:self.stats['_coinage']=random.randint(0,self.max_coinage)
+        return self.stats['_coinage']
+
+    @coinage.setter
+    def coinage(self,value):self.stats['_coinage']=max(0,int(value))
 
     def is_alive(self) -> bool:
         """Returns True if the mob has HP and is not marked as dead."""
@@ -254,6 +263,10 @@ class Mob:
         if not self.is_alive() or self.roundtime > 0:
             return
         
+        if self.location and ("SAFE_ZONE" in self.location.flags or "NODE" in self.location.flags):
+            self.target=None;self.is_fighting=False
+            return
+
         # Authored flags enable roaming and morale without running every NPC.
         retreat=self.has_flag('FLEES') and self.is_fighting and self.hp<self.max_hp*.2
         patrol=self.has_flag('PATROL') and not self.is_fighting and random.random()<.05
@@ -285,7 +298,7 @@ class Mob:
 
         # If hidden and a player is present, initiate an ambush.
         if self.is_hidden:
-            potential_targets = [char for char in self.location.characters if char.is_alive()]
+            potential_targets = [char for char in self.location.characters if char.is_alive() and not char.is_hidden]
             if potential_targets:
                 self.is_hidden = False # Reveal to attack
                 target = random.choice(potential_targets)
@@ -341,10 +354,17 @@ class Mob:
                     try:
                         attack_type = attack_data.get("attack_type", "physical").lower()
                         
-                        if attack_type in ability_defs.MAGICAL_DAMAGE_TYPES or attack_type in {"spell","breath"}:
-                            await resolver.resolve_magical_attack(self, self.target, attack_data, world)
-                        else:
-                            await resolver.resolve_physical_attack(self, self.target, attack_data, world)
+                        details=attack_data.get('effect_details') or {}
+                        if isinstance(details,str):details=json.loads(details)
+                        targets=[self.target]
+                        if details.get('area_attack'):
+                            targets=[c for c in list(self.location.characters) if c.is_alive()]
+                            await self.location.broadcast(f"<R>{self.name.capitalize()} unleashes {attack_data['name']} across the room!<x>")
+                        for victim in targets:
+                            if attack_type in ability_defs.MAGICAL_DAMAGE_TYPES or attack_type in {"spell","breath"}:
+                                await resolver.resolve_magical_attack(self, victim, attack_data, world)
+                            else:
+                                await resolver.resolve_physical_attack(self, victim, attack_data, world)
                     except Exception as e:
                         log.exception("Error during mob %s attack: %s", self.name, e)
                         self.roundtime = 1.0

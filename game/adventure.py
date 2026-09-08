@@ -25,19 +25,31 @@ async def event(character,world,kind,target):
     from game.notices import event as notice_event
     await notice_event(character,world,kind,target)
 
+ADVANCED={
+ 'warrior':('iron-guard','whirlwind','crushing-blow','champion-strike'),
+ 'rogue':('feint','shadow-cut','cripple','deathmark'),
+ 'ranger':('steady-shot','crossfire','pinning-shot','deadeye'),
+ 'barbarian':('warcry','rampage','bonebreaker','earthsplitter'),
+ 'monk':('rooted-palm','hundred-hands','nerve-strike','perfect-form'),
+}
+
 async def cmd_technique(c,w,args):
     name=w.get_class_name(c.class_id).lower();kit=getattr(w,"class_kits",KITS).get(name)
     if not kit:await c.send('Choose a class before using techniques.');return True
     basic,stat,signature,multiplier,description=kit
+    advanced=ADVANCED.get(name,('focus','cascade','disrupt','ascendance'))
+    tiers={m:(level,cost,scale) for m,level,cost,scale in zip(advanced,(12,18,24,30),(8,12,16,20),(1.3,1.6,1.9,2.3))}
     if not args:
+        await c.send('Advanced techniques: '+', '.join(f'{m} (level {v[0]}, {v[1]} essence)' for m,v in tiers.items()))
         await c.send(f'{name.title()}: {description}\ntechnique {basic} <enemy> (level 1, no cost)\ntechnique {signature} <enemy> (level 3, 4 essence)\ntechnique finale <enemy> (level 7, 8 essence)\nEat, drink, and rest at a safe node.');return True
     move,_,target_name=args.partition(' ')
-    if move not in (basic,signature,'finale') or (move==signature and c.level<3) or (move=='finale' and c.level<7):
+    if move not in (basic,signature,'finale',*advanced) or (move in tiers and c.level<tiers[move][0]) or (move==signature and c.level<3) or (move=='finale' and c.level<7):
         await c.send('That technique is not available. Type technique for your kit.');return True
     target=c.location.get_mob_by_name(target_name) if target_name else None
     if not target or 'CIVILIAN' in target.flags or not target.is_alive():
         await c.send('Choose a living hostile creature in this room.');return True
     cost=0 if move==basic else config.TECHNIQUE_SIGNATURE_COST if move==signature else config.TECHNIQUE_FINALE_COST
+    if move in tiers:cost=tiers[move][1]
     if c.essence<cost:await c.send('You lack essence. Use your basic technique or retreat and recover.');return True
     if not c.can_see():await c.send('You cannot make out a target in the dark.');return True
     ambushing=c.is_hidden and name=='rogue' and move==signature
@@ -70,6 +82,10 @@ async def cmd_technique(c,w,args):
         if name in ('paladin','runewarden'):c.effects['signature_ward']={'stat_affected':'barrier_value','amount':5+c.level//4,'ends_at':__import__('time').monotonic()+20}
         if name in ('monk','tempest'):target.roundtime=max(target.roundtime,3)
     if move=='finale':damage*=config.TECHNIQUE_FINALE_MULTIPLIER
+    if move in tiers:
+        damage=round(damage*tiers[move][2]);c.roundtime+=2
+        if move==advanced[0]:c.effects['technique_guard']={'stat_affected':'bonus_dv','amount':3,'ends_at':__import__('time').monotonic()+10}
+        if move==advanced[2]:target.roundtime=max(target.roundtime,4)
     if 'exposed' in target.effects:damage+=2
     c.is_dirty=True;c.is_fighting=True;c.target=target
     target.is_fighting=True;target.target=c

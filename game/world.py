@@ -353,13 +353,13 @@ class World:
                         target_name = info.get("target_name", "its target")
 
                         if msg_self := messages.get("caster_self_complete"):
-                                await p.send(msg_self.format(caster_name=p.name, target_name=target_name))
+                                await p.send(utils.format_message(msg_self,caster_name=p.name,target_name=target_name))
                             
                             # Message to the room
                         if msg_room := messages.get("room_complete"):
                             if p.location:
                                 await p.location.broadcast(
-                                    f"\r\n{msg_room.format(caster_name=p.name, target_name=target_name)}\r\n",
+                                    f"\r\n{utils.format_message(msg_room,caster_name=p.name,target_name=target_name)}\r\n",
                                     exclude={p}
                                     )
                         p.essence -= cost
@@ -481,9 +481,11 @@ class World:
             for key, data in active_effects:
                 # 1. Process ongoing damage effects for this tick (DoTs, etc.)
                 effect_type = data.get('type')
-                if effect_type in ('poison', 'bleed'):
-                    # This part remains the same, handling damage per tick
-                    await resolver.apply_dot_damage(participant, data, self)
+                if effect_type in ('poison','bleed') and data.get('ends_at',0)>current_time:
+                    data['tick_elapsed']=data.get('tick_elapsed',0)+dt
+                    if data['tick_elapsed']>=3:
+                        data['tick_elapsed']%=3
+                        await resolver.apply_dot_damage(participant,data,self)
 
                 # 2. Check if the effect has expired
                 if data.get("ends_at", 0) <= current_time:
@@ -733,10 +735,10 @@ class World:
             message = "{YThe sun crests the horizon, chasing away the shadows of the night.{x"
             remove_dark = True
         elif self.game_hour == calendar_defs.DUSK_HOUR:
-            message = "{yThe sun dips below the horizon, and darkness begins to fall.{x"
+            message = "<y>The sun dips below the horizon, and darkness begins to fall. "+calendar_defs.moon_description(self.game_year,self.game_month,self.game_day)+"<x>"
             apply_dark = True
         elif self.game_hour == 0: # Midnight
-            message = "{BThe moons hang high in the sky, marking the deepest point of the night.{x"
+            message = "<c>"+calendar_defs.moon_description(self.game_year,self.game_month,self.game_day)+"<x>"
         elif self.game_hour == 12: # Noon
             message = "{CThe sun reaches its zenith in the sky.{x"
 

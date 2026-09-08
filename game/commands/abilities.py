@@ -37,12 +37,11 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
         # The database column is 'ability_type', not 'type'
         if data.get("ability_type", "").upper() != "ABILITY":
             continue
-        if normalized_input.startswith(ability_key):
-            if len(ability_key) > longest_match_len:
-                longest_match_len = len(ability_key)
-                found_key = ability_key
-                target_name_input = args_str.strip()[len(ability_key):].strip()
-
+        for alias in {ability_key,data.get('name',ability_key).lower(),ability_key.replace('_',' ')}:
+            if (normalized_input==alias or normalized_input.startswith(alias+' ')) and len(alias)>longest_match_len:
+                longest_match_len=len(alias)
+                found_key=ability_key
+                target_name_input=args_str.strip()[len(alias):].strip()
 
     if not found_key:
         await character.send("You don't know any ability by that name.")
@@ -100,7 +99,7 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
 
     if required_target_type == ability_defs.TARGET_SELF:
         target_obj, target_id, target_obj_type_str = character, "self", "SELF"
-    elif required_target_type == ability_defs.TARGET_NONE:
+    elif required_target_type in (ability_defs.TARGET_NONE,ability_defs.TARGET_AREA):
         target_obj, target_id, target_obj_type_str = None, None, "NONE"
     elif not target_name_input:
         is_beneficial = ability_data.get("effect_type") in [ability_defs.EFFECT_HEAL, ability_defs.EFFECT_BUFF]
@@ -113,7 +112,7 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
         target_char = character.location.get_character_by_name(target_name_input)
         target_mob = character.location.get_mob_by_name(target_name_input)
 
-        if target_char and target_char.is_alive():
+        if target_char and (target_char.is_alive() or (ability_data.get('effect_type')=='HEAL' and target_char.status=='DYING') or (ability_data.get('effect_type')=='RESURRECT' and target_char.status=='DEAD' and target_char.spiritual_tether>0)):
             effect_type = ability_data.get("effect_type")
             is_offensive = effect_type in [ability_defs.EFFECT_DAMAGE, ability_defs.EFFECT_DEBUFF,
                                            ability_defs.EFFECT_MODIFIED_ATTACK, ability_defs.EFFECT_STUN_ATTEMPT]
@@ -140,17 +139,13 @@ async def cmd_use(character: Character, world: 'World', args_str: str) -> bool:
             
     # --- 4. Execute Ability ---
     # Break stealth if hidden
-    if character.is_hidden:
-        character.is_hidden = False
-        await character.send("You emerge from the shadows...")
-
     log.debug("Character %s using ability: %s", character.name, ability_key)
     character.essence -= essence_cost
     
     # Handle stances that apply multiple effects
     if effect_details.get("is_stance"):
         for effect in effect_details.get("effects_to_apply", []):
-            await combat_logic.apply_effect(character, character, effect, ability_data, world)
+            await combat_logic.apply_effect(character, character, ability_data, effect, world)
     else:
         # Handle all other abilities
         await combat_logic.resolve_ability_effect(

@@ -70,3 +70,10 @@ def get_season(month: int) -> str:
         return "summer"
     else:  # months 9, 10, 11
         return "autumn"
+
+MOON_PHASES=('new','waxing crescent','first quarter','waxing gibbous','full','waning gibbous','last quarter','waning crescent')
+def moon_description(year,month,day):
+    days=(year-STARTING_YEAR)*DAYS_PER_YEAR+(month-1)*DAYS_PER_MONTH+day-1
+    first=MOON_PHASES[(days%30)*8//30]
+    second=MOON_PHASES[((days+11)%47)*8//47]
+    return f'The nearer moon is {first}; the farther moon is {second}.'

@@ -21,7 +21,7 @@ TARGET_CHAR_OR_MOB = "CHAR_OR_MOB" #Characters or mobiles
 TARGET_AREA = "AREA" #Affects others in the room *excluding self)
 TARGET_NONE = "NONE" # No target needed
 
-MAGICAL_DAMAGE_TYPES = {"fire", "cold", "lightning", "earth", "arcane", "divine", "poison", "sonic"}
+MAGICAL_DAMAGE_TYPES = {"holy", "fire", "cold", "lightning", "earth", "arcane", "divine", "poison", "sonic"}
 
 
 DAMAGE_ARCANE = "arcane"
@@ -758,3 +758,24 @@ ABILITIES_DATA.update({
  'storm_mantle':{'name':'Storm Mantle','type':'SPELL','class_req':['tempest'],'level_req':4,'cost':7,'target_type':TARGET_SELF,'cast_time':2.0,'roundtime':2.0,'effect_type':EFFECT_BUFF,'effect_details':{'name':'StormMantle','type':'buff','stat_affected':STAT_BARRIER_VALUE,'amount':8,'duration':120.0},'description':'A mantle of charged air grants eight magical barrier for two minutes. Recasting refreshes it.','messages':{'caster_self_complete':'Charged air gathers around you.','apply_msg_self':'A storm mantle crackles around your shoulders.','apply_msg_room':'Charged air curls around {target_name}.'}},
  'forked_lightning':{'name':'Forked Lightning','type':'SPELL','class_req':['tempest'],'level_req':8,'cost':15,'target_type':TARGET_AREA,'cast_time':3.0,'roundtime':4.0,'effect_type':EFFECT_DAMAGE,'effect_details':{'school':'Arcane','damage_type':'lightning','damage_base':14,'damage_rng':6,'aoe_target_scope':'enemies'},'description':'Lightning forks toward hostile creatures in the room. Each target separately dodges and mitigates the strike.','messages':{'caster_self_complete':'You unleash a branching storm of lightning!','room_complete':'Lightning forks from {caster_name} toward nearby foes.'}}
 })
+
+# Distinct progression milestones beyond the opening coast; additive DB seeding.
+for _class,_element,_names in [
+ ('mage','arcane',('Prismatic Shell','Starfall','Aether Rupture')),
+ ('cleric','holy',('Sanctuary Veil','Dawn Chorus','Judgment of Orian')),
+ ('druid','cold',('Bark and Mist','Winter Orchard','Heart of the Wild')),
+ ('bard','sonic',('Resonant Ward','Shattering Refrain','Final Crescendo')),
+ ('paladin','holy',('Aegis of Resolve','Consecrated Ground','Radiant Reckoning')),
+ ('runewarden','arcane',('Granite Covenant','Runic Upheaval','Worldstone Seal')),
+ ('tempest','lightning',('Thundercloud Aegis','Stormfront','Heavenbreaker'))]:
+    for _level,_name in zip((22,26,30),_names):
+        _ward=_level==22
+        ABILITIES_DATA[_name.lower().replace(' ','_')]={
+          'name':_name,'type':'SPELL','class_req':[_class],'level_req':_level,
+          'cost':18 if _ward else 26 if _level==26 else 32,
+          'target_type':TARGET_SELF if _ward else TARGET_AREA if _level==26 else TARGET_CHAR_OR_MOB,
+          'cast_time':3 if _ward else 4,'roundtime':3 if _ward else 5,
+          'effect_type':EFFECT_BUFF if _ward else EFFECT_DAMAGE,
+          'effect_details':{'name':_name,'type':'buff','stat_affected':STAT_BARRIER_VALUE,'amount':14,'duration':120} if _ward else {'school':'Divine' if _class in ('cleric','paladin','druid') else 'Arcane','damage_type':_element,'damage_base':28+_level,'damage_rng':12,'aoe_target_scope':'enemies'},
+          'description': 'A sustained magical ward. Recasting refreshes it.' if _ward else ('An area invocation against nearby hostile creatures.' if _level==26 else 'A costly, concentrated finishing invocation.'),
+          'messages':{'caster_self_complete':f'You unleash {_name}.','room_complete':f'{{caster_name}} unleashes {_name}.','apply_msg_self':f'{_name} surrounds you.','apply_msg_room':f'{_name} surrounds {{target_name}}.'}}

@@ -27,23 +27,14 @@ def check_physical_hit(attacker: Union[Character, Mob], target: Union[Character,
     """
     if use_rar and attacker.location:
         from ..definitions import weather as weather_defs
-        area_weather = attacker.world.area_weather.get(attacker.location.area_id, {})
+        world=getattr(attacker,'world',None)
+        area_weather = world.area_weather.get(attacker.location.area_id,{}) if world else {}
         condition = area_weather.get("condition", "CLEAR")
         weather_effect = weather_defs.WEATHER_EFFECTS.get(condition, {})
         hit_modifier += weather_effect.get("visibility_penalty", 0)
 
     attacker_rating = attacker.rar if use_rar else attacker.mar
 
-    if isinstance(attacker, Character):
-        weapon = attacker._equipped_items.get('main_hand')
-        if not weapon:
-            attacker_rating += attacker.get_skill_rank("martial arts") // 25
-        elif weapon.item_type == "WEAPON":
-            if weapon.damage_type in ['slash', 'pierce']:
-                attacker_rating += attacker.get_skill_rank("bladed weapons") // 25
-            elif weapon.damage_type == 'bludgeon':
-                attacker_rating += attacker.get_skill_rank("bludgeon weapons") // 25
-            
     # FIX: Apply armor penalty to target's dodge value
     target_dv = target.dv
     if isinstance(target, Character):

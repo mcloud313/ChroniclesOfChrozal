@@ -110,6 +110,18 @@ async def handle_durability(attacker: Union[Character, Mob], target: Union[Chara
             elif armor_hit.condition <= 10:
                 await target.send(f"<y>Your {armor_hit.name} was damaged.<x>")
 
+def impact(info, damage):
+    if damage <= 0:return 'glances harmlessly off'
+    verbs={
+        'slash':('nicks','slashes','cleaves'), 'pierce':('grazes','stabs','impales'),
+        'bludgeon':('clips','smashes','crushes'), 'fire':('singes','sears','engulfs'),
+        'cold':('chills','freezes','ravages'),
+        'lightning':('sparks against','shocks','blasts through'),
+        'arcane':('ripples against','rips into','tears through'),
+        'holy':('scorches','smites','scours'), 'poison':('stings','corrodes','ravages')}
+    tier=2 if info.is_crit or info.roll_fraction>=.8 else 1 if info.roll_fraction>=.4 else 0
+    return verbs.get(info.damage_type,('grazes','strikes','batters'))[tier]
+
 async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Character, Mob], 
                                hit_result: HitResult, damage_info: 'DamageInfo', final_damage: int):
     """Sends all relevant, detailed combat messages."""
@@ -118,11 +130,11 @@ async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Ch
     target_name = target.name
     attack_name = damage_info.attack_name
     
-    hit_desc = "{rCRITICAL HIT{x" if hit_result.is_crit else "hits"
+    hit_desc = ("critically hits" if hit_result.is_crit else impact(damage_info, final_damage))
     
     # --- Build Verbose Details for Players ---
     log.info('COMBAT defenses target=%s pds=%s armor=%s barrier=%s resistances=%s',target.name,target.pds,target.total_av,target.barrier_value,target.resistances)
-    hit_details = f"[Roll:{hit_result.roll} + attack:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]"
+    hit_details = ("[CRITICAL HIT] " if hit_result.is_crit else "")+f"[Roll:{hit_result.roll} + attack:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]"
     mitigation = damage_info.pre_mitigation_damage - final_damage
 
     # --- NEW: Show which defense was used (AV or BV) ---
@@ -136,7 +148,7 @@ async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Ch
 
     # --- Message to Attacker (if player) ---
     if isinstance(attacker, Character):
-        verb = "hit" if not hit_result.is_crit else "CRITICAL HIT"
+        verb = hit_desc
         clean_weapon_name = utils.strip_article(attack_name)
         msg = (f"<r>Your {clean_weapon_name} {verb} {target_name}!\n\r"
                f"You deal <y>{final_damage}<x> damage. {hit_details} {damage_details}")
@@ -151,7 +163,7 @@ async def send_attack_messages(attacker: Union[Character, Mob], target: Union[Ch
     
     # --- Message to Room ---
     if attacker.location:
-        room_hit_desc = "CRITICAL HIT" if hit_result.is_crit else "hits"
+        room_hit_desc = hit_desc
         await attacker.location.broadcast(
             f"\r\n<r>{attacker_name}'s {attack_name} {room_hit_desc} {target_name}. {hit_details} {damage_details}\r\n",
             exclude={attacker, target}
@@ -166,15 +178,15 @@ async def send_magical_attack_messages(caster: Union[Character, Mob], target: Un
     target_name = target.name
     spell_name = damage_info.attack_name
     
-    hit_desc = "{rCRITICAL HIT{x" if hit_result.is_crit else "hits"
+    hit_desc = ("critically hits" if hit_result.is_crit else impact(damage_info, final_damage))
     
     # Initialize detail strings as empty.
     details_str = ""
     
     # Only build the verbose detail strings if requested.
     if show_roll_details:
-        rating_name = "APR" if damage_info.damage_type in ["arcane", "fire", "cold"] else "DPR"
-        hit_details = f"<i>[Roll:{hit_result.roll} + {rating_name}:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]<x>"
+        rating_name = "power" # HitResult contains the school-selected attack rating.
+        hit_details = ("[CRITICAL HIT] " if hit_result.is_crit else "")+f"<i>[Roll:{hit_result.roll} + {rating_name}:{hit_result.attacker_rating} vs DV:{hit_result.target_dv}]<x>"
         mitigation = damage_info.pre_mitigation_damage - final_damage
 
         effective_bv = target.barrier_value
@@ -187,7 +199,7 @@ async def send_magical_attack_messages(caster: Union[Character, Mob], target: Un
 
     # --- Message to Caster (if player) ---
     if isinstance(caster, Character):
-        verb = "CRITICAL HIT" if hit_result.is_crit else "hit"
+        verb = hit_desc
         msg = (f"<r>Your {spell_name} {verb} {target_name}!\n\r"
                f"You deal <y>{final_damage}<x> damage.{details_str}")
         await caster.send(msg)
@@ -201,7 +213,7 @@ async def send_magical_attack_messages(caster: Union[Character, Mob], target: Un
     
     # --- Message to Room ---
     if caster.location:
-        room_hit_desc = "CRITICAL HIT" if hit_result.is_crit else "hits"
+        room_hit_desc = hit_desc
         await caster.location.broadcast(
             f"\r\n<r>{caster_name}'s {spell_name} {room_hit_desc} {target_name}. {details_str}\r\n",
             exclude={caster, target}
@@ -238,7 +250,9 @@ async def handle_defeat(attacker: Union[Character, Mob], target: Union[Character
         mob_template = world.get_mob_template(target.template_id)
         
         if mob_template:
-            dropped_coinage, dropped_item_ids = _determine_loot(mob_template)
+            _, dropped_item_ids = _determine_loot(mob_template)
+            dropped_coinage=target.coinage if mob_template.get('max_coinage',0)>0 else 0
+            target.coinage=0
         else:
             dropped_coinage, dropped_item_ids = 0, []
 

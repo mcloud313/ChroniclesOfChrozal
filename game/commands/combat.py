@@ -186,7 +186,7 @@ async def cmd_shoot(character: Character, world: World, args: str) -> bool:
     # 3. Find ammunition in the quiver
     ammo_stack = None
     for item in quiver.contents.values():
-        if item.item_type == "AMMO" and item.stats.get("ammo_type") == required_ammo_type:
+        if item.item_type == "AMMO" and item.stats.get("ammo_type") == required_ammo_type and item.stats.get("quantity",0)>0:
             ammo_stack = item
             break
 
@@ -220,4 +220,14 @@ async def cmd_shoot(character: Character, world: World, args: str) -> bool:
         # Persist quantity change
         await world.db_manager.update_item_instance_stats(ammo_stack.id, ammo_stack.instance_stats)
 
+    return True
+
+async def cmd_ammo(c,w,args):
+    from game.professions import accessible
+    containers=[i for i in c.get_all_owned_item_instances() if i.item_type=='QUIVER']
+    lines=[]
+    for bag in containers:
+        total=sum(max(0,int(i.stats.get('quantity',0))) for i in bag.contents.values() if i.item_type=='AMMO')
+        lines.append(f'{bag.name}: {total} {bag.stats.get("holds_ammo_type","projectile")}(s), '+('open' if bag.instance_stats.get('is_open') else 'closed'))
+    await c.send('Ammunition:\n'+('\n'.join(lines) or 'You have no quiver.'))
     return True

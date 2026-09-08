@@ -14,7 +14,11 @@ async def save(w, room, name, data):
     # Persist both faces of a linked door in one transaction.
     other=w.get_room(data.get('destination_room_id'));changed=[(room,name,data)]
     if other:
-        for key,back in other.exits.items():
+        candidates=[(k,e) for k,e in other.exits.items() if e.get('destination_room_id')==room.dbid and details(e).get('is_door')]
+        reverse=details(data).get('reverse_exit')
+        if reverse:candidates=[(k,e) for k,e in candidates if k==reverse]
+        elif len(candidates)!=1:candidates=[]
+        for key,back in candidates:
             if back.get('destination_room_id')==room.dbid and details(back).get('is_door'):
                 for field in ('is_open','is_locked'):
                     if field in details(data):details(back)[field]=details(data)[field]

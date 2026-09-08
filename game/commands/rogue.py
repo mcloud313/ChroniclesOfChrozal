@@ -55,6 +55,8 @@ async def cmd_lockpick(character: 'Character', world: 'World', args_str: str) ->
         await character.send("What do you want to lockpick?")
         return True
     
+    from game.doors import command
+    if await command(character,world,'lockpick',args_str):return True
     target_name = args_str.lower()
     
     #  --- Try to find a locked door (exit) ---
@@ -108,6 +110,8 @@ async def cmd_disarm(character: 'Character', world: 'World', args_str: str) -> b
         await character.send("What do you want to disarm?")
         return True
 
+    from game.doors import command
+    if await command(character,world,'disarm',args_str):return True
     target_name = args_str.lower()
 
     # Find the target (door or item) and its corresponding trap_id
@@ -178,6 +182,9 @@ async def cmd_pickpocket(character: 'Character', world: 'World', args_str: str) 
 
     if isinstance(target,Character) and (character.level<10 or target.level<10):
         await character.send('Both characters must reach level 10 before player theft is allowed.');return True
+    from game.resolver import protected_pvp
+    if protected_pvp(character,target):
+        await character.send('Player theft is forbidden in a sanctuary.');return True
     if target == character:
         await character.send("You can't pickpocket yourself.")
         return True
@@ -192,7 +199,7 @@ async def cmd_pickpocket(character: 'Character', world: 'World', args_str: str) 
     # The target's perception roll becomes the DC for the rogue's sleight of hand.
     target_perception_dc = 10 + target.get_skill_modifier("perception") if isinstance(target, Character) else target.level * 2
     
-    check = utils.skill_check(character, "sleight of hand", dc=target_perception_dc)
+    check = utils.skill_check(character, "pickpocket", dc=target_perception_dc)
 
     if check['success']:
         # For now, let's just steal coinage. Item stealing can be added later.

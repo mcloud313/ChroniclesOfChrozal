@@ -98,7 +98,7 @@ async def _edit(table,body,request,player):
     values=dict(body.values)
     if not values or len(json.dumps(values)) > 50000 or any(k not in cols for k in values):
         raise HTTPException(422, 'Invalid fields')
-    for protected in ('id','created_at','updated_at','claimed_by','claimed_at','instance_id','remaining','depleted_at'):
+    for protected in ('id','created_at','updated_at','claimed_by','claimed_at','instance_id','remaining','depleted_at','uses'):
         if protected in values:
             raise HTTPException(422, f'{protected} is managed by the server')
     if table == 'balance_rules' and 'value' in values:
@@ -128,6 +128,20 @@ async def _edit(table,body,request,player):
             if not direction or len(direction)>50 or not all(c.isalnum() or c in ' -' for c in direction):
                 raise HTTPException(422,'Use a compass direction or a short named path')
         values['direction']=direction
+    if table=='exits' and 'details' in values:
+        d=values['details']
+        if not isinstance(d,dict):raise HTTPException(422,'Exit settings must be an object')
+        if d.get('is_complex'):
+            from game.utils import get_canonical_direction
+            direction=values.get('direction') or (body.original or {}).get('direction','')
+            if get_canonical_direction(direction):raise HTTPException(422,'Give a complex entrance a name such as ledge or narrow hole, rather than a compass direction')
+        if check:=d.get('skill_check'):
+            from game.definitions.skills import SKILL_ATTRIBUTE_MAP
+            if not isinstance(check,dict) or check.get('skill') not in SKILL_ATTRIBUTE_MAP:raise HTTPException(422,'Choose a valid crossing skill')
+            for k,lo,hi in [('dc',1,200),('fail_damage',0,10000),('fail_roundtime',0,60)]:
+                if k in check and (not isinstance(check[k],(int,float)) or not lo<=check[k]<=hi):raise HTTPException(422,f'Invalid crossing {k}')
+    if table=='mob_templates' and 'max_coinage' in values and (not isinstance(values['max_coinage'],int) or values['max_coinage']<0):
+        raise HTTPException(422,'Maximum Talons must be a non-negative integer')
     params=[json.dumps(v) if cols[k]['data_type'] in ('json','jsonb') else v for k,v in values.items()]
     try:
         async with db_manager.pool.acquire() as conn:
@@ -153,7 +167,7 @@ async def _edit(table,body,request,player):
                     player['id'],action,table,str(row['id']),json.dumps({'before':original,'changes':body.values}))
     except (asyncpg.PostgresError, TypeError, ValueError):
         raise HTTPException(422,'Invalid value, duplicate name, or missing referenced entity')
-    return jsonable_encoder(dict(row))
+    return jsonable_encoder({k:json.loads(v) if cols[k]["data_type"] in ("json","jsonb") and isinstance(v,str) else v for k,v in dict(row).items()})
 
 @router.post('/publish')
 async def publish(request: Request, player=Depends(admin_player)):
@@ -179,3 +193,36 @@ async def warnings_file():
     path=Path(os.getenv('LOG_DIR','logs'))/'warnings-errors.log'
     if not path.exists():raise HTTPException(404,'No warning archive exists yet')
     return FileResponse(path,filename='chrozal-warnings-errors.log',media_type='text/plain')
+
+@router.get('/entity-page/{table}')
+async def entity_page(table: str,q: str='',offset: int=Query(0,ge=0),limit: int=Query(10,ge=1,le=50),area_id: int|None=None):
+    await columns(table)
+    area_filter=f' AND t.area_id={int(area_id)}' if table=='rooms' and area_id is not None else f' AND t.source_room_id IN (SELECT id FROM rooms WHERE area_id={int(area_id)})' if table=='exits' and area_id is not None else ''
+    count=await db_manager.fetch_one_query(f'SELECT count(*) AS total FROM "{table}" t WHERE to_jsonb(t)::text ILIKE $1 {area_filter}','%'+q[:100]+'%')
+    return {'rows':await entities(table,q,offset,limit,area_id),'total':count['total'],'offset':offset,'limit':limit}
+
+@router.get('/lookup/{table}')
+async def lookup(table: str,q: str='',selected: int|None=None):
+    cols=await columns(table)
+    names={c['column_name'] for c in cols}
+    if 'id' not in names:raise HTTPException(422,'This entity has no selectable identifier')
+    label='name' if 'name' in names else 'first_name' if 'first_name' in names else 'direction' if 'direction' in names else 'id'
+    rows=await db_manager.fetch_all_query(f'SELECT id,"{label}"::text AS label FROM "{table}" WHERE "{label}"::text ILIKE $1 OR id::text=$2 ORDER BY "{label}" LIMIT 20','%'+q[:80]+'%',q[:80])
+    result=[dict(r) for r in rows]
+    if selected is not None and all(r['id']!=selected for r in result):
+        row=await db_manager.fetch_one_query(f'SELECT id,"{label}"::text AS label FROM "{table}" WHERE id=$1',selected)
+        if row:result.insert(0,dict(row))
+    return result
+
+@router.post('/exits/{exit_id}/delete')
+async def delete_exit(exit_id:int,body:Edit,request:Request,player=Depends(admin_player)):
+    if not body.original:raise HTTPException(422,'Reload the exit before deleting it')
+    async with request.app.state.world.mutation_lock:
+        async with db_manager.pool.acquire() as conn:
+            async with conn.transaction():
+                old=await conn.fetchval('SELECT to_jsonb(e) FROM exits e WHERE id=$1 FOR UPDATE',exit_id)
+                if not old:raise HTTPException(404,'Exit no longer exists')
+                if json.loads(old)!=body.original:raise HTTPException(409,'Exit changed; reload before deleting')
+                await conn.execute('DELETE FROM exits WHERE id=$1',exit_id)
+                await conn.execute("INSERT INTO builder_audit(player_id,action,entity,entity_id,details) VALUES($1,'delete','exits',$2,$3)",player['id'],str(exit_id),old)
+    return {'ok':True,'note':'Deleted this direction only. Publish to apply it live; the reverse exit is unchanged.'}

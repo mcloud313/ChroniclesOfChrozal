@@ -410,3 +410,9 @@ def format_thirst_status(character: 'Character') -> str:
     if percent >= 40: return "<y>Thirsty<x>"
     if percent >= 15: return "<y>Parched<x>"
     return "<r>Dehydrated<x>"
+
+def format_message(template, **values):
+    """Substitute named game fields without treating legacy color braces as Python syntax."""
+    text=template
+    for key,value in values.items():text=text.replace('{'+key+'}',str(value))
+    return text.replace('{{','{').replace('}}','}')

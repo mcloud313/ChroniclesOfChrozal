@@ -61,6 +61,17 @@ async def _check_and_break_concentration(target: Union['Character', 'Mob'], dama
 def protected_pvp(attacker,target):
     return isinstance(attacker,Character) and isinstance(target,Character) and attacker is not target and attacker.location and bool(attacker.location.flags & {'NODE','SAFE_ZONE','SAFE'})
 
+def engage(attacker,target):
+    """Every hostile attempt, including a miss or block, provokes retaliation."""
+    if isinstance(attacker,Character) or not attacker.is_fighting or not attacker.target:attacker.target=target
+    attacker.is_fighting=True
+    if not target.is_fighting or not target.target:
+        target.target=attacker;target.is_fighting=True
+    if isinstance(attacker,Character):
+        attacker.is_hidden=False;attacker.is_dirty=True
+    if isinstance(target,Character):target.is_dirty=True
+    log.info('COMBAT engage attacker=%s[%s] target=%s[%s] room=%s',attacker.name,getattr(attacker,'dbid',getattr(attacker,'instance_id',None)),target.name,getattr(target,'dbid',getattr(target,'instance_id',None)),getattr(attacker.location,'dbid',None))
+
 async def resolve_physical_attack(
     attacker: Union[Character, Mob],
     target: Union[Character, Mob],
@@ -75,6 +86,8 @@ async def resolve_physical_attack(
     # ---Initial Checks ---
     if not attacker.is_alive() or not target.is_alive() or attacker.location != target.location:
         return
+
+    engage(attacker,target)
 
     # ---Determine Attack Variables (CRITICAL: Do this first!) ---
     wpn_speed = 2.0 # Default for unarmed
@@ -158,6 +171,9 @@ async def resolve_physical_attack(
     outcome_handler.apply_damage(target, final_damage)
     await outcome_handler.send_attack_messages(attacker, target, hit_result, damage_info, final_damage)
 
+    coating=attacker.effects.get('Venom Coat')
+    if final_damage>0 and target.hp>0 and coating and coating.get('ends_at',0)>time.monotonic():
+        await apply_effect(attacker,target,{'name':'Venom'}, {'name':'WeaponVenom','type':'poison','duration':9,'potency':coating.get('potency',5)},world)
     if target.hp <= 0:
         await outcome_handler.handle_defeat(attacker, target, world)
         return
@@ -181,6 +197,8 @@ async def resolve_ranged_attack(
     if not attacker.is_alive() or not target.is_alive() or attacker.location != target.location:
         return
 
+    engage(attacker,target)
+
     # --- Set Attacker Roundtime ---
     wpn_speed = weapon.speed
     rt_penalty = attacker.total_av * 0.05 if isinstance(attacker, Character) else 0.0
@@ -198,9 +216,9 @@ async def resolve_ranged_attack(
     if not hit_result.is_hit:
         roll_details = f"<i>[Roll: {hit_result.roll} + RAR: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]<x>"
         if isinstance(attacker, Character):
-            await attacker.send(f"Your {utils.strip_article(ammo.name)} misses {target.name}. {roll_details}")
+            await attacker.send(f"Your {str(ammo.stats.get('projectile_name') or ammo.stats.get('ammo_type') or 'projectile')} misses {target.name}. {roll_details}")
         if isinstance(target, Character):
-            await target.send(f"<r>{attacker.name.capitalize()}'s {ammo.name} flies past you. {roll_details}")
+            await target.send(f"<r>{attacker.name.capitalize()}'s {ammo.stats.get('ammo_type','projectile')} flies past you. {roll_details}")
         log.info('COMBAT ranged miss attacker=%s target=%s hit=%s',attacker.name,target.name,hit_result)
         await attacker.location.broadcast(f"<r>{attacker.name}'s shot goes wide of {target.name}! {roll_details}", exclude={attacker,target})
         return
@@ -225,8 +243,9 @@ async def resolve_ranged_attack(
     # Add bonus from ammo
     ammo_bonus = ammo.instance_stats.get("damage_bonus", 0)
     damage_info.pre_mitigation_damage += ammo_bonus
+    damage_info.damage_type=ammo.stats.get("damage_type") or ammo.damage_type or ("bludgeon" if ammo.stats.get("ammo_type")=="stone" else "pierce")
     
-    damage_info.attack_name = ammo.name # The projectile is what hits
+    damage_info.attack_name = str(ammo.stats.get('projectile_name') or ammo.stats.get('ammo_type') or 'projectile')
     final_damage = damage_calculator.mitigate_damage(target, damage_info)
 
     await _check_and_break_concentration(target, final_damage)
@@ -255,12 +274,15 @@ async def resolve_magical_attack(
     target_name = target.name.capitalize()
     if protected_pvp(caster,target):
         await caster.send("This is a sanctuary; hostile player combat is forbidden.");return
+    if not caster.is_alive() or not target.is_alive() or caster.location != target.location:return
+    engage(caster,target)
     spell_name = spell_data.get("name", "a spell")
 
     if isinstance(caster,Mob):
         effect_details={"school":"Arcane","damage_base":spell_data.get('damage_base',1),"damage_rng":spell_data.get('damage_rng',0),"damage_type":spell_data.get('attack_type','arcane'),**effect_details}
         spell_data={**spell_data,'effect_details':effect_details}
         caster.roundtime=max(1,float(spell_data.get('speed',3)))+caster.slow_penalty
+    spell_data={**spell_data,'effect_details':effect_details}
     school=effect_details.get('school','Arcane')
     hit_result=hit_resolver.check_magical_hit(caster,target,school)
     if not hit_result.is_hit:
@@ -348,7 +370,9 @@ async def resolve_ability_effect(
                 await resolve_magical_attack(caster, target, ability_data, world)
             elif effect_type == ability_defs.EFFECT_HEAL:
                 await apply_heal(caster, target, effect_details, world)
-            # Add other AoE effect types like DEBUFF here later
+            elif effect_type in (ability_defs.EFFECT_BUFF,ability_defs.EFFECT_DEBUFF):
+                if effect_type==ability_defs.EFFECT_DEBUFF and protected_pvp(caster,target):continue
+                await apply_effect(caster,target,ability_data,effect_details,world)
         
         return # AoE is fully resolved, exit the function
 
@@ -373,12 +397,24 @@ async def resolve_ability_effect(
     # --- 3. Validate Target ---
     required_target_type = ability_data.get("target_type")
     if required_target_type != ability_defs.TARGET_NONE and (
-        target is None or not target.is_alive() or (target != caster and target.location != caster.location)
+        target is None or (not target.is_alive() and not (isinstance(target,Character) and ((effect_type==ability_defs.EFFECT_HEAL and target.status=='DYING') or (effect_type=='RESURRECT' and target.status=='DEAD' and target.spiritual_tether>0)))) or (target != caster and target.location != caster.location)
     ):
         log.info(f"RESOLVE DEBUG: Target object: {target}")
         log.info(f"RESOLVE DEBUG: Target is_alive: {target.is_alive() if target else 'N/A'}")
         await caster.send("Your target is no longer valid.")
         return
+
+    if effect_type in ('DAMAGE','DEBUFF','MODIFIED_ATTACK','STUN_ATTEMPT','CONTESTED_DEBUFF') and target:
+        if protected_pvp(caster,target):
+            await caster.send('This is a sanctuary; hostile player actions are forbidden.');return
+        if effect_details.get('requires_stealth') and not caster.is_hidden:
+            await caster.send('You must be hidden to use this ability.');return
+        if effect_type not in ('MODIFIED_ATTACK',):engage(caster,target)
+        if effect_type=='DEBUFF':
+            hit=hit_resolver.check_magical_hit(caster,target,effect_details.get('school','Arcane'))
+            await caster.location.broadcast(f'<r>{caster.name} attempts {ability_data.get("name")} against {target.name}. [d20 {hit.roll} + power {hit.attacker_rating} vs dodge {hit.target_dv}: '+('hit' if hit.is_hit else 'miss')+']')
+            log.info('COMBAT debuff caster=%s target=%s hit=%s',caster.name,target.name,hit)
+            if not hit.is_hit:return
 
     # --- 4. Resolve Effect ---
     log.debug("Resolving effect '%s' for %s. Caster: %s, Target: %s",
@@ -423,7 +459,7 @@ async def resolve_ability_effect(
             all_targets = [primary_target] + secondary_targets
             
             await caster.send(ability_data["messages"]["caster_self"])
-            await caster.location.broadcast(f"\r\n{ability_data['messages']['room'].format(caster_name=caster.name)}\r\n", exclude={caster})
+            await caster.location.broadcast(f"\r\n{ability_data['messages']['room'].replace("{caster_name}", caster.name)}\r\n", exclude={caster})
 
             weapon = caster._equipped_items.get("main_hand")
             damage_mult = effect_details.get("damage_multiplier", 1.0)
@@ -526,7 +562,7 @@ async def resolve_ability_effect(
         if not contest_details: return
 
         attacker_mod = caster.get_skill_modifier(contest_details["attacker_skill"])
-        defender_mod = target.get_skill_modifier(contest_details["defender_skill"])
+        defender_mod = target.get_skill_modifier(contest_details["defender_skill"]) if isinstance(target,Character) else target.level*2
 
         attacker_roll = random.randint(1, 20) + attacker_mod
         defender_roll = random.randint(1, 20) + defender_mod
@@ -550,8 +586,14 @@ async def apply_dot_damage(target: Union[Character, Mob], effect_data: Dict[str,
     
     effect_type = effect_data.get('type', 'damage')
 
+    if not target.is_alive():return
+    if effect_type=='poison':
+        info=damage_calculator.DamageInfo(damage,'poison',False)
+        damage=damage_calculator.mitigate_magical_damage(target,info)
+    log.info('COMBAT ongoing target=%s type=%s final=%s',target.name,effect_type,damage)
     # Apply Damage
     target.hp = max(0.0, target.hp - damage)
+    if isinstance(target,Character):target.is_dirty=True
 
     # Send feedback if the target is a player
     if isinstance(target, Character):
@@ -564,7 +606,8 @@ async def apply_dot_damage(target: Union[Character, Mob], effect_data: Dict[str,
             name = f"the {effect_type}"
             location = target.location
 
-        await outcome_handler.handle_defeat(EffectAttacker(), target, world)
+        source=world.get_active_character(effect_data.get('caster_id')) if effect_data.get('caster_id') else None
+        await outcome_handler.handle_defeat(source or EffectAttacker(), target, world)
 
 def determine_loot(loot_table: Dict[str, Any]) -> Tuple[int, List[int]]:
     """Calculates loot based on the provided loot_table dictionary."""
@@ -643,7 +686,8 @@ async def apply_heal(caster: Character, target: Union[Character, Mob], effect_de
     msg_target = f"{caster.name.capitalize()} heals you for {int(actual_healed)} hit points."
     msg_room = f"{caster.name.capitalize()} heals {target.name}."
     
-    await caster.send(msg_caster)
+    if isinstance(caster,Character):await caster.send(msg_caster)
+    if isinstance(target,Character):target.is_dirty=True
     if target != caster and isinstance(target, Character):
         await target.send(msg_target)
     if target.location:
@@ -654,6 +698,21 @@ async def apply_effect(caster: Union[Character, Mob], target: Union[Character, M
     Applies a temporary effect (BUFF/DEBUFF) to the target, handling special cases and messaging.
     This is the single, consolidated function for all effects.
     """
+    if effect_details.get('effects_to_apply'):
+        for part in effect_details['effects_to_apply']:
+            await apply_effect(caster,target,ability_data,part,world)
+        return
+    effect_details=dict(effect_details)
+    effect_details.setdefault('name',ability_data.get('name','Effect'))
+    if effect_details.get('type') in ('stun','silence','poison','bleed'):
+        effect_details.setdefault('stat_affected','hp' if effect_details['type'] in ('poison','bleed') else 'none')
+        effect_details.setdefault('amount',effect_details.get('potency',0))
+    if effect_details.get('name')=='Venom Coat':effect_details.setdefault('stat_affected','weapon_poison')
+    if 'stat' in effect_details:
+        effect_details.setdefault('stat_affected',{'dodge':'bonus_dv'}.get(effect_details['stat'],effect_details['stat']))
+        effect_details.setdefault('amount',effect_details.get('modifier',0))
+    effect_details['stat_affected']={'dodge_value':'bonus_dv','armor_value':'bonus_av'}.get(effect_details.get('stat_affected'),effect_details.get('stat_affected'))
+    if effect_details.get('duration')==-1:effect_details['duration']=315360000
     effect_name = effect_details.get("name")
     if not effect_name:
         log.warning("Attempted to apply an effect with no name.")
@@ -700,6 +759,8 @@ async def apply_effect(caster: Union[Character, Mob], target: Union[Character, M
         "type": final_effect_details.get('type', 'buff'),
         "stat_affected": stat,
         "amount": amount,
+        "potency": final_effect_details.get("potency",amount),
+        "tick_elapsed": 0,
         "applied_at": time.monotonic(),
         "ends_at": time.monotonic() + duration,
         "caster_id": caster.dbid if isinstance(caster, Character) else None,
@@ -719,7 +780,7 @@ async def apply_effect(caster: Union[Character, Mob], target: Union[Character, M
         if isinstance(target, Character):
             await target.send("{RYou are stunned!{x")
         if target.location:
-            await target.location.broadcast(f"\\r\\n{target.name.capitalize()} is stunned!\\r\\n", exclude={target})
+            await target.location.broadcast(f"\r\n{target.name.capitalize()} is stunned!\r\n", exclude={target})
 
     if new_stance := final_effect_details.get('set_stance'):
         if isinstance(target, Character):
@@ -734,13 +795,13 @@ async def apply_effect(caster: Union[Character, Mob], target: Union[Character, M
         if msg := messages.get("apply_msg_self"):
             await caster.send(msg)
     else:
-        if msg := messages.get("apply_msg_target"):
-            await target.send(msg.format(caster_name=caster_name))
-        await caster.send(f"You apply {effect_name} to {target_name}.")
+        if isinstance(target,Character) and (msg := messages.get("apply_msg_target")):
+            await target.send(utils.format_message(msg,caster_name=caster_name))
+        if isinstance(caster,Character):await caster.send(f"You apply {effect_name} to {target_name}.")
 
     if msg_room := messages.get("apply_msg_room"):
         if target.location:
-            await target.location.broadcast(f"\\r\\n{msg_room.format(caster_name=caster_name, target_name=target_name)}\\r\\n", exclude={caster, target})
+            await target.location.broadcast(f"\r\n{utils.format_message(msg_room,caster_name=caster_name,target_name=target_name)}\r\n", exclude={caster, target})
 
 async def resolve_effect_expiration(target: Union[Character, Mob], effect_key: str, world: 'World'):
     """
@@ -777,14 +838,14 @@ async def resolve_effect_expiration(target: Union[Character, Mob], effect_key: s
     # Send the correct message to the right person
     if isinstance(target, Character):
         if msg := messages.get("expire_msg_self"):
-            await target.send(msg.format(target_name=target_name))
+            await target.send(utils.format_message(msg,target_name=target_name))
         elif msg := messages.get("expire_msg_target"): # Fallback for debuffs cast by others
-             await target.send(msg.format(target_name=target_name))
+             await target.send(utils.format_message(msg,target_name=target_name))
 
 
     if msg_room := messages.get("expire_msg_room"):
         if target.location:
-            await target.location.broadcast(f"\\r\\n{msg_room.format(target_name=target_name)}\\r\\n", exclude={target})
+            await target.location.broadcast(f"\r\n{utils.format_message(msg_room,target_name=target_name)}\r\n", exclude={target})
 
 async def resolve_consumable_effect(character: Character, item_template: Dict[str, Any], world: 'World') -> bool:
     """Applies the effect of a consumable item (FOOD/DRINK)."""

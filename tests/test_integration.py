@@ -111,9 +111,22 @@ def test_gather_craft_relic_persistence(client):
         await c.load_related_data()
         c.update_location(world.get_room(3))
         await db.execute_query("UPDATE resource_nodes SET remaining=capacity WHERE name='silverleaf'")
-        await living.cmd_gather(c,world,'silverleaf');await living.cmd_gather(c,world,'silverleaf')
+        from unittest.mock import patch
+        from game.commands.handler import process_command
+        async def give_tool(profession):
+            tid=await db.fetch_one_query('SELECT id FROM item_templates WHERE name=$1',profession+' tool')
+            await db.execute_query('INSERT INTO item_instances(template_id,owner_char_id) VALUES($1,$2)',tid['id'],c.dbid)
+            await living.refresh_inventory(c,world)
+        await give_tool('herbalism')
+        with patch('game.professions.random.randint',return_value=20),patch('game.professions.random.random',return_value=.99):
+            for _ in range(2):
+                c.roundtime=0;await living.cmd_gather(c,world,'silverleaf')
+                c.roundtime=0;await process_command(c,world,'put silverleaf in traveler backpack')
+        c.roundtime=0;await process_command(c,world,'put herbalism tool in traveler backpack')
+        await give_tool('alchemy')
         c.update_location(world.get_room(4))
-        await living.cmd_craft(c,world,'coast salve')
+        with patch('game.professions.random.randint',return_value=20):
+            await living.cmd_craft(c,world,'coast salve')
         assert any(i.name=='coast salve' for i in c._inventory_items.values())
         c.update_location(world.get_room(6))
         c.level=50

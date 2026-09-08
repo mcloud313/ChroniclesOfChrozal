@@ -3,6 +3,7 @@
 Commands specific to the Bard class.
 """
 import logging
+from game import utils
 from typing import TYPE_CHECKING
 from ..definitions import abilities as ability_defs
 
@@ -36,7 +37,7 @@ async def cmd_sing(character: Character, world: 'World', args_str: str) -> bool:
                 await character.send(msg_self)
             if msg_room := messages.get("stop_sing_room"):
                 await character.location.broadcast(
-                    f"\r\n{msg_room.format(caster_name=character.name)}\r\n",
+                    f"\r\n{utils.format_message(msg_room,caster_name=character.name)}\r\n",
                     exclude={character}
                 )
 
@@ -79,7 +80,7 @@ async def cmd_sing(character: Character, world: 'World', args_str: str) -> bool:
         await character.send(msg_self)
     if msg_room := messages.get("start_sing_room"):
         await character.location.broadcast(
-            f"\r\n{msg_room.format(caster_name=character.name)}\r\n",
+            f"\r\n{utils.format_message(msg_room,caster_name=character.name)}\r\n",
             exclude={character}
         )
 

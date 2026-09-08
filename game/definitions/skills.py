@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Optional
 
 # Mapping from skill name (lowercase) to primary attribute name (lowercase)
 SKILL_ATTRIBUTE_MAP = {
-    "herbalism":"intellect", "mining":"might", "skinning":"agility", "alchemy":"intellect", "blacksmithing":"might",
+    "fishing":"agility", "logging":"might", "farming":"vitality", "hunting":"agility", "smithing":"might", "cooking":"intellect", "runecrafting":"aura", "brewing":"intellect", "herbalism":"intellect", "mining":"might", "skinning":"agility", "alchemy":"intellect", "blacksmithing":"might",
     "acrobatics": "agility",
     "athletics": "might",
     "armor training": "vitality",

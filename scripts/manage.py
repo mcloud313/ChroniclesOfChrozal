@@ -104,6 +104,7 @@ async def seed():
             faction=await c.fetchval("INSERT INTO factions(name,description) VALUES('Valian Wayfinders','The coast’s guides, rescuers and keepers of shared roads.') RETURNING id")
             await c.execute('UPDATE quests SET faction_id=$1,reputation_reward=10',faction)
             await c.execute('UPDATE quests SET required_standing=10 WHERE min_level>1')
+            await c.execute('SELECT chrozal_professions_setup()')
             await c.execute('INSERT INTO notice_boards(room_id) VALUES(1) ON CONFLICT DO NOTHING')
             print('Seeded Port Valis: 15 rooms and opening notice-board templates. Use expand-slice for the 100-room world.')
 

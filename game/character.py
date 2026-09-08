@@ -31,44 +31,45 @@ class Character:
     def might_mod(self) -> int:
         base_might = self.stats.get("might", 10)
         bonus_might = self.get_stat_bonus_from_equipment("bonus_might")
-        return utils.calculate_modifier(base_might + bonus_might)
+        return utils.calculate_modifier(base_might + bonus_might + self.get_stat_bonus_from_effects("might"))
     
     @property
     def vit_mod(self) -> int:
         base_vitality = self.stats.get("vitality", 10)
         bonus_vitality = self.get_stat_bonus_from_equipment("bonus_vitality")
-        return utils.calculate_modifier(base_vitality + bonus_vitality)
+        return utils.calculate_modifier(base_vitality + bonus_vitality + self.get_stat_bonus_from_effects("vitality"))
     
     @property
     def agi_mod(self) -> int:
         base_agility = self.stats.get("agility", 10)
         bonus_agility = self.get_stat_bonus_from_equipment("bonus_agility")
-        return utils.calculate_modifier(base_agility + bonus_agility)
+        return utils.calculate_modifier(base_agility + bonus_agility + self.get_stat_bonus_from_effects("agility"))
     
     @property
     def int_mod(self) -> int:
         base_intellect = self.stats.get("intellect", 10)
         bonus_intellect = self.get_stat_bonus_from_equipment("bonus_intellect")
-        return utils.calculate_modifier(base_intellect + bonus_intellect)
+        return utils.calculate_modifier(base_intellect + bonus_intellect + self.get_stat_bonus_from_effects("intellect"))
     
     @property
     def aura_mod(self) -> int:
         base_aura = self.stats.get("aura", 10)
         bonus_aura = self.get_stat_bonus_from_equipment("bonus_aura")
-        return utils.calculate_modifier(base_aura + bonus_aura)
+        return utils.calculate_modifier(base_aura + bonus_aura + self.get_stat_bonus_from_effects("aura"))
     
     @property
     def pers_mod(self) -> int:
         base_persona = self.stats.get("persona", 10)
         bonus_persona = self.get_stat_bonus_from_equipment("bonus_persona")
-        return utils.calculate_modifier(base_persona + bonus_persona)
+        return utils.calculate_modifier(base_persona + bonus_persona + self.get_stat_bonus_from_effects("persona"))
 
     @property
     def mar(self) -> int:
         base_mar = self.might_mod + (self.agi_mod // 2)
         item_bonus = self.get_stat_bonus_from_equipment("bonus_mar")
         effect_bonus = self.get_stat_bonus_from_effects("bonus_mar")
-        return base_mar + item_bonus + effect_bonus
+        from game.combat.training import weapon_rank
+        return base_mar + item_bonus + effect_bonus + weapon_rank(self)//25
 
     @property
     def rar(self) -> int:
@@ -128,7 +129,8 @@ class Character:
             # --- FIX: Look for the correct key, "stat_affected" ---
             if effect_data.get("stat_affected") == ability_defs.STAT_BARRIER_VALUE and effect_data.get("ends_at",0)>time.monotonic():
                 total_bv += effect_data.get("amount", 0)
-        return total_bv
+        total_bv += self.get_stat_bonus_from_equipment("barrier_value")
+        return max(0,total_bv)+(self.get_skill_rank("warding")//20 if total_bv>0 else 0)
 
     @property
     def total_spell_failure(self) -> int:
@@ -196,7 +198,7 @@ class Character:
         total_modifier = 0
         # Iterate through a copy of the values in case the dictionary changes
         for effect in list(self.effects.values()):
-            if effect.get('stat_affected') == stat_name:
+            if effect.get('stat_affected') == stat_name and effect.get('ends_at',0)>time.monotonic():
                 total_modifier += effect.get('amount', 0)
         return total_modifier
 

@@ -44,11 +44,11 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
         if data.get("ability_type", "").upper() != "SPELL":
             continue
 
-        if normalized_input.startswith(spell_key):
-            if len(spell_key) > longest_match_len:
-                longest_match_len = len(spell_key)
-                found_key = spell_key
-                target_name_input = args_str.strip()[len(spell_key):].strip()
+        for alias in {spell_key,data.get('name',spell_key).lower(),spell_key.replace('_',' ')}:
+            if (normalized_input==alias or normalized_input.startswith(alias+' ')) and len(alias)>longest_match_len:
+                longest_match_len=len(alias)
+                found_key=spell_key
+                target_name_input=args_str.strip()[len(alias):].strip()
 
     if not found_key:
         await character.send("You don't know any spell by that name.")
@@ -90,7 +90,7 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
 
     if required_target_type == ability_defs.TARGET_SELF:
         target_obj, target_id, target_obj_type_str = character, "self", "SELF"
-    elif required_target_type == ability_defs.TARGET_NONE:
+    elif required_target_type in (ability_defs.TARGET_NONE,ability_defs.TARGET_AREA):
         target_obj, target_id, target_obj_type_str = None, None, "NONE"
     elif not target_name_input:
         is_beneficial = spell_data.get("effect_type") in [ability_defs.EFFECT_HEAL, ability_defs.EFFECT_BUFF]
@@ -103,7 +103,7 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
         target_char = character.location.get_character_by_name(target_name_input)
         target_mob = character.location.get_mob_by_name(target_name_input)
 
-        if target_char and target_char.is_alive():
+        if target_char and (target_char.is_alive() or (spell_data.get('effect_type')=='HEAL' and target_char.status=='DYING') or (spell_data.get('effect_type')=='RESURRECT' and target_char.status=='DEAD' and target_char.spiritual_tether>0)):
             effect_type = spell_data.get("effect_type")
             is_offensive = effect_type in [ability_defs.EFFECT_DAMAGE, ability_defs.EFFECT_DEBUFF]
 
@@ -159,6 +159,6 @@ async def cmd_cast(character: Character, world: 'World', args_str: str) -> bool:
         target_display = f" on yourself" if target_obj == character else f" on {target_obj.name}"
     
     await character.send(f"You begin casting {display_name}{target_display}...")
-    character.roundtime = cast_time
+    character.roundtime = max(.01,cast_time)
 
     return True

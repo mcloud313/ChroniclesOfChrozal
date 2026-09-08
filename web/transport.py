@@ -98,7 +98,7 @@ def snapshot(character, world):
         'safe': bool(set(room.flags)&{'NODE','SAFE_ZONE','SAFE'}) and not character.is_fighting, 'hp': character.hp, 'max_hp': character.max_hp,
         'essence': character.essence, 'max_essence': character.max_essence,
         'soul_tether':character.spiritual_tether,
-        'combat':{'melee':character.mar,'ranged':character.rar,'arcane':character.apr,'divine':character.dpr,'defense':character.dv,'armor':character.total_av},
+        'combat':{'melee':character.mar,'ranged':character.rar,'arcane':character.apr,'divine':character.dpr,'defense':character.dv,'armor':character.total_av,'barrier':character.barrier_value,'ammunition':sum(max(0,int(i.stats.get('quantity',0))) for i in character.get_all_owned_item_instances() if i.item_type=='AMMO')},
         'date':f'{cal.DAY_NAMES[((world.game_month-1)*cal.DAYS_PER_MONTH+world.game_day-1)%cal.DAYS_PER_WEEK]}, {world.game_day} {cal.MONTH_NAMES[world.game_month-1]}, {world.game_year} · {cal.get_season(world.game_month)}',
         'level': character.level, 'xp_pool': character.xp_pool, 'roundtime': character.roundtime,
         'stance': character.stance, 'hunger': character.hunger, 'thirst': character.thirst,

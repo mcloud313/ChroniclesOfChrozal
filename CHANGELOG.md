@@ -1,3 +1,15 @@
+# 0.4.0-alpha — 2026-09-08
+
+- Add seven gathering and five crafting professions with held tools, room flags, skill checks, persistent depletion, rare tick-based recovery and open-container ingredients.
+- Stock apprentice tools and starter materials/recipes; expose profession room flags to builders.
+- Vary physical and magical narration by damage type and damage-roll strength without hiding combat math.
+- Enable scavenger aggression; respect stealth and safe nodes; support per-target mob area attacks through normal defense resolution.
+- Add persistent five-card draw and dice, small virtual-currency stakes, daily limits and settlement ledger.
+- Fix ranged retaliation, singular projectile wording, ammo inspection, two-handed training and warding; audit spell/control/rogue paths and add abilities through level 30.
+- Add concise numbered entity pagination, searchable named references, contextual item/creature/quest forms, configurable complex exits and audited exit deletion.
+- Add calendar-derived moon phases and repair legacy spell-message formatting.
+- Extend profession, inventory, combat, gambling and persistence regression coverage. See docs/UPGRADE-0.4.md for non-destructive Bazzite upgrade and QA.
+
 # 0.3.0-alpha — 2026-09-07
 
 - Enforce gathering/skinning hand capacity, preserve old overflow, add confirmed instance destruction with relic protection, and grant worn starter backpacks/clothes.

@@ -3,6 +3,7 @@
 Handles all damage calculation and mitigation logic.
 """
 import random
+import json
 import math
 from dataclasses import dataclass
 from typing import Union, Dict, Any, Optional
@@ -19,6 +20,10 @@ class DamageInfo:
     damage_type: str
     is_crit: bool
     attack_name: str = "an attack" # Add a default value
+    roll_fraction: float = 0.5
+    base_damage: int = 0
+    rolled_damage: int = 0
+    stat_and_training: int = 0
 
 def _roll_exploding_dice(max_roll: int) -> int:
     """Rolls a die, exploding on the maximum result up to 10 times."""
@@ -54,7 +59,13 @@ def calculate_physical_damage(
     elif isinstance(attacker, Mob) and isinstance(attack_source, dict):
         base_dmg = attack_source.get("damage_base", 1)
         rng_dmg = attack_source.get("damage_rng", 0)
-        dmg_type = attack_source.get("damage_type", "bludgeon")
+        details=attack_source.get('effect_details') or {}
+        if isinstance(details,str):details=json.loads(details)
+        dmg_type = details.get('damage_type') or attack_source.get('damage_type') or (attack_source.get('attack_type') if attack_source.get('attack_type') in ('slash','pierce','bludgeon') else 'bludgeon')
+
+    if isinstance(attacker,Character):
+        from .training import weapon_rank
+        stat_modifier += weapon_rank(attacker,attack_source if isinstance(attack_source,Item) else None)//20
 
     # --- FIX 2: Get bonus damage from the ability ---
     bonus_damage = ability_mods.get("bonus_damage", 0)
@@ -68,6 +79,8 @@ def calculate_physical_damage(
     pre_mitigation_damage = max(0, base_dmg + rng_roll_result + stat_modifier + bonus_damage)
     
     return DamageInfo(
+        base_damage=base_dmg,rolled_damage=rng_roll_result,stat_and_training=stat_modifier,
+        roll_fraction=min(1,rng_roll_result/max(1,rng_dmg)),
         pre_mitigation_damage=pre_mitigation_damage,
         damage_type=dmg_type,
         is_crit=is_crit,
@@ -149,4 +162,4 @@ def calculate_magical_damage(caster: Union[Character, Mob], spell_data: Dict[str
 
     pre_mitigation_damage = max(0, base_dmg + rng_roll_result + stat_modifier)
     
-    return DamageInfo(pre_mitigation_damage=pre_mitigation_damage, damage_type=dmg_type, is_crit=is_crit)
+    return DamageInfo(pre_mitigation_damage=pre_mitigation_damage, damage_type=dmg_type, is_crit=is_crit, roll_fraction=min(1,rng_roll_result/max(1,rng_dmg)),base_damage=base_dmg,rolled_damage=rng_roll_result,stat_and_training=stat_modifier)
