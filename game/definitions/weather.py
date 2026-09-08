@@ -218,3 +218,12 @@ WEATHER_EFFECTS = {
         "visibility_penalty": -5
     }
 }
+WEATHER_AMBIENCE = {
+ 'THUNDERSTORM': ['Thunder rolls over the rooftops, rattling loose shutters.', 'Lightning forks across the clouds; rain lashes the ground.', 'A sudden flash turns every raindrop silver before darkness returns.'],
+ 'RAINY': ['Rain patters against stone and cloth.', 'Water trickles along the path in thin, winding streams.'],
+ 'SNOWY': ['Snowflakes drift through the air and settle on your shoulders.', 'Fresh snow softens the sound of distant footsteps.'],
+ 'BLIZZARD': ['A gust of snow swallows the horizon.', 'Ice crystals sting exposed skin as the wind howls.'],
+ 'FOGGY': ['Mist curls around your ankles and blurs the road ahead.'],
+ 'BLAZING': ['Heat shimmers above the ground. The air feels dry and heavy.'],
+ 'WINDY': ['Wind tugs at cloaks and whistles through the branches.'],
+}

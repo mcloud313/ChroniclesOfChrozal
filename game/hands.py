@@ -21,6 +21,7 @@ def assign(c):
         if hand=='both' and not used:used.update(('right','left'));continue
         if hand not in ('right','left') or hand in used:hand=next((h for h in ('right','left') if h not in used),None)
         if hand:used.add(hand);item.instance_stats['held_hand']=hand
+        else:item.instance_stats.pop('held_hand',None)
     return used
 
 async def command(c,w,args):
@@ -43,3 +44,17 @@ async def command(c,w,args):
     item.instance_stats['held_hand']=hand;c.is_dirty=True
     await w.db_manager.update_item_instance_stats(item.id,item.instance_stats)
     await c.send(f'You hold {item.name} in your {hand} hand(s).');return True
+
+async def repair_overflow(c,w):
+    """Preserve old overflow instances by stowing in an owned open container."""
+    assign(c)
+    for item in list(c._inventory_items.values()):
+        if item.instance_stats.get('held_hand'):continue
+        containers=[bag for bag in c._equipped_items.values() if bag.item_type in ('CONTAINER','QUIVER') and bag.instance_stats.get('is_open') and bag.get_total_contents_weight()+item.weight<=bag.capacity]
+        if not containers:
+            await c.send(f'Legacy overflow: {item.name} [{item.id}]. Put it away or DESTROY <GUID>, then DESTROY CONFIRM.')
+            continue
+        bag=containers[0]
+        await w.db_manager.update_item_location(item.id,container_id=bag.id)
+        item.container_id=bag.id;bag.contents[item.id]=item;c._inventory_items.pop(item.id);c.is_dirty=True
+        await c.send(f'Your overflow {item.name} has been safely stowed in {bag.name}.')

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from game.database import db_manager
 from web.auth import admin_player
 
-EDITABLE = {'shop_services','notice_boards','class_kits','factions','balance_rules','quests','areas','rooms','exits','room_objects','ambient_scripts','item_templates','mob_templates',
+EDITABLE = {'lore_articles','shop_services','notice_boards','class_kits','factions','balance_rules','quests','areas','rooms','exits','room_objects','ambient_scripts','item_templates','mob_templates',
             'mob_attacks','mob_loot_table','loot_tables','loot_table_entries','ability_templates',
             'races','classes','damage_types','shop_inventories','resource_nodes','recipes','npc_schedules','relics'}
 READONLY = {'board_notices','notice_claims','connection_events','gameplay_metrics','player_homes','market_listings','character_reputation','economy_ledger','game_mail','character_quests','characters','character_stats','character_skills','character_abilities','character_equipment',
@@ -32,12 +32,36 @@ async def catalog():
     return result
 
 @router.get('/status')
-async def status(request: Request):
+async def status(request: Request, offset: int = Query(0,ge=0), limit: int = Query(50,ge=1,le=100)):
+    from itertools import islice
     world=request.app.state.world
-    return {'players':len(world.active_characters),'connections':len(request.app.state.connections),
+    online=sorted(world.active_characters.values(),key=lambda c:c.dbid)
+    mobs=(m for r in world.rooms.values() for m in r.mobs)
+    return {'players':len(online),'connections':len(request.app.state.connections),
         'rooms':len(world.rooms),'npcs':sum(len(r.mobs) for r in world.rooms.values()),
-        'online':[{'id':c.dbid,'name':c.name,'room':c.location_id,'hp':c.hp,'link_lost':getattr(c,'linkdead',False),'level':c.level,'essence':c.essence,'stats':dict(c.stats),'conditions':c.effects,'stance':c.stance,'hidden':c.is_hidden,'xp_total':c.xp_total,'xp_pool':c.xp_pool,'coins':c.coinage,'inventory':[{'guid':str(i.id),'name':i.name,'hand':i.instance_stats.get('held_hand'),'equipment':[slot for slot,item in c._equipped_items.items() if item.id==i.id],'container':str(i.container_id) if i.container_id else None} for i in c.get_all_owned_item_instances()]} for c in world.active_characters.values()],
-        'mobs':[{'id':m.instance_id,'name':m.name,'room':r.dbid,'hp':m.hp} for r in world.rooms.values() for m in r.mobs]}
+        'online':[{'id':c.dbid,'name':c.name,'room':c.location_id,'hp':c.hp,'level':c.level,'link_lost':getattr(c,'linkdead',False)} for c in online[offset:offset+limit]],
+        'mobs':[{'id':str(m.instance_id),'name':m.name,'room':m.location.dbid,'hp':m.hp} for m in islice(mobs,offset,offset+limit)]}
+
+@router.get('/characters/{character_id}')
+async def character_detail(character_id: int, request: Request, offset: int = Query(0,ge=0)):
+    character=await db_manager.fetch_one_query('SELECT * FROM characters WHERE id=$1',character_id)
+    if not character:raise HTTPException(404,'Character not found')
+    stats=await db_manager.fetch_one_query('SELECT * FROM character_stats WHERE character_id=$1',character_id)
+    equipment=await db_manager.fetch_one_query('SELECT * FROM character_equipment WHERE character_id=$1',character_id)
+    items=await db_manager.fetch_all_query('WITH RECURSIVE owned(id) AS (SELECT id FROM item_instances WHERE owner_char_id=$1 UNION SELECT i.id FROM item_instances i JOIN owned o ON i.container_id=o.id) SELECT i.id,t.name,i.container_id,i.instance_stats FROM owned o JOIN item_instances i ON i.id=o.id JOIN item_templates t ON t.id=i.template_id ORDER BY i.id LIMIT 50 OFFSET $2',character_id,offset)
+    equipped=[]
+    if equipment:
+        ids=[value for slot,value in dict(equipment).items() if slot!='character_id' and value]
+        names=await db_manager.fetch_all_query('SELECT i.id,t.name FROM item_instances i JOIN item_templates t ON t.id=i.template_id WHERE i.id=ANY($1::uuid[])',ids)
+        lookup={r['id']:r['name'] for r in names}
+        equipped=[{'slot':slot,'name':lookup.get(value,'Missing instance'),'guid':value} for slot,value in dict(equipment).items() if slot!='character_id' and value]
+    live=request.app.state.world.active_characters.get(character_id)
+    skills=await db_manager.fetch_all_query('SELECT skill_name,rank FROM character_skills WHERE character_id=$1 ORDER BY skill_name',character_id)
+    abilities=await db_manager.fetch_all_query('SELECT ability_internal_name FROM character_abilities WHERE character_id=$1 ORDER BY ability_internal_name LIMIT 100',character_id)
+    core=dict(character)
+    if isinstance(core.get("runtime_state"),str):core["runtime_state"]=json.loads(core["runtime_state"])
+    if live:core.update(hp=live.hp,essence=live.essence,location_id=live.location_id,xp_total=live.xp_total,xp_pool=live.xp_pool,status=live.status,coinage=live.coinage)
+    return jsonable_encoder({'character':core,'stats':dict(live.stats) if live else dict(stats) if stats else {},'skills':dict(live.skills) if live else {r['skill_name']:r['rank'] for r in skills},'abilities':[r['ability_internal_name'] for r in abilities],'conditions':live.effects if live else core.get('runtime_state',{}),'equipment':equipped,'inventory':[{**dict(i),'instance_stats':json.loads(i['instance_stats']) if isinstance(i['instance_stats'],str) else i['instance_stats']} for i in items],'inventory_offset':offset,'inventory_more':len(items)==50})
 
 @router.get('/analytics')
 async def analytics():
@@ -47,17 +71,19 @@ async def analytics():
     return {'connections':[dict(r) for r in connections],'economy':[dict(r) for r in economy],'gameplay':[dict(r) for r in gameplay]}
 
 @router.get('/logs')
-async def logs(request: Request):
+async def logs(request: Request, q: str = '', level: str = '', offset: int = Query(0,ge=0), limit: int = Query(50,ge=1,le=100)):
+    entries=[e for e in reversed(request.app.state.logs.entries) if q[:100].lower() in e['message'].lower() and (not level or e['level']==level)]
     audit=await db_manager.fetch_all_query('SELECT * FROM builder_audit ORDER BY id DESC LIMIT 100')
-    return {'runtime':list(request.app.state.logs.entries),'audit':[dict(a) for a in audit]}
+    return {'runtime':entries[offset:offset+limit],'has_more':len(entries)>offset+limit,'audit':[dict(a) for a in audit]}
 
 @router.get('/entities/{table}')
 async def entities(table: str, q: str = '', offset: int = Query(0,ge=0), limit: int = Query(50,ge=1,le=100), area_id: int | None = None):
-    await columns(table)
+    cols=await columns(table)
+    order='id' if any(c['column_name']=='id' for c in cols) else 'character_id' if any(c['column_name']=='character_id' for c in cols) else cols[0]['column_name']
     # Identifiers only come from the server allowlist. Values remain parameterized.
     area_filter=f' AND t.area_id={int(area_id)}' if table=='rooms' and area_id is not None else f' AND t.source_room_id IN (SELECT id FROM rooms WHERE area_id={int(area_id)})' if table=='exits' and area_id is not None else ''
     rows=await db_manager.fetch_all_query(f'''SELECT to_jsonb(t) AS data FROM "{table}" t
-        WHERE to_jsonb(t)::text ILIKE $1 {area_filter} ORDER BY to_jsonb(t)::text LIMIT $2 OFFSET $3''', '%'+q[:100]+'%',limit,offset)
+        WHERE to_jsonb(t)::text ILIKE $1 {area_filter} ORDER BY t."{order}" LIMIT $2 OFFSET $3''', '%'+q[:100]+'%',limit,offset)
     return [json.loads(r['data']) for r in rows]
 
 @router.post('/entities/{table}')

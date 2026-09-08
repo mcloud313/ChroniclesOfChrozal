@@ -32,7 +32,7 @@ async def cmd_inventory(character: 'Character', world: 'World', args_str: str) -
     if not character._inventory_items:
         output.append(" Nothing.")
     else:
-        item_names = [item.name for item in character._inventory_items.values()]
+        item_names = [f'{item.name} [{item.id}] ({item.instance_stats.get("held_hand","overflow — put away or destroy")})' for item in character._inventory_items.values()]
         output.append(" " + ", ".join(sorted(item_names)) + ".")
 
     output.append(f"\r\nCoins: {utils.format_coinage(character.coinage)}")

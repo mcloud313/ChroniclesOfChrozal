@@ -65,7 +65,7 @@ class Mob:
         if self.effects:
             for effect_data in list(self.effects.values()):
                 if effect_data.get("ends_at", 0) > current_time and \
-                   effect_data.get("stat") == ability_defs.STAT_BARRIER_VALUE:
+                   effect_data.get("stat_affected",effect_data.get("stat")) == ability_defs.STAT_BARRIER_VALUE:
                     total_bv += effect_data.get("amount", 0)
         return max(0, total_bv)
     
@@ -77,7 +77,7 @@ class Mob:
         if self.effects:
             for effect_data in list(self.effects.values()):
                 if effect_data.get("ends_at", 0) > current_time and \
-                   effect_data.get("stat") == "bonus_av":
+                   effect_data.get("stat_affected",effect_data.get("stat")) == "bonus_av":
                     total_av += effect_data.get("amount", 0)
         return max(0, total_av)
 
@@ -243,7 +243,7 @@ class Mob:
         if self.effects:
             for effect_data in list(self.effects.values()):
                 if effect_data.get("ends_at", 0) > current_time and \
-                   effect_data.get("stat") == ability_defs.STAT_ARMOR_VALUE:
+                   effect_data.get("stat_affected",effect_data.get("stat")) == ability_defs.STAT_ARMOR_VALUE:
                     total_av += effect_data.get("amount", 0)
         return max(0, total_av)
 
@@ -266,25 +266,6 @@ class Mob:
                 self.is_fighting=False;self.target=None;self.roundtime=5
                 await old.broadcast(f'{self.name.capitalize()} '+('flees!' if retreat else 'continues a patrol.'))
                 return
-
-        if self.has_flag("TELEGRAPH") and self.is_fighting and self.target:
-            target=self.target
-            if not target.is_alive() or target.location != self.location:
-                self.is_fighting=False;self.target=None;self.effects.pop('windup',None)
-                return
-            if 'windup' not in self.effects:
-                self.effects['windup']={'amount':random.choice([1,1,2]),'ends_at':time.monotonic()+30}
-                self.roundtime=random.uniform(2.5,4.0)
-                await target.send(f"{self.name.capitalize()} draws back for a {'heavy' if self.effects['windup']['amount']==2 else 'measured'} blow. Brace or press your attack!")
-            else:
-                strength=self.effects.pop('windup')['amount']
-                from .combat.outcome_handler import apply_damage,handle_defeat
-                damage=(2+self.level)*strength
-                apply_damage(target,damage)
-                await target.send(f'<r>{self.name.capitalize()} strikes. You have {int(target.hp)} HP remaining.')
-                self.roundtime=2
-                if target.hp<=0:await handle_defeat(self,target,world)
-            return
 
         if self.has_flag("CAN_FLY"):
             # 10% chance per tick to consider changing flight state
@@ -360,7 +341,7 @@ class Mob:
                     try:
                         attack_type = attack_data.get("attack_type", "physical").lower()
                         
-                        if attack_type in ability_defs.MAGICAL_DAMAGE_TYPES:
+                        if attack_type in ability_defs.MAGICAL_DAMAGE_TYPES or attack_type in {"spell","breath"}:
                             await resolver.resolve_magical_attack(self, self.target, attack_data, world)
                         else:
                             await resolver.resolve_physical_attack(self, self.target, attack_data, world)

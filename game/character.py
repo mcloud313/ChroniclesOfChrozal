@@ -126,7 +126,7 @@ class Character:
         total_bv = 0
         for effect_data in self.effects.values():
             # --- FIX: Look for the correct key, "stat_affected" ---
-            if effect_data.get("stat_affected") == ability_defs.STAT_BARRIER_VALUE:
+            if effect_data.get("stat_affected") == ability_defs.STAT_BARRIER_VALUE and effect_data.get("ends_at",0)>time.monotonic():
                 total_bv += effect_data.get("amount", 0)
         return total_bv
 
@@ -493,7 +493,7 @@ class Character:
             return True
         
         # If the room IS dark, check if ANYONE has a light source
-        return self.location.has_light_source()
+        return self.location.has_light_source() or any(item and item.instance_stats.get("is_lit") for item in (self.world.get_item_object(id) for id in self.location.item_instance_ids))
 
     def update_regen(self, dt: float, is_in_node: bool):
         """Applies HP and essence regeneration using config-driven values."""
@@ -696,7 +696,7 @@ class Character:
 
     def get_current_weight(self) -> float:
         """Calculates the total weight of all carried and equipped items."""
-        total_weight = 0.0
+        total_weight = max(0,self.coinage) / 100.0
         # Add weight of items in top-level inventory
         for item in self._inventory_items.values():
             total_weight += self._get_item_weight_recursively(item)

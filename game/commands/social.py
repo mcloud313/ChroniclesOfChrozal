@@ -34,22 +34,22 @@ async def cmd_drag(character: 'Character', world: 'World', args_str: str) -> boo
         await character.send("You don't see that body here.")
         return True
     
-    # --- FIX: Correctly find the exit and its destination ID ---
-    exit_data = character.location.exits.get(exit_name.lower())
-    if not exit_data:
-        await character.send("You can't drag a body that way.")
-        return True
-
-    destination_id = exit_data.get('destination_room_id')
-    if not destination_id:
-        await character.send("The path seems to vanish into nothingness.")
-        return True
-    
-    target_room = world.get_room(destination_id)
-    if not target_room:
-        await character.send("The path seems to vanish into nothingness.")
-        log.error(f"Drag command failed: Exit '{exit_name}' in room {character.location.dbid} points to non-existent room {destination_id}.")
-        return True
+    if character.hands_are_full():
+        await character.send('Free a hand before dragging a body.');return True
+    if character.group and character.group.leader==character:
+        await character.send('Leave the group before dragging a body so followers do not cross without you.');return True
+    old_room=character.location
+    # Reuse the full movement path: aliases, locked doors, faction and terrain checks.
+    await movement_logic.cmd_go(character,world,exit_name)
+    if character.location==old_room:return True
+    old_room.remove_character(target_corpse)
+    target_corpse.update_location(character.location)
+    character.location.add_character(target_corpse)
+    target_corpse.is_dirty=True
+    character.roundtime+=2
+    await old_room.broadcast(f'{character.name} drags {target_corpse.name} away.')
+    await character.location.broadcast(f'{character.name} drags {target_corpse.name} into view.')
+    return True
 
 async def cmd_group(character: 'Character', world: 'World', args_str: str) -> bool:
     """Forms or joins a group with another creature."""

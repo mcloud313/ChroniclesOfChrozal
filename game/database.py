@@ -59,11 +59,25 @@ class DatabaseManager:
         async with self.pool.acquire() as conn:
             return await conn.fetch(query, *params)
             
+    async def bootstrap_admin(self):
+        """Explicit initialization only: never create or reset accounts on server startup."""
+        import secrets
+        password=secrets.token_urlsafe(24)
+        hashed=await asyncio.to_thread(utils.hash_password,password)
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute('SELECT pg_advisory_xact_lock(730032)')
+                if await conn.fetchval('SELECT EXISTS(SELECT 1 FROM players WHERE is_admin)'):
+                    return None
+                result=await conn.fetchval("INSERT INTO players(username,email,hashed_password,is_admin,email_verified,must_change_password) VALUES('admin','admin@localhost.invalid',$1,true,true,true) ON CONFLICT DO NOTHING RETURNING id",hashed)
+                return password if result else None
+
     async def init_db(self):
         """Initializes the database schema for PostgreSQL."""
         log.info("--- Initializing PostgreSQL database schema ---")
         async with self.pool.acquire() as conn:
             async with conn.transaction():
+                await conn.execute('SELECT pg_advisory_xact_lock(730030)')
                 # --- Core Tables ---
                 await conn.execute("""
                     CREATE TABLE IF NOT EXISTS areas (
@@ -657,7 +671,13 @@ class DatabaseManager:
                 # Step 3: Insert a blank equipment record
                 await conn.execute("INSERT INTO character_equipment (character_id) VALUES ($1)", new_char_id)
 
-                # --- CLEANUP: Removed the duplicated, incorrect skill insertion logic ---
+                # Starter equipment is created atomically with the character; no loose overflow.
+                for item_name, slot in [('traveler backpack','back'),('traveler shirt','torso'),('traveler trousers','legs'),('traveler boots','feet')]:
+                    template_id=await conn.fetchval('SELECT id FROM item_templates WHERE name=$1',item_name)
+                    if template_id:
+                        item_id=await conn.fetchval("INSERT INTO item_instances(template_id,owner_char_id,instance_stats) VALUES($1,$2,'{\"is_open\":true}'::jsonb) RETURNING id",template_id,new_char_id)
+                        await conn.execute(f'UPDATE character_equipment SET {slot}=$1 WHERE character_id=$2',item_id,new_char_id)
+
 
                 # Step 4: Insert initial skills WITH class bonuses
                 bonuses = class_defs.get_starting_skill_bonuses(class_name)

@@ -72,6 +72,9 @@ async def cmd_gather(character, world, args):
         rows=await db.fetch_all_query('SELECT name FROM resource_nodes WHERE room_id=$1',character.location_id)
         await character.send('Resources: '+(', '.join(r['name'] for r in rows) or 'none'))
         return True
+    if character.hands_are_full():
+        await character.send('Your hands are full. Put an item in an open container or sheathe your weapon first.')
+        return True
     async with db.pool.acquire() as conn:
         async with conn.transaction():
             node=await conn.fetchrow('SELECT * FROM resource_nodes WHERE room_id=$1 AND lower(name)=lower($2) FOR UPDATE',character.location_id,args)
@@ -124,6 +127,9 @@ async def cmd_craft(character, world, args):
                         selected.extend(eligible[:quantity])
                     else:
                         output=world.get_item_template(recipe['output_template_id'])
+                        occupied=len(character._inventory_items)-len(selected)+len([slot for slot in ('main_hand','off_hand') if character._equipped_items.get(slot)])
+                        if occupied>=2:
+                            await character.send('Put away excess items before crafting.');return True
                         consumed=sum(character._inventory_items[i].weight for i in selected)
                         if character.get_current_weight()-consumed+output.get('stats',{}).get('weight',0)>character.get_max_weight():
                             await character.send('You cannot carry the crafted item.')
@@ -178,6 +184,8 @@ async def cmd_journal(character, world, args):
     return True
 
 async def cmd_skin(c,w,args):
+    if c.hands_are_full():
+        await c.send('Free a hand before skinning.');return True
     mob=next((m for m in c.location.mobs if args.lower() in m.name.lower() and not m.is_alive() and 'SKINNABLE' in m.flags),None)
     if not args or not mob or not mob.harvest_token:
         await c.send('Choose a slain, skinnable beast here.');return True
@@ -185,6 +193,9 @@ async def cmd_skin(c,w,args):
         async with conn.transaction():
             template=await conn.fetchval("SELECT id FROM item_templates WHERE name='saltwind hide' LIMIT 1")
             if not template:return True
+            item_template=w.get_item_template(template)
+            if c.get_current_weight()+item_template.get('stats',{}).get('weight',0)>c.get_max_weight():
+                await c.send('You cannot carry a hide.');return True
             claimed=await conn.fetchval('INSERT INTO harvest_claims(token,character_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING token',mob.harvest_token,c.dbid)
             if not claimed:await c.send('That carcass has already been skinned.');return True
             await conn.execute('INSERT INTO item_instances(template_id,owner_char_id) VALUES($1,$2)',template,c.dbid)

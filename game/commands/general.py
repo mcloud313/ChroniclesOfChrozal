@@ -18,7 +18,6 @@ HELP_TOPICS = {
     "LIVING WORLD": {
         "quest": "QUEST: read the local notice board. QUEST ACCEPT <number> reserves one daily contract; QUEST COMPLETE returns it.",
         "technique": "TECHNIQUE: class kit. TECHNIQUE <move> <enemy> uses a server-resolved move.",
-        "brace": "BRACE: halve the next incoming blow. Watch enemy wind-ups.",
         "rest": "REST: sit to regenerate while fed and hydrated. Nodes accelerate recovery; EAT and DRINK consume held supplies.",
         "gather": "GATHER [resource name]: list or harvest local resources.",
         "craft": "CRAFT [recipe]: list recipes or craft at the required station.",
@@ -28,6 +27,12 @@ HELP_TOPICS = {
         "journal": "JOURNAL: read your persistent discoveries."
     },
     "GENERAL": {
+        "emotes": "EMOTES: list social gestures. CHUCKLE, BOW, WAVE, FINGER [target], or EMOTE <custom action>. These never dictate another character’s response.",
+        "destroy": "DESTROY <held item or GUID>, then DESTROY CONFIRM within 30 seconds. Permanently removes that instance; never relics or full containers.",
+        "administer": "ADMINISTER <healing potion> TO <dying character>: consume a held potion to rescue them at 1 HP.",
+        "lore": "LORE [topic|races|classes]: browse administrator-published world lore.",
+        "hands": "Hands hold one item each. Worn equipment is on your body. PUT item IN backpack, SHEATHE weapon IN backpack, GET item FROM backpack. Open containers first.",
+        "movement": "Use N, NORTH, GO REEDWATER, GO MARCH, or a visible exit name such as RETURN. Ambiguous names need more words. Weight, armor, mud and snow increase movement roundtime.",
         "look": "LOOK [target|in container]\n\r  Look at your surroundings, a person, an item, or inside a container.",
         "score": "SCORE\n\r  Display your character's vital statistics, attributes, and status.",
         "skills": "SKILLS\n\r  Show a list of your skills and their current ranks.",

@@ -30,7 +30,7 @@ async def cmd_technique(c,w,args):
     if not kit:await c.send('Choose a class before using techniques.');return True
     basic,stat,signature,multiplier,description=kit
     if not args:
-        await c.send(f'{name.title()}: {description}\ntechnique {basic} <enemy> (level 1, no cost)\ntechnique {signature} <enemy> (level 3, 4 essence)\ntechnique finale <enemy> (level 7, 8 essence)\nbrace reduces the next blow; eat, drink, and rest at a safe node.');return True
+        await c.send(f'{name.title()}: {description}\ntechnique {basic} <enemy> (level 1, no cost)\ntechnique {signature} <enemy> (level 3, 4 essence)\ntechnique finale <enemy> (level 7, 8 essence)\nEat, drink, and rest at a safe node.');return True
     move,_,target_name=args.partition(' ')
     if move not in (basic,signature,'finale') or (move==signature and c.level<3) or (move=='finale' and c.level<7):
         await c.send('That technique is not available. Type technique for your kit.');return True
@@ -54,7 +54,9 @@ async def cmd_technique(c,w,args):
     hit=hit_resolver.check_physical_hit(c,target,use_rar=name=='ranger') if physical else hit_resolver.check_magical_hit(c,target,'Arcane' if name in ('mage','bard','runewarden') else 'Divine')
     roll_text=f'[d20 {hit.roll} + attack {hit.attacker_rating} vs defense {hit.target_dv}; recovery {c.roundtime:.1f}s]'
     if not hit.is_hit:
-        await c.send(f'<r>Your {move} misses {target.name}. {roll_text}');return True
+        await c.location.broadcast(f'<r>{c.name} misses {target.name} with {move}. {roll_text}')
+        __import__('logging').getLogger(__name__).info('COMBAT technique miss character=%s target=%s %s',c.dbid,target.name,roll_text)
+        return True
     base=config.TECHNIQUE_BASE+c.level*config.TECHNIQUE_PER_LEVEL+utils.calculate_modifier(c.stats.get(stat,10))
     damage=max(1,round(base*multiplier*random.uniform(.85,1.15)))
     if ambushing:damage=round(damage*1.5)
@@ -65,7 +67,7 @@ async def cmd_technique(c,w,args):
         if name=='rogue' and target.hp<target.max_hp/2:damage+=base//2
         if name=='barbarian':c.hp=max(1,c.hp-base//4);damage+=base//3
         if name=='bard':c.essence=min(c.max_essence,c.essence+2)
-        if name in ('paladin','runewarden'):c.effects['braced']={'amount':.5,'ends_at':__import__('time').monotonic()+10}
+        if name in ('paladin','runewarden'):c.effects['signature_ward']={'stat_affected':'barrier_value','amount':5+c.level//4,'ends_at':__import__('time').monotonic()+20}
         if name in ('monk','tempest'):target.roundtime=max(target.roundtime,3)
     if move=='finale':damage*=config.TECHNIQUE_FINALE_MULTIPLIER
     if 'exposed' in target.effects:damage+=2
@@ -75,17 +77,15 @@ async def cmd_technique(c,w,args):
     info=damage_calculator.DamageInfo(pre_mitigation_damage=damage,damage_type='slash' if physical else 'arcane',is_crit=hit.is_crit)
     damage=damage_calculator.mitigate_damage(target,info) if physical else damage_calculator.mitigate_magical_damage(target,info)
     target.hp=max(0,target.hp-damage)
-    await c.send(f'<r>Your {move} hits {target.name} for {damage}. [{round(target.hp)}/{target.max_hp} HP] {roll_text}')
+    from game.combat import outcome_handler
+    info.attack_name=move
+    if physical:await outcome_handler.send_attack_messages(c,target,hit,info,damage)
+    else:await outcome_handler.send_magical_attack_messages(c,target,hit,info,damage)
     if target.hp<=0:
         from game.combat.outcome_handler import handle_defeat
         await handle_defeat(c,target,w)
         c.is_fighting=False;c.target=None
     return True
-
-async def cmd_brace(c,w,args):
-    import time
-    c.effects['braced']={'amount':.5,'ends_at':time.monotonic()+8};c.roundtime=max(c.roundtime,1);c.is_dirty=True
-    await c.send('You brace for the next blow.');return True
 
 async def cmd_treat(c,w,args):
     salve=next((i for i in c._inventory_items.values() if i.name=='coast salve'),None)

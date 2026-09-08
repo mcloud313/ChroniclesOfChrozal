@@ -9,10 +9,11 @@ def describe(data):
     def present(text):return text and not text.startswith(('none','no ','clean-shaven'))
     subj,_,poss,_,has=utils.get_pronouns(data.get('sex','They/Them'))
     name=data.get('first_name','A traveler')
-    sentences=[f"You see {name}, a {race}."]
-    if value('Height'):sentences.append(f"{subj} {utils.get_pronouns(data.get('sex','They/Them'))[3]} {value('Height')} in stature, with a {value('Build') or 'balanced'} build.")
+    article="an" if race[:1].lower() in "aeiou" else "a"
+    sentences=[f"You see {name}, {article} {race}."]
+    if value('Height'):sentences.append(f"{subj} {utils.get_pronouns(data.get('sex','They/Them'))[3]} {value('Height')} in stature, with {'an' if (value('Build') or 'balanced')[0] in 'aeiou' else 'a'} {value('Build') or 'balanced'} build.")
     features=[]
-    handled={'Height','Build','Hair Style','Hair Color','Beard Style','Fur Color','Fur Pattern'}
+    handled={'Scars','Adornment','Bearing','Height','Build','Hair Style','Hair Color','Beard Style','Fur Color','Fur Pattern'}
     if present(value('Fur Color')):
         features.append(f"{value('Fur Color')} fur"+(f" with {value('Fur Pattern')} markings" if present(value('Fur Pattern')) else ''))
     hair=value('Hair Style')
@@ -26,4 +27,7 @@ def describe(data):
         noun=nouns.get(key,key.lower())
         features.append(f'{value(key)} {noun}')
     if features:sentences.append(f'{subj} {has} '+', '.join(features[:-1])+(' and ' if len(features)>1 else '')+features[-1]+'.')
+    if present(value('Scars')):sentences.append(value('Scars').capitalize()+'.')
+    if present(value('Adornment')):sentences.append(f"{subj} {has} {value('Adornment')}.")
+    if value('Bearing'):sentences.append(f"{poss.capitalize()} bearing is {value('Bearing')}.")
     return ' '.join(sentences)

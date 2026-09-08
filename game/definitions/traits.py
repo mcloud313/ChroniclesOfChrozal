@@ -108,3 +108,10 @@ TRAIT_OPTIONS.update({
 
 for _race in ('aelari','veskar'):
     DEFAULT_TRAITS[_race]={key:values[0] for key,values in TRAIT_OPTIONS[_race].items()}
+
+# Additional physical choices apply to every race; none impose personality.
+for _race,_options in TRAIT_OPTIONS.items():
+    _options.update({'Scars':['None','A fine scar across one brow','A pale scar along the jaw','Old scars across the knuckles','A thin scar at the throat'], 'Adornment':['None','A small copper ear ring','A braided cord at the wrist','An inked geometric mark at the shoulder','A simple nose ring'], 'Bearing':['Upright','Relaxed','Slightly stooped','Poised','Loose-limbed']})
+    DEFAULT_TRAITS.setdefault(_race,{}).update({'Scars':'None','Adornment':'None','Bearing':'Upright'})
+TRAIT_OPTIONS['aelari'].update({'Skin Pattern':['Unmarked','Fine silver mottling','Faint tidal stripes'],'Nose Type':['Narrow','Broad','Straight'],'Head Shape':['Oval','Angular','Round']})
+TRAIT_OPTIONS['veskar'].update({'Scale Pattern':['Smooth','Fine speckles','Broad bands','Mottled'],'Head Shape':['Wedge-shaped','Broad','Long'],'Crest':['None','Low ridge','Fan-shaped','Spined']})

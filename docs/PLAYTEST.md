@@ -16,7 +16,7 @@ Create a character, roll 4d6+1 scores, and assign them. Put your strongest value
 | Monk | Agility | palm | flurry: delays the enemy |
 | Runewarden | Intellect | etch | aegis: wards the next blow |
 
-Use `technique <move> <enemy>`, for example `technique slash tide scavenger`. All classes unlock `technique finale <enemy>` at level 7. Basic techniques cost no essence. Signatures cost 4 and finales 8. Watch the enemy's announced wind-up and use `brace` to halve the next hit. Recovery cannot be bypassed by spamming commands. The original skills/spells remain available but are outside this focused balance pass.
+Use `technique <move> <enemy>`, for example `technique slash tide scavenger`. All classes unlock `technique finale <enemy>` at level 7. Basic techniques cost no essence. Signatures cost 4 and finales 8. Watch enemy hit rolls and damage math; there is no brace minigame. Recovery cannot be bypassed by spamming commands. The original skills/spells remain available; the 0.3 pass tests mitigation and Tempest spell unlocks.
 
 Mira visits the plaza by day and the tavern by night and provides local lore. Contracts come from notice boards, not NPCs. At the plaza type `quest`, then `quest accept <id>`. Follow the listed objectives and return to the board with `quest complete`. One contract may be active per character; each board supplies ten shared notices per game day. Group notices require two or three adventurers as listed.
 

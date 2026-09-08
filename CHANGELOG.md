@@ -1,3 +1,14 @@
+# 0.3.0-alpha — 2026-09-07
+
+- Enforce gathering/skinning hand capacity, preserve old overflow, add confirmed instance destruction with relic protection, and grant worn starter backpacks/clothes.
+- Restore ordinary enemy attack resolution; remove brace/telegraph bypass. Correct bow damage and magical resistance scaling; separate armor and barrier mitigation. Broadcast combat math and prominent critical hits.
+- Restore dragging and rescue DYING characters at 1 HP with spells or administered potions.
+- Support named-exit abbreviations and direct exit commands. Add weather ambience and coin-weight encumbrance.
+- Add published lore, 254 social gestures, generic race-trait creation, deeper appearance options, and three Tempest spells.
+- Replace wide character/equipment tables with individual inspection; paginate entity/live/inventory/log views, search logs, and show room exits.
+- Serialize schema migrations, add explicit first-login admin provisioning, enforce password change, and retain existing accounts/world data.
+- Expand persistence, combat, creation, progression, registration and administrator regression tests.
+
 # Changelog
 
 ## 0.2.0-alpha — desktop QA iteration

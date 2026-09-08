@@ -45,7 +45,7 @@ def calculate_physical_damage(
 
     if isinstance(attacker, Character):
         # Corrected to include both weapon types
-        if isinstance(attack_source, Item) and attack_source.item_type in (item_defs.WEAPON, item_defs.TWO_HANDED_WEAPON):
+        if isinstance(attack_source, Item) and attack_source.item_type in (item_defs.WEAPON, item_defs.TWO_HANDED_WEAPON, item_defs.RANGED_WEAPON):
             base_dmg = attack_source.damage_base
             rng_dmg = attack_source.damage_rng
             dmg_type = attack_source.damage_type or "bludgeon"
@@ -54,6 +54,7 @@ def calculate_physical_damage(
     elif isinstance(attacker, Mob) and isinstance(attack_source, dict):
         base_dmg = attack_source.get("damage_base", 1)
         rng_dmg = attack_source.get("damage_rng", 0)
+        dmg_type = attack_source.get("damage_type", "bludgeon")
 
     # --- FIX 2: Get bonus damage from the ability ---
     bonus_damage = ability_mods.get("bonus_damage", 0)
@@ -87,7 +88,7 @@ def mitigate_damage(target: Union[Character, Mob], damage_info: DamageInfo) -> i
     effective_bv = math.floor(target.barrier_value / 2) # Barriers are half as effective vs. physical.
 
     # Use the greater of the two values for the final mitigation step.
-    best_defense_value = max(effective_av, effective_bv)
+    best_defense_value = effective_av
     post_armor_damage = max(0, post_pds_damage - best_defense_value)
     # --- END NEW LOGIC ---
 
@@ -115,7 +116,7 @@ def mitigate_magical_damage(target: Union[Character, Mob], damage_info: DamageIn
     effective_av = math.floor(target.total_av / 2) # Armor is half as effective vs. magical.
 
     # Use the greater of the two values for the final mitigation step.
-    best_defense_value = max(effective_bv, effective_av)
+    best_defense_value = effective_bv
     post_mitigation_damage = max(0, post_sds_damage - best_defense_value)
     # --- END NEW LOGIC ---
 
@@ -123,7 +124,7 @@ def mitigate_magical_damage(target: Union[Character, Mob], damage_info: DamageIn
     resistance = target.resistances.get(damage_info.damage_type, 0.0)
     # The multiplier for magical resistance might be different; ensure this matches your design.
     if resistance != 0:
-        multiplier = 1.0 - resistance
+        multiplier = max(0.0, 1.0 - resistance / 100.0)
         final_damage = int(post_mitigation_damage * multiplier)
     else:
         final_damage = post_mitigation_damage

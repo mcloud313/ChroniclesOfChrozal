@@ -27,6 +27,7 @@ class CreationState(Enum):
     CONFIRM_STATS = auto()
     ASSIGN_STATS = auto()
     BUILD_DESCRIPTION_START = auto()
+    GET_TRAIT_GENERIC = auto()
     GET_TRAIT_HEIGHT = auto()
     GET_TRAIT_BUILD = auto()
     GET_TRAIT_HAIR_STYLE = auto()
@@ -239,13 +240,7 @@ class CreationHandler:
         if self._current_trait_index >= len(self._trait_keys):
             self.state = CreationState.FINALIZE
             return
-        next_trait_key = self._trait_keys[self._current_trait_index]
-        try:
-            enum_key = f"GET_TRAIT_{next_trait_key.upper().replace(' ', '_')}"
-            self.state = CreationState[enum_key]
-        except KeyError:
-            log.error(f"Could not find CreationState for trait key '{next_trait_key}'")
-            self.state = CreationState.FINALIZE
+        self.state = CreationState.GET_TRAIT_GENERIC
 
     async def _handle_get_trait(self, trait_key: str):
         race_name = self.creation_data.get("race_name", "").lower()
@@ -315,6 +310,7 @@ class CreationHandler:
         await self._send("\r\n--- Character Creation ---\r\nType 'quit' at any time to cancel.")
         
         state_map = {
+            CreationState.GET_TRAIT_GENERIC: lambda: self._handle_get_trait(self._trait_keys[self._current_trait_index]),
             CreationState.GET_FIRST_NAME: lambda: self._handle_get_name("first"),
             CreationState.GET_LAST_NAME: lambda: self._handle_get_name("last"),
             CreationState.GET_SEX: self._handle_get_sex,

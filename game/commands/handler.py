@@ -1,4 +1,5 @@
-from game import horizon
+from game import horizon, lore
+from game.commands import reclaim
 from game import community
 from game import soul
 # game/commands/handler.py
@@ -39,7 +40,8 @@ DEAD_ALLOWED_CMDS = {"quit", "release", "look", "who", "tell", "help"}
 # --- Command Map ---
 COMMAND_MAP: Dict[str, CommandHandlerFunc] = {
     "hold":hands.command,
-    "out": lambda c,w,a: movement.cmd_go(c,w,"out"), "home": horizon.cmd_home, "market": horizon.cmd_market, "enchant": horizon.cmd_enchant, "tales": horizon.cmd_tales, "mail": community.cmd_mail, "reputation": community.cmd_reputation, "infuse": community.cmd_infuse, "tether": soul.cmd_tether, "skin": living.cmd_skin, "treat": adventure.cmd_treat, "quest": notices.command, "technique": adventure.cmd_technique, "brace": adventure.cmd_brace, "rest": general_cmds.cmd_sit,
+    "destroy": reclaim.destroy, "administer": reclaim.administer, "lore": lore.command,
+    "out": lambda c,w,a: movement.cmd_go(c,w,"out"), "home": horizon.cmd_home, "market": horizon.cmd_market, "enchant": horizon.cmd_enchant, "tales": horizon.cmd_tales, "mail": community.cmd_mail, "reputation": community.cmd_reputation, "infuse": community.cmd_infuse, "tether": soul.cmd_tether, "skin": living.cmd_skin, "treat": adventure.cmd_treat, "quest": notices.command, "technique": adventure.cmd_technique, "rest": general_cmds.cmd_sit,
     "talk": living.cmd_talk, "gather": living.cmd_gather, "craft": living.cmd_craft,
     "journal": living.cmd_journal,
     # General Commands
@@ -155,6 +157,11 @@ DIRECTIONAL_ALIASES = {
 for alias, direction in DIRECTIONAL_ALIASES.items():
     COMMAND_MAP[alias] = partial(movement_cmds.cmd_move, direction=direction)
 
+from game import emotes
+for verb in emotes.EMOTES:
+    COMMAND_MAP.setdefault(verb,partial(emotes.perform,verb=verb))
+COMMAND_MAP['emotes']=emotes.catalog
+
 def _parse_input(raw_input: str) -> Tuple[str, str]:
     """Splits raw input into a command verb and arguments string."""
     stripped_input = raw_input.strip()
@@ -189,7 +196,7 @@ async def _process_command(character: Character, world: World, raw_input: str) -
         character.status = "ALIVE"
         await character.send("You stop meditating as you act.")
 
-    if character.roundtime > 0 and command_verb not in {"say", "whisper", "/me", "emote", "pose", "look", "l", "score", "stats", "who", "help", "quit", "brace", "quest"}:
+    if character.roundtime > 0 and command_verb not in {"say", "whisper", "/me", "emote", "pose", "look", "l", "score", "stats", "who", "help", "quit", "quest"}:
         await character.send(f"You are still recovering for {character.roundtime:.1f} seconds.")
         return True
 
@@ -198,6 +205,11 @@ async def _process_command(character: Character, world: World, raw_input: str) -
         return True
     # --- Find and Execute Command ---
     command_func = COMMAND_MAP.get(command_verb)
+    if not command_func and getattr(character,'location',None):
+        _, exit_data=movement_cmds.resolve_exit(character.location,raw_input)
+        if exit_data:
+            command_func=movement_cmds.cmd_go
+            args_str=raw_input
     if not command_func:
         await character.send("Huh? (Type 'help' for available commands).")
         return True

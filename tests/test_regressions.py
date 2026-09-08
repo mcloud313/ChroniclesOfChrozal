@@ -54,15 +54,9 @@ async def test_failed_save_keeps_character_dirty():
     with pytest.raises(RuntimeError):await c.save()
     assert c.is_dirty
 
-@pytest.mark.asyncio
-async def test_brace_cannot_shorten_attack_recovery():
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
-    from game.adventure import cmd_brace
-    c=SimpleNamespace(roundtime=3.5,effects={},is_dirty=False,send=AsyncMock())
-    await cmd_brace(c,None,'')
-    assert c.roundtime==3.5
-    assert c.is_dirty
+def test_brace_removed():
+    from game.commands.handler import COMMAND_MAP
+    assert 'brace' not in COMMAND_MAP
 
 
 def test_long_progression_and_cap():

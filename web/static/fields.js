@@ -23,7 +23,7 @@ function structuredField(initial,key){
   return panel;
  };
  function draw(){box.replaceChildren(hidden);if(key==='flags'){
-  const choices=new Set(['NODE','SAFE_ZONE','LIT','OUTDOORS','SHOP','BANK','ROUGH_TERRAIN','MUD','SNOWY','CIVILIAN','TELEGRAPH','SKINNABLE','PATROL','FLEES','NOSELL',...data]);
+  const choices=new Set(['NODE','SAFE_ZONE','LIT','OUTDOORS','SHOP','BANK','ROUGH_TERRAIN','MUD','SNOWY','CIVILIAN','SKINNABLE','PATROL','FLEES','NOSELL',...data]);
   for(const flag of choices){const label=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=data.includes(flag);input.onchange=()=>{data=input.checked?[...data,flag]:data.filter(x=>x!==flag);sync();};label.append(input,document.createTextNode(flag));box.append(label);}
  }else {if(key==='details'){for(const [title,preset] of [['Door',{is_door:true,is_open:false,is_locked:true,lockpick_dc:15}],['River crossing',{skill_check:{skill:'swimming',dc:16,fail_damage:8}}],['Rockwall',{skill_check:{skill:'climbing',dc:16,fail_damage:8}}]]){const b=document.createElement('button');b.type='button';b.textContent='Use '+title;b.onclick=()=>{data=structuredClone(preset);draw();};box.append(b);}}box.append(renderValue(data,v=>{data=v;sync();}));}sync();}
  draw();return {box,input:hidden};

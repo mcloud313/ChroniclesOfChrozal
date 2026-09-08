@@ -168,7 +168,7 @@ ABILITIES_DATA: Dict[str, Dict[str, Any]] = {
         "effect_type": EFFECT_DAMAGE,
         "effect_details": {"damage_base": 2, "damage_rng": 4, "damage_type": DAMAGE_ARCANE, "school": "Arcane", "always_hits": True},
         "roundtime": 1.0, # RT applied AFTER spell fires
-        "description": "A missile of pure arcane energy unerringly strikes your target.",
+        "description": "A missile of pure arcane energy tests your target’s dodge and magical barrier.",
         "messages": {
             "caster_self_complete": "A shimmering bolt of arcane energy flies from your fingertips!",
             "room_complete": "{caster_name} launches a shimmering bolt of arcane energy!"
@@ -752,3 +752,9 @@ for _class,_element,_names in [
           'effect_type':EFFECT_DAMAGE,'effect_details':{'school':_school,'damage_type':_element,'damage_base':18+_level,'damage_rng':8},
           'description':f'A powerful {_element} invocation; four seconds to cast and five seconds of roundtime.',
           'messages':{'caster_self_complete':f'You release {_name}.','room_complete':f'{{caster_name}} releases {_name}.'}}
+
+ABILITIES_DATA.update({
+ 'wind_lash':{'name':'Wind Lash','type':'SPELL','class_req':['tempest'],'level_req':1,'cost':3,'target_type':TARGET_CHAR_OR_MOB,'cast_time':1.0,'roundtime':1.5,'effect_type':EFFECT_DAMAGE,'effect_details':{'school':'Arcane','damage_type':'cold','damage_base':6,'damage_rng':4},'description':'A quick lash of freezing wind. Low cost and short roundtime.','messages':{'caster_self_complete':'You snap a ribbon of freezing wind toward your foe.','room_complete':'{caster_name} sends a ribbon of freezing wind across the room.'}},
+ 'storm_mantle':{'name':'Storm Mantle','type':'SPELL','class_req':['tempest'],'level_req':4,'cost':7,'target_type':TARGET_SELF,'cast_time':2.0,'roundtime':2.0,'effect_type':EFFECT_BUFF,'effect_details':{'name':'StormMantle','type':'buff','stat_affected':STAT_BARRIER_VALUE,'amount':8,'duration':120.0},'description':'A mantle of charged air grants eight magical barrier for two minutes. Recasting refreshes it.','messages':{'caster_self_complete':'Charged air gathers around you.','apply_msg_self':'A storm mantle crackles around your shoulders.','apply_msg_room':'Charged air curls around {target_name}.'}},
+ 'forked_lightning':{'name':'Forked Lightning','type':'SPELL','class_req':['tempest'],'level_req':8,'cost':15,'target_type':TARGET_AREA,'cast_time':3.0,'roundtime':4.0,'effect_type':EFFECT_DAMAGE,'effect_details':{'school':'Arcane','damage_type':'lightning','damage_base':14,'damage_rng':6,'aoe_target_scope':'enemies'},'description':'Lightning forks toward hostile creatures in the room. Each target separately dodges and mitigates the strike.','messages':{'caster_self_complete':'You unleash a branching storm of lightning!','room_complete':'Lightning forks from {caster_name} toward nearby foes.'}}
+})

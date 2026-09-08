@@ -34,6 +34,7 @@ class RecentLogs(logging.Handler):
 async def migrate():
     async with db_manager.pool.acquire() as conn:
         async with conn.transaction():
+            await conn.execute('SELECT pg_advisory_xact_lock(730031)')
             await conn.execute('CREATE TABLE IF NOT EXISTS schema_migrations(name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT now())')
             for path in sorted((ROOT/'migrations').glob('*.sql')):
                 if not await conn.fetchval('SELECT 1 FROM schema_migrations WHERE name=$1',path.name):
@@ -156,7 +157,7 @@ async def websocket(ws: WebSocket):
         return
     token = ws.cookies.get('chrozal_session')
     player = await auth.session_player(token)
-    if not player or not app.state.ready:
+    if not player or player['must_change_password'] or not app.state.ready:
         await ws.close(code=1008)
         return
     player_id = player['id']

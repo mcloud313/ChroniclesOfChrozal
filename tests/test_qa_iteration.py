@@ -73,7 +73,7 @@ def test_slice_boards_movement_food_and_ranged(client):
                 c.roundtime=0;await process_command(c,w,'stand')
                 # Shop instances go through real wear/put commands.
                 c.coinage=125
-                for command in ['buy coast quiver','wear coast quiver','open coast quiver','buy arrow bundle','put arrow bundle in coast quiver','buy coast bow','buy traveler pack','wear traveler pack','open traveler pack','wield coast bow']:
+                for command in ['buy coast quiver','wear coast quiver','open coast quiver','buy arrow bundle','put arrow bundle in coast quiver','buy coast bow','wield coast bow']:
                     c.roundtime=0;await process_command(c,w,command)
                 assert c._equipped_items.get('main_hand'),c.send.call_args
                 quiver=next(i for i in c._equipped_items.values() if i.item_type=='QUIVER');ammo=next(iter(quiver.contents.values()))

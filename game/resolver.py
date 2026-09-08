@@ -109,17 +109,22 @@ async def resolve_physical_attack(
         if isinstance(attacker, Character):
             await attacker.send(f"You miss {target.name} with your {utils.strip_article(attack_name)}. {roll_details}")
         if isinstance(target, Character):
-            await target.send(f"{attacker.name.capitalize()}'s {attack_name} misses you.")
+            await target.send(f"<r>{attacker.name.capitalize()}'s {attack_name} misses you. {roll_details}")
+        log.info('COMBAT miss attacker=%s target=%s result=%s',attacker.name,target.name,hit_result)
+        await attacker.location.broadcast(f'<r>{attacker.name} misses {target.name} with {attack_name}. {roll_details}',exclude={attacker,target})
         attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
         return
     
     # --- Resolve Parry ---
     if isinstance(target, Character) and (weapon := target._equipped_items.get("main_hand")):
         parry_skill_rank = target.get_skill_rank("parrying")
-        parry_chance = parry_skill_rank * 0.005
-        if random.random() < parry_chance:
-            await attacker.send(f"<y>{target.name} parries your attack with their {weapon.name}!<x>")
-            await target.send(f"<g>You parry {attacker.name}'s attack with your {weapon.name}!<x>")
+        parry_chance = min(.75,parry_skill_rank * 0.005)
+        parry_roll=random.random()
+        log.info('COMBAT parry target=%s roll=%s chance=%s',target.name,parry_roll,parry_chance)
+        if parry_roll < parry_chance:
+            if isinstance(attacker,Character):await attacker.send(f"<y>{target.name} parries your attack with their {weapon.name}!<x>")
+            await attacker.location.broadcast(f'<r>{target.name} parries {attacker.name}. [parry {parry_roll:.3f} < {parry_chance:.3f}]',exclude={attacker,target})
+            await target.send(f"<g>You parry {attacker.name}'s attack with your {weapon.name}! [attack d20 {hit_result.roll} + {hit_result.attacker_rating} vs dodge {hit_result.target_dv}; parry {parry_roll:.3f} < {parry_chance:.3f}]<x>")
             attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
             return
 
@@ -127,9 +132,12 @@ async def resolve_physical_attack(
     if isinstance(target, Character) and (shield := target.get_shield()):
         shield_skill_rank = target.get_skill_rank("shield usage")
         block_chance = shield.block_chance + (math.floor(shield_skill_rank / 10) * 0.01)
-        if random.random() < block_chance:
-            await attacker.send(f"<y>{target.name} blocks your attack with their shield!<x>")
-            await target.send(f"<g>You block {attacker.name}'s attack with your shield!<x>")
+        block_roll=random.random()
+        log.info('COMBAT block target=%s roll=%s chance=%s',target.name,block_roll,block_chance)
+        if block_roll < min(.85,block_chance):
+            if isinstance(attacker,Character):await attacker.send(f"<y>{target.name} blocks your attack with their shield!<x>")
+            await attacker.location.broadcast(f'<r>{target.name} blocks {attacker.name}. [block {block_roll:.3f} < {min(.85,block_chance):.3f}]',exclude={attacker,target})
+            await target.send(f"<g>You block {attacker.name}'s attack with your shield! [attack d20 {hit_result.roll} + {hit_result.attacker_rating} vs dodge {hit_result.target_dv}; block {block_roll:.3f} < {min(.85,block_chance):.3f}]<x>")
             attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
             return
         
@@ -192,17 +200,21 @@ async def resolve_ranged_attack(
         if isinstance(attacker, Character):
             await attacker.send(f"Your {utils.strip_article(ammo.name)} misses {target.name}. {roll_details}")
         if isinstance(target, Character):
-            await target.send(f"{attacker.name.capitalize()}'s {ammo.name} flies past you.")
-        await attacker.location.broadcast(f"\r\n{attacker.name.capitalize()}'s shot goes wide of {target.name}!\r\n", {attacker, target})
+            await target.send(f"<r>{attacker.name.capitalize()}'s {ammo.name} flies past you. {roll_details}")
+        log.info('COMBAT ranged miss attacker=%s target=%s hit=%s',attacker.name,target.name,hit_result)
+        await attacker.location.broadcast(f"<r>{attacker.name}'s shot goes wide of {target.name}! {roll_details}", exclude={attacker,target})
         return
     
        # ---Resolve Block ---
     if isinstance(target, Character) and (shield := target.get_shield()):
         shield_skill_rank = target.get_skill_rank("shield usage")
         block_chance = shield.block_chance + (math.floor(shield_skill_rank / 10) * 0.01)
-        if random.random() < block_chance:
-            await attacker.send(f"<y>{target.name} blocks your attack with their shield!<x>")
-            await target.send(f"<g>You block {attacker.name}'s attack with your shield!<x>")
+        block_roll=random.random()
+        log.info('COMBAT block target=%s roll=%s chance=%s',target.name,block_roll,block_chance)
+        if block_roll < min(.85,block_chance):
+            if isinstance(attacker,Character):await attacker.send(f"<y>{target.name} blocks your attack with their shield!<x>")
+            await attacker.location.broadcast(f'<r>{target.name} blocks {attacker.name}. [block {block_roll:.3f} < {min(.85,block_chance):.3f}]',exclude={attacker,target})
+            await target.send(f"<g>You block {attacker.name}'s attack with your shield! [attack d20 {hit_result.roll} + {hit_result.attacker_rating} vs dodge {hit_result.target_dv}; block {block_roll:.3f} < {min(.85,block_chance):.3f}]<x>")
             attacker.roundtime = wpn_speed + rt_penalty + attacker.slow_penalty
             return
         
@@ -237,33 +249,26 @@ async def resolve_magical_attack(
     world: 'World'
 ):
     """Resolves spell damage against a target with detailed calculations and messaging."""
-    effect_details = spell_data.get("effect_details", {})
+    effect_details = spell_data.get("effect_details") or {}
+    if isinstance(effect_details,str):effect_details=json.loads(effect_details)
     caster_name = caster.name.capitalize()
     target_name = target.name.capitalize()
     if protected_pvp(caster,target):
         await caster.send("This is a sanctuary; hostile player combat is forbidden.");return
     spell_name = spell_data.get("name", "a spell")
 
-    if effect_details.get("always_hits"):
-        # If the spell can't miss, create a fake HitResult and skip the roll.
-        hit_result = hit_resolver.HitResult(is_hit=True, is_crit=False, roll=0, attacker_rating=0, target_dv=0)
-    else:
+    if isinstance(caster,Mob):
+        effect_details={"school":"Arcane","damage_base":spell_data.get('damage_base',1),"damage_rng":spell_data.get('damage_rng',0),"damage_type":spell_data.get('attack_type','arcane'),**effect_details}
+        spell_data={**spell_data,'effect_details':effect_details}
+        caster.roundtime=max(1,float(spell_data.get('speed',3)))+caster.slow_penalty
+    school=effect_details.get('school','Arcane')
+    hit_result=hit_resolver.check_magical_hit(caster,target,school)
+    if not hit_result.is_hit:
+        details=f'[d20 {hit_result.roll} + attack {hit_result.attacker_rating} vs dodge {hit_result.target_dv}]'
+        await caster.location.broadcast(f'<r>{caster.name} misses {target.name} with {spell_name}. {details}')
+        log.info('COMBAT magic miss attacker=%s target=%s result=%s',caster.name,target.name,hit_result)
+        return
 
-
-    # ---Get Power and Defense Ratings ---
-        school = effect_details.get("school", "Arcane")
-        rating_name = "APR" if school == "Arcane" else "DPR"
-
-        hit_result = hit_resolver.check_magical_hit(caster, target, school)
-
-        if not hit_result.is_hit:
-            roll_details = f"<i>[Roll: {hit_result.roll} + {rating_name}: {hit_result.attacker_rating} vs DV: {hit_result.target_dv}]<x>"
-            if isinstance(caster, Character):
-                await caster.send(f"Your {spell_name} misses {target_name}. {roll_details}")
-            if isinstance(target, Character):
-                await target.send(f"{caster_name}'s {spell_name} misses you.")
-            return
-    
     # ---Calculate Damage ---
     damage_info = damage_calculator.calculate_magical_damage(caster, spell_data, hit_result.is_crit)
 
@@ -322,7 +327,7 @@ async def resolve_ability_effect(
 
         if scope == "enemies":
             # Target all living mobs
-            final_targets = [m for m in caster.location.mobs if m.is_alive()]
+            final_targets = [m for m in caster.location.mobs if m.is_alive() and 'CIVILIAN' not in m.flags]
         elif scope == "allies":
             # Target all living group members in the room, including the caster
             if caster.group:
@@ -625,7 +630,10 @@ async def apply_heal(caster: Character, target: Union[Character, Mob], effect_de
 
     # If they were dying, bring them back to consciousness
     if was_dying and target.hp > 0:
+        target.hp = 1
+        actual_healed = 1
         target.status = "ALIVE"
+        target.is_dirty = True
         target.death_timer_ends_at = None # Stop the death timer
         await target.send("{gYou feel life return to your limbs! You are no longer dying.{x")
         if target.location:

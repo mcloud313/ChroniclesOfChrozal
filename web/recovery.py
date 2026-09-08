@@ -62,7 +62,7 @@ async def redeem(body:Redeem,request:Request):
             if not token:raise HTTPException(400,'Invalid or expired code')
             if token['purpose']=='reset':
                 if not hashed:raise HTTPException(422,'Use a password with at least 12 characters')
-                await conn.execute('UPDATE players SET hashed_password=$1 WHERE id=$2',hashed,token['player_id'])
+                await conn.execute('UPDATE players SET must_change_password=false,hashed_password=$1 WHERE id=$2',hashed,token['player_id'])
                 await conn.execute('DELETE FROM web_sessions WHERE player_id=$1',token['player_id'])
             else:await conn.execute('UPDATE players SET email_verified=true WHERE id=$1',token['player_id'])
             await conn.execute('DELETE FROM account_tokens WHERE player_id=$1 AND purpose=$2',token['player_id'],token['purpose'])

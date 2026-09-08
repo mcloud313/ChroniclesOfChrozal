@@ -15,6 +15,9 @@ async def main(args):
         await db_manager.init_db()
         from web.app import migrate
         await migrate()
+        if args.command=='init':
+            result=await db_manager.bootstrap_admin()
+            if result:print('Initial administrator username: admin\nInitial password: '+result+'\nChange required before playing or administration. Store this password securely; it is printed only once.')
         if args.command=='account':
             password=getpass.getpass('Password (12+ characters): ')
             if len(password)<12:

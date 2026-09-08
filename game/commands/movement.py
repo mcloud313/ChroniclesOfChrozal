@@ -69,6 +69,10 @@ async def _perform_move(character: 'Character', world: 'World', target_room: 'Ro
         move_rt += config.MUD_ROUNDTIME
     if "SNOWY" in target_room.flags:
         move_rt += config.SNOW_ROUNDTIME
+    encumbrance=max((max(0,member.get_current_weight()/max(1,member.get_max_weight())-.5)*4 for member in chars_to_move),default=0)
+    move_rt += encumbrance
+    if encumbrance:
+        for member in chars_to_move:await member.send('Your burden slows your movement.' if member.get_current_weight()>member.get_max_weight()*.5 else 'Your group slows to match its burdened members.')
     final_rt = move_rt
     if is_group_move:
         slowest_member_rt = character.group.get_slowest_member_rt()
@@ -181,7 +185,8 @@ def resolve_exit(room, name):
     for key, data in room.exits.items():
         if (utils.get_canonical_direction(key) or key.lower()) == canonical:
             return key, data
-    return name, None
+    matches=[(key,data) for key,data in room.exits.items() if not data.get('is_hidden') and name and all(any(word.startswith(part) for word in key.lower().split()) for part in name.split())]
+    return matches[0] if len(matches)==1 else (name,None)
 
 async def cmd_go(character: 'Character', world: 'World', args_str: str) -> bool:
     """Handles the 'go <target>' command for complex, named exits that may require skill checks."""

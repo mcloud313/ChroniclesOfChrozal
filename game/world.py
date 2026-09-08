@@ -891,6 +891,10 @@ class World:
                         script['area_id'] == room.area_id)
                 ]
 
+                from game.definitions.weather import WEATHER_AMBIENCE
+                if 'OUTDOORS' in room.flags:
+                    condition=self.area_weather.get(room.area_id,{}).get('condition','CLEAR')
+                    possible_scripts += [{'script_text':text} for text in WEATHER_AMBIENCE.get(condition,[])]
                 if possible_scripts:
                     chosen_script = random.choice(possible_scripts)
                     message = f"<i>{chosen_script['script_text']}<x>"

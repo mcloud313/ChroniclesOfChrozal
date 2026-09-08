@@ -1,3 +1,5 @@
+**Desktop QA update 0.3:** see [upgrade and QA instructions](docs/UPGRADE-0.3.md) before replacing an existing installation. Do not reseed.
+
 # Chronicles of Chrozal
 
 A persistent, roleplay-focused Python fantasy MUD. This revival branch restores browser play, a character HUD, an authenticated builder, and an optional 100-room level 1–20 QA slice for twelve classes. PostgreSQL remains the authoritative store.

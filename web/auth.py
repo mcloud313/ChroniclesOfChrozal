@@ -58,6 +58,8 @@ async def current_player(request: Request):
 
 
 async def admin_player(request: Request, player=Depends(current_player)):
+    if player['must_change_password']:
+        raise HTTPException(403,'Change the initial password before using administration')
     if not player['is_admin']:
         raise HTTPException(403, 'Builder access required')
     if request.method not in {'GET', 'HEAD'}:
@@ -67,8 +69,27 @@ async def admin_player(request: Request, player=Depends(current_player)):
 
 @router.get('/me')
 async def me(player=Depends(current_player)):
-    return {'username': player['username'], 'is_admin': player['is_admin']}
+    return {'username': player['username'], 'is_admin': player['is_admin'], 'must_change_password':player['must_change_password']}
 
+
+class PasswordChange(BaseModel):
+    password: str = Field(min_length=12,max_length=128)
+
+@router.post('/change-password')
+async def change_password(body: PasswordChange, request: Request, response: Response, player=Depends(current_player)):
+    origin_check(request)
+    rate_limit(request)
+    async with hash_slots:
+        account=Player(**dict(player))
+        same,_=await asyncio.to_thread(account.check_password,body.password)
+        if same:raise HTTPException(422,'Choose a different password')
+        hashed=await asyncio.to_thread(utils.hash_password,body.password)
+    async with db_manager.pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute('UPDATE players SET hashed_password=$1,must_change_password=false WHERE id=$2',hashed,player['id'])
+            await conn.execute('DELETE FROM web_sessions WHERE player_id=$1',player['id'])
+    response.delete_cookie('chrozal_session')
+    return {'message':'Password changed. Sign in again.'}
 
 @router.post('/{action}')
 async def authenticate(action: str, body: Credentials, request: Request, response: Response):
@@ -110,7 +131,7 @@ async def authenticate(action: str, body: Credentials, request: Request, respons
             await conn.execute('INSERT INTO web_sessions(token_hash,player_id) VALUES($1,$2)', digest(token),player['id'])
     response.set_cookie('chrozal_session', token, httponly=True, secure=config.COOKIE_SECURE,
                         samesite='strict', max_age=43200)
-    return {'username': player['username'], 'is_admin': player['is_admin']}
+    return {'username': player['username'], 'is_admin': player['is_admin'], 'must_change_password':player['must_change_password']}
 
 
 @router.delete('/session')

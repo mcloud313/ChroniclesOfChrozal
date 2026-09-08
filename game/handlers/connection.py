@@ -245,9 +245,10 @@ class ConnectionHandler:
     async def _post_load_locked(self):
         # NEW: Call the character's method to load its unique item instances
         await self.active_character.load_related_data()
+        from game.hands import repair_overflow
+        await repair_overflow(self.active_character,self.world)
         room = self.world.get_room(self.active_character.location_id) or self.world.get_room(1)
-        if self.active_character.level == 1 and not self.active_character.known_abilities:
-            await self.active_character.check_and_learn_new_abilities()
+        await self.active_character.check_and_learn_new_abilities()
         self.active_character.update_location(room)
         room.add_character(self.active_character)
         self.world.add_active_character(self.active_character)
